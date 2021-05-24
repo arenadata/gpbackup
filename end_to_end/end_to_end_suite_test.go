@@ -844,6 +844,27 @@ var _ = Describe("backup and restore end to end tests", func() {
 			assertDataRestored(restoreConn, schema3TupleCounts)
 			assertRelationsCreatedInSchema(restoreConn, "schema2", 0)
 		})
+		It("runs --redirect-schema with --matadata-only", func(){
+			skipIfOldBackupVersionBefore("1.17.0")
+			testhelper.AssertQueryRuns(restoreConn,
+				"DROP SCHEMA IF EXISTS schema3 CASCADE; CREATE SCHEMA schema3;")
+			defer testhelper.AssertQueryRuns(restoreConn,
+				"DROP SCHEMA schema3 CASCADE")
+			testhelper.AssertQueryRuns(backupConn,
+				"CREATE SCHEMA foo")
+			defer testhelper.AssertQueryRuns(backupConn,
+				"DROP SCHEMA foo CASCADE")
+			testhelper.AssertQueryRuns(backupConn,
+				"CREATE TABLE foo.bar(i int)")
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--metadata-only", "--include-schema", "foo")
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
+				"--redirect-db", "restoredb",
+				"--redirect-schema", "schema3",
+				"--include-table", "foo.bar",
+				"--metadata-only")
+			assertRelationsCreatedInSchema(restoreConn, "schema3", 1)
+			assertDataRestored(restoreConn, map[string]int{"schema3.bar": 0})
+		})
 	})
 	Describe("ACLs for extensions", func() {
 		It("runs gpbackup and gprestores any user defined ACLs on extensions", func() {
