@@ -13,11 +13,15 @@ type PipeThroughProgram struct {
 	Extension     string
 }
 
-func InitializePipeThroughParameters(compress bool, compressionLevel int) {
-	if compress {
-		pipeThroughProgram = PipeThroughProgram{Name: "gzip", OutputCommand: fmt.Sprintf("gzip -c -%d", compressionLevel), InputCommand: "gzip -d -c", Extension: ".gz"}
-	} else {
+func InitializePipeThroughParameters(compress bool, compressionType string, compressionLevel int) {
+	if !compress {
 		pipeThroughProgram = PipeThroughProgram{Name: "cat", OutputCommand: "cat -", InputCommand: "cat -", Extension: ""}
+		return
+	}
+
+	if compressionType == "gzip" {
+		pipeThroughProgram = PipeThroughProgram{Name: "gzip", OutputCommand: fmt.Sprintf("gzip -c -%d", compressionLevel), InputCommand: "gzip -d -c", Extension: ".gz"}
+		return
 	}
 }
 

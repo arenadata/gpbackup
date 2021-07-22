@@ -43,11 +43,11 @@ func RemoveFileIfExists(filename string) error {
 }
 
 func OpenFileForWrite(filename string) (*os.File, error) {
-	return os.OpenFile(filename, os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0644)
+	return os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 }
 
 func WriteToFileAndMakeReadOnly(filename string, contents []byte) error {
-	file, err := os.OpenFile(filename, os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0644)
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
@@ -105,6 +105,13 @@ func ValidateFQNs(tableList []string) error {
 func ValidateFullPath(path string) error {
 	if len(path) > 0 && !(strings.HasPrefix(path, "/") || strings.HasPrefix(path, "~")) {
 		return errors.Errorf("%s is not an absolute path.", path)
+	}
+	return nil
+}
+
+func ValidateCompressionType(compressionType string) error {
+	if compressionType != "gzip" {
+		return errors.Errorf("Compression type must be 'gzip'")
 	}
 	return nil
 }

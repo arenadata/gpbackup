@@ -114,6 +114,8 @@ func validateFlagValues() {
 	gplog.FatalOnError(err)
 	err = utils.ValidateFullPath(MustGetFlagString(options.PLUGIN_CONFIG))
 	gplog.FatalOnError(err)
+	err = utils.ValidateCompressionType(MustGetFlagString(options.COMPRESSION_TYPE))
+	gplog.FatalOnError(err)
 	err = utils.ValidateCompressionLevel(MustGetFlagInt(options.COMPRESSION_LEVEL))
 	gplog.FatalOnError(err)
 	if MustGetFlagString(options.FROM_TIMESTAMP) != "" && !filepath.IsValidTimestamp(MustGetFlagString(options.FROM_TIMESTAMP)) {
