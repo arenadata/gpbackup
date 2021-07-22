@@ -194,7 +194,7 @@ func getRestoreDataReader(toc *toc.SegmentTOC, oidList []int) (*RestoreReader, e
 			restoreReader.readerType = NONSEEKABLE
 		}
 	} else {
-		if *isFiltered && !strings.HasSuffix(*dataFile, ".gz") {
+		if *isFiltered && !strings.HasSuffix(*dataFile, ".gz") && !strings.HasSuffix(*dataFile, ".zst") {
 			// Seekable reader if backup is not compressed and filters are set
 			seekHandle, err = os.Open(*dataFile)
 			restoreReader.readerType = SEEKABLE
@@ -261,7 +261,7 @@ func startRestorePluginCommand(toc *toc.SegmentTOC, oidList []int) (io.Reader, b
 		return nil, false, err
 	}
 	cmdStr := ""
-	if pluginConfig.CanRestoreSubset() && *isFiltered && !strings.HasSuffix(*dataFile, ".gz") {
+	if pluginConfig.CanRestoreSubset() && *isFiltered && !strings.HasSuffix(*dataFile, ".gz") && !strings.HasSuffix(*dataFile, ".zst") {
 		offsetsFile, _ := ioutil.TempFile("/tmp", "gprestore_offsets_")
 		defer func() {
 			offsetsFile.Close()
