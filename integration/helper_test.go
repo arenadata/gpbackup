@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"fmt"
@@ -323,16 +322,14 @@ func setupRestoreFiles(compressionType string, withPlugin bool) {
 
 	if compressionType == "gzip" {
 		f, _ := os.Create(dataFile + ".gz")
+		defer f.Close()
 		gzipf := gzip.NewWriter(f)
-		defer func() {
-			_ = gzipf.Close()
-		}()
+		defer gzipf.Close()
 		_, _ = gzipf.Write([]byte(expectedData))
 	} else if compressionType == "zstd" {
 		f, _ := os.Create(dataFile + ".zst")
 		defer f.Close()
-		bufiof := bufio.NewWriter(f)
-		zstdf, _ := zstd.NewWriter(bufiof)
+		zstdf, _ := zstd.NewWriter(f)
 		defer zstdf.Close()
 		_, _ = zstdf.Write([]byte(expectedData))
 	} else {
