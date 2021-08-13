@@ -4,7 +4,7 @@ set -eox pipefail
 
 source gpdb_src/concourse/scripts/common.bash
 install_and_configure_gpdb
-make -C gpdb_src
+make -C gpdb_src/src/test/regress/
 make -C gpdb_src/contrib/dummy_seclabel/ install
 gpdb_src/concourse/scripts/setup_gpadmin_user.bash
 make_cluster
