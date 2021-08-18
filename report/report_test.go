@@ -392,9 +392,18 @@ restore status:      Success but non-fatal errors occurred. See log file .+ for 
 		It("Does not panic if gpbackup version equals gprestore version", func() {
 			EnsureBackupVersionCompatibility("0.1.0", "0.1.0")
 		})
-		It("Panics if gpbackup arenadata version is greater than gprestore arenadata version", func() {
-			defer testhelper.ShouldPanicWithMessage("gprestore arenadata1 cannot restore a backup taken with gpbackup arenadata2; please use gprestore arenadata2 or later.")
-			EnsureBackupVersionCompatibility("1.20.4_arenadata2", "1.20.4_arenadata1")
+		It("Panics if gpbackup version is greater than gprestore version (arenadata build)", func() {
+			defer testhelper.ShouldPanicWithMessage("gprestore arenadata9 cannot restore a backup taken with gpbackup arenadata10; please use gprestore arenadata10 or later.")
+			EnsureBackupVersionCompatibility("1.21.0_arenadata10", "1.21.0_arenadata9")
+		})
+		It("Does not panic if gpbackup version is less than gprestore version (arenadata build)", func() {
+			EnsureBackupVersionCompatibility("1.21.0_arenadata9", "1.21.0_arenadata10")
+		})
+		It("Does not panic if gpbackup version equals gprestore version (arenadata build)", func() {
+			EnsureBackupVersionCompatibility("1.20.4_arenadata1", "1.20.4_arenadata1")
+		})
+		It("Does not panic if gpbackup version equals gprestore version (arenadata dev build)", func() {
+			EnsureBackupVersionCompatibility("1.20.4_arenadata2+dev.1.g768b7e0", "1.20.4_arenadata2+dev.1.g768b7e0")
 		})
 		It("Does not panic if gpbackup has upstream version, while gprestore has arenadata version", func() {
 			EnsureBackupVersionCompatibility("1.20.4", "1.20.4_arenadata2")

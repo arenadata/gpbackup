@@ -292,14 +292,11 @@ func PrintObjectCounts(reportFile io.WriteCloser, objectCounts map[string]int) {
 func EnsureBackupVersionCompatibility(backupVersion string, restoreVersion string) {
 	if strings.Index(restoreVersion, "_arenadata") != -1 {
 		// arenadata build
-		var err error
 		if strings.Index(backupVersion, "_arenadata") != -1 {
 			arenadata.EnsureAdVersionCompatibility(backupVersion, restoreVersion)
-			backupVersion, err = arenadata.GetOriginalVersion(backupVersion)
-			gplog.FatalOnError(err)
+			backupVersion = arenadata.GetOriginalVersion(backupVersion)
 		}
-		restoreVersion, err = arenadata.GetOriginalVersion(restoreVersion)
-		gplog.FatalOnError(err)
+		restoreVersion = arenadata.GetOriginalVersion(restoreVersion)
 	}
 	backupSemVer, err := semver.Make(backupVersion)
 	gplog.FatalOnError(err)
