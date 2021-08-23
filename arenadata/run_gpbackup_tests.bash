@@ -1,5 +1,6 @@
 #!/bin/bash -l
 
+
 set -eox pipefail
 
 source gpdb_src/concourse/scripts/common.bash
