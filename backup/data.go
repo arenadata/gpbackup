@@ -71,11 +71,11 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 		customPipeThroughCommand = "cat -"
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		sendToDestinationCommand = fmt.Sprintf("| %s backup_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
+	} else if customPipeThroughCommand == "cat -" {
+		copyCommand = fmt.Sprintf("'%s'", destinationToWrite)
 	}
 
-	if customPipeThroughCommand == "cat -" {
-		copyCommand = fmt.Sprintf("'%s'", destinationToWrite)
-	} else {
+	if copyCommand == "" {
 		copyCommand = fmt.Sprintf("PROGRAM '%s%s %s %s'", checkPipeExistsCommand, customPipeThroughCommand, sendToDestinationCommand, destinationToWrite)
 	}
 
