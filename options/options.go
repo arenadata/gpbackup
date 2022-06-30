@@ -3,6 +3,7 @@ package options
 import (
 	"fmt"
 	"strings"
+	"regexp"
 
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
 	"github.com/greenplum-db/gp-common-go-libs/iohelper"
@@ -177,21 +178,25 @@ func QuoteTableNames(conn *dbconn.DBConn, tableNames []string) ([]string, error)
 }
 
 func SeparateSchemaAndTable(tableNames []string) ([]FqnStruct, error) {
+	validFormat := regexp.MustCompile(`^([^.\"]+|"(.+)")\.([^.\"]+|"(.+)")$`)
 	fqnSlice := make([]FqnStruct, 0)
 	for _, fqn := range tableNames {
-		parts := strings.Split(fqn, ".")
-		if len(parts) > 2 {
-			return nil, errors.Errorf("cannot process an Fully Qualified Name with embedded dots yet: %s", fqn)
+		res := validFormat.FindStringSubmatch(fqn)
+		if len(res) == 0 {
+			return nil, errors.Errorf("cannot process an Fully Qualified Name: %s", fqn)
 		}
-		if len(parts) < 2 {
-			return nil, errors.Errorf("Fully Qualified Names require a minimum of one dot, specifying the schema and table. Cannot process: %s", fqn)
+
+		schema := res[2]
+		if schema == "" {
+			schema = res[1]
+		}			
+		table := res[4]
+		if table == "" {
+			table = res[3]
 		}
-		schema := parts[0]
-		table := parts[1]
 		if schema == "" || table == "" {
 			return nil, errors.Errorf("Fully Qualified Names must specify the schema and table. Cannot process: %s", fqn)
 		}
-
 		currFqn := FqnStruct{
 			SchemaName: schema,
 			TableName:  table,

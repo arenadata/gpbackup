@@ -233,12 +233,18 @@ func verifyIncrementalState() {
 		existingTablesMap[table] = Empty{}
 	}
 
+	validFormat := regexp.MustCompile(`^([^.\"]+|"(.+)")\.([^.\"]+|"(.+)")$`)
 	var schemasToCreate []string
 	var tableFQNsToCreate []string
 	var schemasExcludedByUserInput []string
 	var tablesExcludedByUserInput []string
 	for _, table := range tableFQNsToRestore {
-		schemaName := strings.Split(table, ".")[0]
+		res := validFormat.FindStringSubmatch(table)
+		schemaName := res[2]
+		if schemaName == "" {
+			schemaName = res[1]
+		}
+
 		if utils.SchemaIsExcludedByUser(opts.IncludedSchemas, opts.ExcludedSchemas, schemaName) {
 			if !utils.Exists(schemasExcludedByUserInput, schemaName) {
 				schemasExcludedByUserInput = append(schemasExcludedByUserInput, schemaName)

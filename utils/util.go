@@ -92,7 +92,7 @@ func MakeFQN(schema string, object string) string {
 // Since we currently split schema and table on the dot (.), we can't allow
 // users to filter backup or restore tables with dots in the schema or table.
 func ValidateFQNs(tableList []string) error {
-	validFormat := regexp.MustCompile(`^[^.]+\.[^.]+$`)
+	validFormat := regexp.MustCompile(`^([^.\"]+|"(.+)")\.([^.\"]+|"(.+)")$`)
 	for _, fqn := range tableList {
 		if !validFormat.Match([]byte(fqn)) {
 			return errors.Errorf(`Table "%s" is not correctly fully-qualified.  Please ensure table is in the format "schema.table" and both the schema and table does not contain a dot (.).`, fqn)
