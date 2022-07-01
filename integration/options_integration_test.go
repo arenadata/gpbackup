@@ -20,7 +20,7 @@ var _ = Describe("Options Integration", func() {
 				`foo.'bar`, // make sure that single quotes are escaped before string is fed to quote_ident
 				`foo.2`,    // numbers
 				`foo._bar`, // underscore
-				`foo ~#$%^&*()_-+[]{}><\|;:/?!,.bar`,
+				`"foo ~#$%^&*()_-+[]{}><\|;:/?!,".bar`,
 				"foo.\tbar", // important to use double quotes to allow \t to become tab
 				"foo.\nbar", // important to use double quotes to allow \n to become a new line
 				`foo.\n`,
@@ -141,7 +141,7 @@ bar";
 			Expect(err).ToNot(HaveOccurred())
 			subject, err := options.NewOptions(backupCmdFlags)
 			Expect(err).To(Not(HaveOccurred()))
-			Expect(subject.GetIncludedTables()).To(ContainElement(`public."""hasquote""_1_prt_girls"`))
+			Expect(subject.GetIncludedTables()).To(ContainElement(`public."hasquote"_1_prt_girls`))
 			Expect(subject.GetIncludedTables()).To(HaveLen(1))
 
 			err = subject.ExpandIncludesForPartitions(connectionPool, backupCmdFlags)
