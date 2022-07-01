@@ -144,8 +144,8 @@ bar";
 			Expect(subject.GetIncludedTables()).To(ContainElement(`public."""hasquote""_1_prt_girls"`))
 			Expect(subject.GetIncludedTables()).To(HaveLen(1))
 
-			err = subject.ExpandIncludesForPartitions(connectionPool, backupCmdFlags)
-			Expect(err).To(Not(HaveOccurred()))
+			//err = subject.ExpandIncludesForPartitions(connectionPool, backupCmdFlags)
+			//Expect(err).To(Not(HaveOccurred()))
 			Expect(subject.GetIncludedTables()).To(HaveLen(2))
 			Expect(backupCmdFlags.GetStringArray(options.INCLUDE_RELATION)).To(HaveLen(2))
 			Expect(subject.GetIncludedTables()[0]).To(Equal(`public."""hasquote""_1_prt_girls"`))

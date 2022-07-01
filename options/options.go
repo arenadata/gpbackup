@@ -200,11 +200,11 @@ func (o *Options) ExpandIncludesForPartitions(conn *dbconn.DBConn, flags *pflag.
 		return nil
 	}
 
-	/*quotedIncludeRelations, err := QuoteTableNames(conn, o.GetIncludedTables())
+	quotedIncludeRelations, err := QuoteTableNames(conn, o.GetIncludedTables())
 	if err != nil {
 		return err
-	}*/
-	quotedIncludeRelations := o.GetIncludedTables()
+	}
+//	quotedIncludeRelations := o.GetIncludedTables()
 
 	allFqnStructs, err := o.getUserTableRelationsWithIncludeFiltering(conn, quotedIncludeRelations)
 	if err != nil {
