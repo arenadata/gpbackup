@@ -104,7 +104,7 @@ func ExtractSchemaAndTableName(fullName string) (string, string) {
 	if len(res) == 0 {
 		return "", ""
 	}
-/*
+
 	schema := res[2]
 	if schema == "" {
 		schema = res[1]
@@ -117,9 +117,6 @@ func ExtractSchemaAndTableName(fullName string) (string, string) {
 	} else {
 		table = strings.ReplaceAll(table, `""`, `"`)
 	}
-*/
-	schema := res[1]
-	table := res[3]
 
 	return schema, table
 }

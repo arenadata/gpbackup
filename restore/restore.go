@@ -64,11 +64,11 @@ func DoSetup() {
 	opts, err = options.NewOptions(cmdFlags)
 	gplog.FatalOnError(err)
 
-	//err = opts.QuoteIncludeRelations(connectionPool)
-	//gplog.FatalOnError(err)
+	err = opts.QuoteIncludeRelations(connectionPool)
+	gplog.FatalOnError(err)
 
-	//err = opts.QuoteExcludeRelations(connectionPool)
-	//gplog.FatalOnError(err)
+	err = opts.QuoteExcludeRelations(connectionPool)
+	gplog.FatalOnError(err)
 
 	segConfig := cluster.MustGetSegmentConfiguration(connectionPool)
 	globalCluster = cluster.NewCluster(segConfig)
