@@ -200,10 +200,11 @@ func (o *Options) ExpandIncludesForPartitions(conn *dbconn.DBConn, flags *pflag.
 		return nil
 	}
 
-	quotedIncludeRelations, err := QuoteTableNames(conn, o.GetIncludedTables())
+	/*quotedIncludeRelations, err := QuoteTableNames(conn, o.GetIncludedTables())
 	if err != nil {
 		return err
-	}
+	}*/
+	quotedIncludeRelations := o.GetIncludedTables()
 
 	allFqnStructs, err := o.getUserTableRelationsWithIncludeFiltering(conn, quotedIncludeRelations)
 	if err != nil {
@@ -240,7 +241,7 @@ func (o *Options) ExpandIncludesForPartitions(conn *dbconn.DBConn, flags *pflag.
 
 	return nil
 }
-
+/*
 func (o *Options) QuoteIncludeRelations(conn *dbconn.DBConn) error {
 	var err error
 	o.IncludedRelations, err = QuoteTableNames(conn, o.GetIncludedTables())
@@ -260,7 +261,7 @@ func (o *Options) QuoteExcludeRelations(conn *dbconn.DBConn) error {
 
 	return nil
 }
-
+*/
 func (o Options) getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, includedRelationsQuoted []string) ([]FqnStruct, error) {
 	includeOids, err := getOidsFromRelationList(connectionPool, includedRelationsQuoted)
 	if err != nil {

@@ -24,8 +24,9 @@ func relationAndSchemaFilterClause() string {
 	}
 	filterRelationClause = SchemaFilterClause("n")
 	if len(MustGetFlagStringArray(options.EXCLUDE_RELATION)) > 0 {
-		quotedExcludeRelations, err := options.QuoteTableNames(connectionPool, MustGetFlagStringArray(options.EXCLUDE_RELATION))
-		gplog.FatalOnError(err)
+		//quotedExcludeRelations, err := options.QuoteTableNames(connectionPool, MustGetFlagStringArray(options.EXCLUDE_RELATION))
+		//gplog.FatalOnError(err)
+		quotedExcludeRelations := MustGetFlagStringArray(options.EXCLUDE_RELATION)
 
 		excludeOids := getOidsFromRelationList(connectionPool, quotedExcludeRelations)
 		if len(excludeOids) > 0 {
@@ -33,8 +34,9 @@ func relationAndSchemaFilterClause() string {
 		}
 	}
 	if len(MustGetFlagStringArray(options.INCLUDE_RELATION)) > 0 {
-		quotedIncludeRelations, err := options.QuoteTableNames(connectionPool, MustGetFlagStringArray(options.INCLUDE_RELATION))
-		gplog.FatalOnError(err)
+		//quotedIncludeRelations, err := options.QuoteTableNames(connectionPool, MustGetFlagStringArray(options.INCLUDE_RELATION))
+		//gplog.FatalOnError(err)
+		quotedIncludeRelations := MustGetFlagStringArray(options.INCLUDE_RELATION)
 
 		includeOids := getOidsFromRelationList(connectionPool, quotedIncludeRelations)
 		filterRelationClause += fmt.Sprintf("\nAND c.oid IN (%s)", strings.Join(includeOids, ", "))

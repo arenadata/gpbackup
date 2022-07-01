@@ -170,8 +170,9 @@ func createBackupDirectoriesOnAllHosts() {
  */
 
 func RetrieveAndProcessTables() ([]Table, []Table) {
-	quotedIncludeRelations, err := options.QuoteTableNames(connectionPool, MustGetFlagStringArray(options.INCLUDE_RELATION))
-	gplog.FatalOnError(err)
+	//quotedIncludeRelations, err := options.QuoteTableNames(connectionPool, MustGetFlagStringArray(options.INCLUDE_RELATION))
+	//gplog.FatalOnError(err)
+	quotedIncludeRelations := MustGetFlagStringArray(options.INCLUDE_RELATION)
 
 	tableRelations := GetIncludedUserTableRelations(connectionPool, quotedIncludeRelations)
 	LockTables(connectionPool, tableRelations)

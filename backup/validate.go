@@ -52,9 +52,10 @@ func ValidateTablesExist(conn *dbconn.DBConn, tableList []string, excludeSet boo
 		return
 	}
 
-	quotedIncludeRelations, err := options.QuoteTableNames(connectionPool, tableList)
-	gplog.FatalOnError(err)
+	//quotedIncludeRelations, err := options.QuoteTableNames(connectionPool, tableList)
+	//gplog.FatalOnError(err)
 	// todo perhaps store quoted list in options??
+	quotedIncludeRelations := tableList
 
 	quotedTablesStr := utils.SliceToQuotedString(quotedIncludeRelations)
 	query := fmt.Sprintf(`
@@ -68,7 +69,7 @@ func ValidateTablesExist(conn *dbconn.DBConn, tableList []string, excludeSet boo
 		Oid  uint32
 		Name string
 	}, 0)
-	err = conn.Select(&resultTables, query)
+	err := conn.Select(&resultTables, query)
 	gplog.FatalOnError(err, fmt.Sprintf("Query was: %s", query))
 	tableMap := make(map[string]uint32)
 	for _, table := range resultTables {

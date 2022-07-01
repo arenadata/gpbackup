@@ -23,7 +23,8 @@ var _ = Describe("backup integration tests", func() {
 			testhelper.AssertQueryRuns(connectionPool, "CREATE SCHEMA testschema")
 			defer testhelper.AssertQueryRuns(connectionPool, "DROP SCHEMA testschema CASCADE")
 			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE testschema.testtable(t text)")
-			includeRelationsQuoted, err := options.QuoteTableNames(connectionPool, backup.MustGetFlagStringArray(options.INCLUDE_RELATION))
+			//includeRelationsQuoted, err := options.QuoteTableNames(connectionPool, backup.MustGetFlagStringArray(options.INCLUDE_RELATION))
+			includeRelationsQuoted = backup.MustGetFlagStringArray(options.INCLUDE_RELATION)
 			Expect(err).NotTo(HaveOccurred())
 
 			tables := backup.GetIncludedUserTableRelations(connectionPool, includeRelationsQuoted)
@@ -105,7 +106,8 @@ PARTITION BY LIST (gender)
 			defer testhelper.AssertQueryRuns(connectionPool, "DROP TABLE testschema.foo")
 
 			_ = backupCmdFlags.Set(options.INCLUDE_RELATION, "testschema.foo")
-			includeRelationsQuoted, err := options.QuoteTableNames(connectionPool, backup.MustGetFlagStringArray(options.INCLUDE_RELATION))
+			//includeRelationsQuoted, err := options.QuoteTableNames(connectionPool, backup.MustGetFlagStringArray(options.INCLUDE_RELATION))
+			includeRelationsQuoted = backup.MustGetFlagStringArray(options.INCLUDE_RELATION)
 			Expect(err).NotTo(HaveOccurred())
 			tables := backup.GetIncludedUserTableRelations(connectionPool, includeRelationsQuoted)
 
