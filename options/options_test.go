@@ -46,14 +46,14 @@ var _ = Describe("options", func() {
 			Expect(originalIncludedTables[0]).To(Equal("foo.bar"))
 		})
 		It("returns an include with special characters besides quote and dot", func() {
-			err := myflags.Set(options.INCLUDE_RELATION, `foo '~#$%^&*()_-+[]{}><\|;:/?!\t\n,.bar`)
+			err := myflags.Set(options.INCLUDE_RELATION, `"foo '~#$%^&*()_-+[]{}><\|;:/?!\t\n,".bar`)
 			Expect(err).ToNot(HaveOccurred())
 			subject, err := options.NewOptions(myflags)
 			Expect(err).To(Not(HaveOccurred()))
 
 			includedTables := subject.GetIncludedTables()
 			Expect(includedTables).To(HaveLen(1))
-			Expect(includedTables[0]).To(Equal(`foo '~#$%^&*()_-+[]{}><\|;:/?!\t\n,.bar`))
+			Expect(includedTables[0]).To(Equal(`"foo '~#$%^&*()_-+[]{}><\|;:/?!\t\n,".bar`))
 		})
 		It("returns all included tables when multiple individual flags provided", func() {
 			err := myflags.Set(options.INCLUDE_RELATION, "foo.bar")
@@ -214,7 +214,7 @@ var _ = Describe("options", func() {
 	})
 	Describe("SeparateSchemaAndTable", func() {
 		It("properly splits the strings", func() {
-			tableList := []string{"foo.Bar", "FOO.Bar", "FO!@#.BAR"}
+			tableList := []string{`foo.Bar`, `FOO.Bar`, `"FO!@#".BAR`}
 			expectedFqn := []options.FqnStruct{
 				{SchemaName: `foo`, TableName: `Bar`},
 				{SchemaName: `FOO`, TableName: `Bar`},

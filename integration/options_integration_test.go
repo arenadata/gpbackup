@@ -137,18 +137,18 @@ bar";
 			`)
 			defer testhelper.AssertQueryRuns(connectionPool, `DROP TABLE public."""hasquote"""`)
 
-			err := backupCmdFlags.Set(options.INCLUDE_RELATION, `public."hasquote"_1_prt_girls`)
+			err := backupCmdFlags.Set(options.INCLUDE_RELATION, `public."""hasquote""_1_prt_girls"`)
 			Expect(err).ToNot(HaveOccurred())
 			subject, err := options.NewOptions(backupCmdFlags)
 			Expect(err).To(Not(HaveOccurred()))
-			Expect(subject.GetIncludedTables()).To(ContainElement(`public."hasquote"_1_prt_girls`))
+			Expect(subject.GetIncludedTables()).To(ContainElement(`public."""hasquote""_1_prt_girls"`))
 			Expect(subject.GetIncludedTables()).To(HaveLen(1))
 
 			err = subject.ExpandIncludesForPartitions(connectionPool, backupCmdFlags)
 			Expect(err).To(Not(HaveOccurred()))
 			Expect(subject.GetIncludedTables()).To(HaveLen(2))
 			Expect(backupCmdFlags.GetStringArray(options.INCLUDE_RELATION)).To(HaveLen(2))
-			Expect(subject.GetIncludedTables()[0]).To(Equal(`public."hasquote"_1_prt_girls`))
+			Expect(subject.GetIncludedTables()[0]).To(Equal(`public."""hasquote""_1_prt_girls"`))
 			Expect(subject.GetIncludedTables()[1]).To(Equal(`public."hasquote"`))
 		})
 		It("returns child partition tables for an included parent table if the leaf-partition-data flag is set and the filter includes a parent partition table", func() {
