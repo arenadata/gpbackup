@@ -137,11 +137,11 @@ bar";
 			`)
 			defer testhelper.AssertQueryRuns(connectionPool, `DROP TABLE public."""hasquote"""`)
 
-			err := backupCmdFlags.Set(options.INCLUDE_RELATION, `public."""hasquote""_1_prt_girls"`)
+			err := backupCmdFlags.Set(options.INCLUDE_RELATION, `public."hasquote"_1_prt_girls`)
 			Expect(err).ToNot(HaveOccurred())
 			subject, err := options.NewOptions(backupCmdFlags)
 			Expect(err).To(Not(HaveOccurred()))
-			Expect(subject.GetIncludedTables()).To(ContainElement(`public."hasquote"_1_prt_girls`))
+			Expect(subject.GetIncludedTables()).To(ContainElement(`public."""hasquote""_1_prt_girls"`))
 			Expect(subject.GetIncludedTables()).To(HaveLen(1))
 
 			err = subject.ExpandIncludesForPartitions(connectionPool, backupCmdFlags)
