@@ -142,7 +142,7 @@ type FqnStruct struct {
 	SchemaName string
 	TableName  string
 }
-
+/*
 func QuoteTableNames(conn *dbconn.DBConn, tableNames []string) ([]string, error) {
 	if len(tableNames) == 0 {
 		return []string{}, nil
@@ -175,7 +175,7 @@ func QuoteTableNames(conn *dbconn.DBConn, tableNames []string) ([]string, error)
 
 	return result, nil
 }
-
+*/
 func SeparateSchemaAndTable(tableNames []string) ([]FqnStruct, error) {
 	fqnSlice := make([]FqnStruct, 0)
 	for _, fqn := range tableNames {
