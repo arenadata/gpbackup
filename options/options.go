@@ -3,7 +3,6 @@ package options
 import (
 	"fmt"
 	"strings"
-	"regexp"
 
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
 	"github.com/greenplum-db/gp-common-go-libs/iohelper"
@@ -178,22 +177,10 @@ func QuoteTableNames(conn *dbconn.DBConn, tableNames []string) ([]string, error)
 }
 
 func SeparateSchemaAndTable(tableNames []string) ([]FqnStruct, error) {
-	validFormat := regexp.MustCompile(`^([^.\"]+|"(.+)")\.([^.\"]+|"(.+)")$`)
 	fqnSlice := make([]FqnStruct, 0)
 	for _, fqn := range tableNames {
-		res := validFormat.FindStringSubmatch(fqn)
-		if len(res) == 0 {
-			return nil, errors.Errorf("cannot process an Fully Qualified Name: %s", fqn)
-		}
+		schema, table := utils.ExtractSchemaAndTableName(fqn);
 
-		schema := res[2]
-		if schema == "" {
-			schema = res[1]
-		}			
-		table := res[4]
-		if table == "" {
-			table = res[3]
-		}
 		if schema == "" || table == "" {
 			return nil, errors.Errorf("Fully Qualified Names must specify the schema and table. Cannot process: %s", fqn)
 		}

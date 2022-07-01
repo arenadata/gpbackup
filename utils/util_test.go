@@ -41,11 +41,21 @@ var _ = Describe("utils/util tests", func() {
 				`schemaname.tablename`,    // unquoted
 				`"schema,name".tablename`, // quoted schema
 				`schemaname."table,name"`, // quoted table
+				`"schema name"."tablename"""`,  // spaces
+				`"schema name	"."tablename"""`, //tabs
+				`schemaname."TABLENAME!@#$%^&*()_+={}|[]\';""":/,?><"""`, // special characters
+			}
+			err := utils.ValidateFQNs(testStrings)
+			Expect(err).To(Not(HaveOccurred()))
+		})
+		It("fails if given a string with special characters without quotes", func() {
+			testStrings := []string{
 				`schema name.tablename"`,  // spaces
 				`schema name	.tablename"`, //tabs
 				`schemaname.TABLENAME!@#$%^&*()_+={}|[]\';":/,?><"`, // special characters
 			}
-			utils.ValidateFQNs(testStrings)
+			err := utils.ValidateFQNs(testStrings)
+			Expect(err).To(HaveOccurred())
 		})
 		It("fails if given a string without a schema", func() {
 			testStrings := []string{`.tablename`}

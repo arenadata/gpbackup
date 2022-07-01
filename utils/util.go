@@ -24,6 +24,16 @@ const MINIMUM_GPDB4_VERSION = "4.3.17"
 const MINIMUM_GPDB5_VERSION = "5.1.0"
 
 /*
+ * Regular expression to validate FQNs.
+ * Both, schema and table names can be one of two alternatives:
+ * 1: [\pL_][\pL\pM0-9_$]* - first char is any letter or '_', others are
+ * letters, letter's marks, numbers, '_' or '$'
+ * 2: "(.+)" - any chars inside double quotes
+ */
+const VALID_FQN_REGEX_STR = `^([\pL_][\pL\pM0-9_$]*|"(.+)")\.([\pL_][\pL\pM0-9_$]*|"(.+)")$`
+var /* const */ VALID_FQN_REGEX = regexp.MustCompile(VALID_FQN_REGEX_STR)
+
+/*
  * General helper functions
  */
 
@@ -89,13 +99,33 @@ func MakeFQN(schema string, object string) string {
 	return fmt.Sprintf("%s.%s", schema, object)
 }
 
-// Since we currently split schema and table on the dot (.), we can't allow
-// users to filter backup or restore tables with dots in the schema or table.
+func ExtractSchemaAndTableName(fullName string) (string, string) {
+	res := VALID_FQN_REGEX.FindStringSubmatch(fullName)
+	if len(res) == 0 {
+		return "", ""
+	}
+
+	schema := res[2]
+	if schema == "" {
+		schema = res[1]
+	} else {
+		schema = strings.ReplaceAll(schema, `""`, `"`)
+	}
+	table := res[4]
+	if table == "" {
+		table = res[3]
+	} else {
+		table = strings.ReplaceAll(table, `""`, `"`)
+	}
+
+	return schema, table
+}
+
 func ValidateFQNs(tableList []string) error {
-	validFormat := regexp.MustCompile(`^([^.\"]+|"(.+)")\.([^.\"]+|"(.+)")$`)
 	for _, fqn := range tableList {
-		if !validFormat.Match([]byte(fqn)) {
-			return errors.Errorf(`Table "%s" is not correctly fully-qualified.  Please ensure table is in the format "schema.table" and both the schema and table does not contain a dot (.).`, fqn)
+		schema, table := ExtractSchemaAndTableName(fqn)
+		if schema == "" || table == "" {
+			return errors.Errorf(`Table "%s" is not correctly fully-qualified.  Please ensure table is in the format "schema.table".`, fqn)
 		}
 	}
 
