@@ -24,7 +24,7 @@ var _ = Describe("Options Integration", func() {
 				"foo.\tbar", // important to use double quotes to allow \t to become tab
 				"foo.\nbar", // important to use double quotes to allow \n to become a new line
 				`foo.\n`,
-				`foo."bar`, // quote ident should escape double-quote with another double-quote
+				`foo."""bar"`, // quote ident should escape double-quote with another double-quote
 			}
 			expected := []string{
 				`foo.bar`,
@@ -82,7 +82,7 @@ bar";
 				`CAPschema.BAR`,
 				`CAPschema.baz`,
 				`public.foo_bar`,
-				`public.foo ~#$%^&*()_-+[]{}><\|;:/?!bar`,
+				`public."foo ~#$%^&*()_-+[]{}><\|;:/?!bar"`,
 				"public.tab\tbar",     // important to use double quotes to allow \t to become tab
 				"public.newline\nbar", // important to use double quotes to allow \n to become newline
 			}
@@ -137,7 +137,7 @@ bar";
 			`)
 			defer testhelper.AssertQueryRuns(connectionPool, `DROP TABLE public."""hasquote"""`)
 
-			err := backupCmdFlags.Set(options.INCLUDE_RELATION, `public."hasquote"_1_prt_girls`)
+			err := backupCmdFlags.Set(options.INCLUDE_RELATION, `public."""hasquote""_1_prt_girls"`)
 			Expect(err).ToNot(HaveOccurred())
 			subject, err := options.NewOptions(backupCmdFlags)
 			Expect(err).To(Not(HaveOccurred()))
