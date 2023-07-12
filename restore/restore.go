@@ -75,6 +75,11 @@ func DoSetup() {
 	segPrefix, err = filepath.ParseSegPrefix(MustGetFlagString(options.BACKUP_DIR))
 	gplog.FatalOnError(err)
 	globalFPInfo = filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), backupTimestamp, segPrefix)
+	if MustGetFlagString(options.REPORT_DIR) != "" {
+		globalFPInfo.SetReportDir(MustGetFlagString(options.REPORT_DIR));
+		_, err = globalCluster.ExecuteLocalCommand(fmt.Sprintf("mkdir -p %s", globalFPInfo.GetDirForReport(-1)))
+		gplog.FatalOnError(err)
+	}
 
 	// Get restore metadata from plugin
 	if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
