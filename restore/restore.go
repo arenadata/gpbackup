@@ -351,23 +351,30 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 		oldSchema := fmt.Sprintf("%s.", statement.Schema)
 		newSchema := fmt.Sprintf("%s.", redirectSchema)
 		statements[i].Schema = redirectSchema
-		statements[i].Statement = strings.Replace(statement.Statement, oldSchema, newSchema, 1)
+		newStatement := ""
+		for _, singleStatement := range strings.Split(statement.Statement, ";\n") {
+			singleStatement = strings.Replace(singleStatement, oldSchema, newSchema, 1)
 
-		// ALTER TABLE schema.root ATTACH PARTITION schema.leaf needs two schema replacements
-		if connectionPool.Version.AtLeast("7") && statement.ObjectType == "TABLE" && statement.ReferenceObject != "" {
-			alterTableAttachPart := strings.Split(statements[i].Statement, " ATTACH PARTITION ")
+			// ALTER TABLE schema.root ATTACH PARTITION schema.leaf needs two schema replacements
+			if connectionPool.Version.AtLeast("7") && statement.ObjectType == "TABLE" && statement.ReferenceObject != "" {
+				alterTableAttachPart := strings.Split(statements[i].Statement, " ATTACH PARTITION ")
 
-			if len(alterTableAttachPart) == 2 {
-				statements[i].Statement = fmt.Sprintf(`%s ATTACH PARTITION %s`,
-					alterTableAttachPart[0],
-					strings.Replace(alterTableAttachPart[1], oldSchema, newSchema, 1))
+				if len(alterTableAttachPart) == 2 {
+					singleStatement = fmt.Sprintf(`%s ATTACH PARTITION %s`,
+						alterTableAttachPart[0],
+						strings.Replace(alterTableAttachPart[1], oldSchema, newSchema, 1))
+				}
 			}
+
+			newStatement = newStatement + singleStatement + ";\n"
 		}
 
 		// only postdata will have a reference object
 		if statement.ReferenceObject != "" {
 			statements[i].ReferenceObject = strings.Replace(statement.ReferenceObject, oldSchema, newSchema, 1)
 		}
+
+		statements[i].Statement = newStatement
 	}
 }
 
