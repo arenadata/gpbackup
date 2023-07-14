@@ -353,6 +353,9 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 		statements[i].Schema = redirectSchema
 		newStatement := ""
 		for _, singleStatement := range strings.Split(statement.Statement, ";\n") {
+			if singleStatement == "" {
+				continue
+			}
 			singleStatement = strings.Replace(singleStatement, oldSchema, newSchema, 1)
 
 			// ALTER TABLE schema.root ATTACH PARTITION schema.leaf needs two schema replacements
