@@ -26,10 +26,11 @@ type FilePathInfo struct {
 	Timestamp              string
 	UserSpecifiedBackupDir string
 	UserSpecifiedSegPrefix string
+	BaseDataDir            string
 	UserSpecifiedReportDir string
 }
 
-func NewFilePathInfo(c *cluster.Cluster, userSpecifiedBackupDir string, timestamp string, userSegPrefix string) FilePathInfo {
+func NewFilePathInfo(c *cluster.Cluster, userSpecifiedBackupDir string, timestamp string, userSegPrefix string, useMirrors ...bool) FilePathInfo {
 	backupFPInfo := FilePathInfo{}
 	backupFPInfo.PID = os.Getpid()
 	backupFPInfo.UserSpecifiedBackupDir = userSpecifiedBackupDir
@@ -37,9 +38,18 @@ func NewFilePathInfo(c *cluster.Cluster, userSpecifiedBackupDir string, timestam
 	backupFPInfo.UserSpecifiedReportDir = ""
 	backupFPInfo.Timestamp = timestamp
 	backupFPInfo.SegDirMap = make(map[int]string)
-	for _, segment := range c.Segments {
-		backupFPInfo.SegDirMap[segment.ContentID] = segment.DataDir
+	backupFPInfo.BaseDataDir = "<SEG_DATA_DIR>"
+
+	// While gpbackup doesn't care about mirrors, gpbackup_manager uses FilePathInfo and needs
+	// to record mirror information for deleting backups, so we add that functionality here.
+	role := "p"
+	if len(useMirrors) == 1 && useMirrors[0] {
+		role = "m"
 	}
+	for _, content := range c.ContentIDs {
+		backupFPInfo.SegDirMap[content] = c.GetDirForContent(content, role)
+	}
+
 	return backupFPInfo
 }
 
@@ -111,7 +121,7 @@ func (backupFPInfo *FilePathInfo) GetTableBackupFilePathForCopyCommand(tableOid 
 	}
 
 	backupFilePath += extension
-	baseDir := "<SEG_DATA_DIR>"
+	baseDir := backupFPInfo.BaseDataDir
 	if backupFPInfo.IsUserSpecifiedBackupDir() {
 		baseDir = path.Join(backupFPInfo.UserSpecifiedBackupDir, fmt.Sprintf("%s<SEGID>", backupFPInfo.UserSpecifiedSegPrefix))
 	}
