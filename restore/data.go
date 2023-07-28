@@ -263,7 +263,12 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 				if backupConfig.SingleDataFile {
 					agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
 					if agentErr != nil {
-						gplog.Error(agentErr.Error())
+						/*if MustGetFlagBool(options.ON_ERROR_CONTINUE) {
+							gplog.Error(agentErr.Error())
+						} else {
+							gplog.Fatal(errors.Errorf(agentErr.Error()), "")
+						}*/
+						gplog.Fatal(errors.Errorf(agentErr.Error()), "")
 						return
 					}
 				}
