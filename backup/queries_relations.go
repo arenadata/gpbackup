@@ -45,17 +45,21 @@ func relationAndSchemaFilterClause() string {
 func getOidsFromRelationList(connectionPool *dbconn.DBConn, quotedIncludeRelations []string) []string {
 	relList := utils.SliceToQuotedString(quotedIncludeRelations)
 	// query broken
+	// the query is broken firstly, there are useless union
+
 	query := fmt.Sprintf(`
-	SELECT c.oid AS string
-	FROM pg_class c
-		JOIN pg_namespace n ON c.relnamespace = n.oid
-	WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
+	WITH root_oids AS (
+		SELECT c.oid AS a
+		FROM pg_class c
+			JOIN pg_namespace n ON c.relnamespace = n.oid
+			WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
+	)
+	SELECT a FROM root_oids
 	UNION
-	select r.parchildrelid as string
-	from pg_partition p join pg_partition_rule r on p.oid = r.paroid
-		join (select c1.oid from pg_class c1 JOIN pg_namespace n ON c1.relnamespace = n.oid
-			WHERE quote_ident(n.nspname) || '.' || quote_ident(c1.relname) IN (%s)
-		) c1 on p.parrelid = c1.oid WHERE c1.oid != 0`, relList, relList)
+	SELECT r.parchildrelid as string
+	FROM pg_partition p join pg_partition_rule r on p.oid = r.paroid
+		join root_oids oids on p.parrelid = oids.a WHERE r.parchildrelid != 0
+	`, relList)
 	return dbconn.MustSelectStringSlice(connectionPool, query)
 }
 
