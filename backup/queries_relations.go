@@ -44,9 +44,8 @@ func relationAndSchemaFilterClause() string {
 
 func getOidsFromRelationList(connectionPool *dbconn.DBConn, quotedIncludeRelations []string) []string {
 	relList := utils.SliceToQuotedString(quotedIncludeRelations)
-	// query broken
-	// the query is broken firstly, there are useless union
 
+	// is this solution correct for cases with include
 	query := fmt.Sprintf(`
 	WITH root_oids AS (
 		SELECT c.oid AS a
