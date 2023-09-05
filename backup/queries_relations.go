@@ -27,7 +27,7 @@ func relationAndSchemaFilterClause() string {
 		quotedExcludeRelations, err := options.QuoteTableNames(connectionPool, MustGetFlagStringArray(options.EXCLUDE_RELATION))
 		gplog.FatalOnError(err)
 
-		excludeOids := getOidsFromRelationList(connectionPool, quotedExcludeRelations)
+		excludeOids := getExcludedRelationOidsList(connectionPool, quotedExcludeRelations)
 		if len(excludeOids) > 0 {
 			filterRelationClause += fmt.Sprintf("\nAND c.oid NOT IN (%s)", strings.Join(excludeOids, ", "))
 		}
@@ -42,23 +42,32 @@ func relationAndSchemaFilterClause() string {
 	return filterRelationClause
 }
 
-func getOidsFromRelationList(connectionPool *dbconn.DBConn, quotedIncludeRelations []string) []string {
+func getExcludedRelationOidsList(connectionPool *dbconn.DBConn, quotedIncludeRelations []string) []string {
 	relList := utils.SliceToQuotedString(quotedIncludeRelations)
 
-	// is this solution correct for cases with include
 	query := fmt.Sprintf(`
 	WITH root_oids AS (
-		SELECT c.oid AS a
+		SELECT c.oid AS _oid
 		FROM pg_class c
 			JOIN pg_namespace n ON c.relnamespace = n.oid
 			WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
 	)
-	SELECT a FROM root_oids
+	SELECT _oid FROM root_oids
 	UNION
-	SELECT r.parchildrelid as string
+	SELECT r.parchildrelid as _oid
 	FROM pg_partition p join pg_partition_rule r on p.oid = r.paroid
 		join root_oids oids on p.parrelid = oids.a WHERE r.parchildrelid != 0
 	`, relList)
+	return dbconn.MustSelectStringSlice(connectionPool, query)
+}
+
+func getOidsFromRelationList(connectionPool *dbconn.DBConn, quotedIncludeRelations []string) []string {
+	relList := utils.SliceToQuotedString(quotedIncludeRelations)
+	query := fmt.Sprintf(`
+	SELECT c.oid AS string
+	FROM pg_class c
+		JOIN pg_namespace n ON c.relnamespace = n.oid
+	WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)`, relList)
 	return dbconn.MustSelectStringSlice(connectionPool, query)
 }
 
