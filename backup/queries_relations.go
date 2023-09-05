@@ -56,7 +56,7 @@ func getExcludedRelationOidsList(connectionPool *dbconn.DBConn, quotedIncludeRel
 	UNION
 	SELECT r.parchildrelid as _oid
 	FROM pg_partition p join pg_partition_rule r on p.oid = r.paroid
-		join root_oids oids on p.parrelid = oids.a WHERE r.parchildrelid != 0
+		join root_oids oids on p.parrelid = oids._oid WHERE r.parchildrelid != 0
 	`, relList)
 	return dbconn.MustSelectStringSlice(connectionPool, query)
 }
