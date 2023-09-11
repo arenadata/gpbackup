@@ -27,6 +27,7 @@ import (
 	"github.com/greenplum-db/gp-common-go-libs/testhelper"
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/filepath"
+	"github.com/greenplum-db/gpbackup/history"
 	"github.com/greenplum-db/gpbackup/testutils"
 	"github.com/greenplum-db/gpbackup/toc"
 	"github.com/greenplum-db/gpbackup/utils"
@@ -2509,6 +2510,63 @@ LANGUAGE plpgsql NO SQL;`)
 					Fail(fmt.Sprintf("Expected printed timestamp %s to match timestamp %s in report file", stdoutEndTime, reportEndTime))
 				}
 			}
+		})
+	})
+	Describe("Exclude subpartitions for given root partition in leaf-partition-data mode", func() {
+		BeforeEach(func() {
+			testhelper.AssertQueryRuns(backupConn,
+				"CREATE SCHEMA testschema")
+			testhelper.AssertQueryRuns(backupConn,
+				`CREATE TABLE testschema.p3_sales (id int, a int, b int, region text)
+				WITH (appendoptimized=true)
+				DISTRIBUTED BY (id)
+				PARTITION BY RANGE (a)
+					SUBPARTITION BY RANGE (b)
+					SUBPARTITION TEMPLATE (
+						START (1) END (3) EVERY (1))
+						SUBPARTITION BY LIST (region)
+							SUBPARTITION TEMPLATE (
+							SUBPARTITION usa VALUES ('usa'),
+							SUBPARTITION europe VALUES ('europe'))
+				( START (1) END (3) EVERY (1))`)
+		})
+		AfterEach(func() {
+			testhelper.AssertQueryRuns(backupConn,
+				"DROP SCHEMA IF EXISTS testschema CASCADE")
+
+		})
+		It("1. --leaf-partition-data is set and --exclude-table is set for root partition", func() {
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--include-schema", "testschema", "--exclude-table", "testschema.p3_sales")
+			defer assertArtifactsCleaned(restoreConn, timestamp)
+			historyDB, err := history.InitializeHistoryDatabase(historyFilePath)
+			Expect(err).ToNot(HaveOccurred())
+			backupConfig, err := history.GetBackupConfig(timestamp, historyDB)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(backupConfig.LeafPartitionData).To(BeTrue())
+			Expect(backupConfig.RestorePlan).To(HaveLen(0))
+		})
+		It("2. --leaf-partition-data is set and --exclude-table is set for leaf partition", func() {
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--include-schema", "testschema", "--exclude-table", "testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa")
+			defer assertArtifactsCleaned(restoreConn, timestamp)
+			historyDB, err := history.InitializeHistoryDatabase(historyFilePath)
+			Expect(err).ToNot(HaveOccurred())
+			backupConfig, err := history.GetBackupConfig(timestamp, historyDB)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(backupConfig.LeafPartitionData).To(BeTrue())
+			Expect(backupConfig.RestorePlan).To(HaveLen(1))
+			Expect(backupConfig.RestorePlan[0].Timestamp).To(Equal(timestamp))
+			Expect(backupConfig.RestorePlan[0].TableFQNs).To(HaveLen(7))
+			Expect(backupConfig.RestorePlan[0].TableFQNs).ToNot(ContainElement(`testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa`))
+		})
+		It("3. --leaf-partition-data is not set and --exclude-table is set for root partition", func() {
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--include-schema", "testschema", "--exclude-table", "testschema.p3_sales")
+			defer assertArtifactsCleaned(restoreConn, timestamp)
+			historyDB, err := history.InitializeHistoryDatabase(historyFilePath)
+			Expect(err).ToNot(HaveOccurred())
+			backupConfig, err := history.GetBackupConfig(timestamp, historyDB)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(backupConfig.LeafPartitionData).To(BeFalse())
+			Expect(backupConfig.RestorePlan).To(HaveLen(0))
 		})
 	})
 })
