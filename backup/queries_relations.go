@@ -46,18 +46,17 @@ func getExcludedRelationOidsList(connectionPool *dbconn.DBConn, quotedIncludeRel
 	relList := utils.SliceToQuotedString(quotedIncludeRelations)
 
 	query := fmt.Sprintf(`
-	WITH root_oids AS (
-		SELECT c.oid AS _oid
+	WITH recursive cte AS (
+		SELECT c.oid AS string
 		FROM pg_class c
 			JOIN pg_namespace n ON c.relnamespace = n.oid
-			WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
-	)
-	SELECT _oid FROM root_oids
-	UNION
-	SELECT r.parchildrelid as _oid
-	FROM pg_partition p join pg_partition_rule r on p.oid = r.paroid
-		join root_oids oids on p.parrelid = oids._oid WHERE r.parchildrelid != 0
-	`, relList)
+		WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
+		UNION ALL
+		SELECT inhrelid AS strings
+		FROM cte
+			LEFT JOIN pg_inherits ON inhparent = string
+		WHERE inhrelid IS NOT NULL
+	) SELECT * FROM cte`, relList)
 	return dbconn.MustSelectStringSlice(connectionPool, query)
 }
 
