@@ -45,18 +45,35 @@ func relationAndSchemaFilterClause() string {
 func getExcludedRelationOidsList(connectionPool *dbconn.DBConn, quotedIncludeRelations []string) []string {
 	relList := utils.SliceToQuotedString(quotedIncludeRelations)
 
-	query := fmt.Sprintf(`
-	WITH recursive cte AS (
-		SELECT c.oid AS string
-		FROM pg_class c
-			JOIN pg_namespace n ON c.relnamespace = n.oid
-		WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
-		UNION ALL
-		SELECT inhrelid AS strings
-		FROM cte
-			LEFT JOIN pg_inherits ON inhparent = string
-		WHERE inhrelid IS NOT NULL
-	) SELECT * FROM cte`, relList)
+	query := ""
+	if connectionPool.Version.Before("6") {
+		query = fmt.Sprintf(`
+		WITH root_oids AS (
+			SELECT c.oid AS string
+			FROM pg_class c
+				JOIN pg_namespace n ON c.relnamespace = n.oid
+				WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
+		)
+		SELECT string FROM root_oids
+		UNION
+		SELECT r.parchildrelid AS string
+		FROM pg_partition p JOIN pg_partition_rule r ON p.oid = r.paroid
+			JOIN root_oids oids ON p.parrelid = oids.string WHERE r.parchildrelid IS NOT NULL
+		`, relList)
+	} else {
+		query = fmt.Sprintf(`
+		WITH recursive cte AS (
+			SELECT c.oid AS string
+			FROM pg_class c
+				JOIN pg_namespace n ON c.relnamespace = n.oid
+			WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
+			UNION ALL
+			SELECT inhrelid AS strings
+			FROM cte
+				LEFT JOIN pg_inherits ON inhparent = string
+			WHERE inhrelid IS NOT NULL
+		) SELECT * FROM cte`, relList)
+	}
 	return dbconn.MustSelectStringSlice(connectionPool, query)
 }
 
