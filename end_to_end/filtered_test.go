@@ -436,11 +436,50 @@ PARTITION BY LIST (gender)
 		})
 	})
 	Describe("Exclude subpartitions for given root partition in leaf-partition-data mode", func() {
-		BeforeEach(func() {
+		It("runs gpbackup and gprestore with leaf-partition-data and exclude-table root partition backup flags", func() {
 			testhelper.AssertQueryRuns(backupConn,
-				`CREATE SCHEMA testschema`)
+				`DROP SCHEMA IF EXISTS testschema1 CASCADE; CREATE SCHEMA testschema1`)
 			testhelper.AssertQueryRuns(backupConn,
-				`CREATE TABLE testschema.p3_sales (id int, a int, b int, region text)
+				`CREATE TABLE testschema1.p3_sales (id int, a int, b int, region text)
+				WITH (appendoptimized=true)
+				DISTRIBUTED BY (id)
+				PARTITION BY RANGE (a)
+					SUBPARTITION BY RANGE (b)
+					SUBPARTITION TEMPLATE (
+						START (1) END (3) EVERY (1))
+						SUBPARTITION BY LIST (region)
+							SUBPARTITION TEMPLATE (
+							SUBPARTITION usa VALUES ('usa'),
+							SUBPARTITION europe VALUES ('europe'))
+				( START (1) END (3) EVERY (1))`)
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--exclude-table", "testschema1.p3_sales")
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
+			assertTablesNotRestored(restoreConn, []string{
+				"testschema1.p3_sales",
+				"testschema1.p3_sales_1_prt_1",
+				"testschema1.p3_sales_1_prt_1_2_prt_1",
+				"testschema1.p3_sales_1_prt_1_2_prt_1_3_prt_europe",
+				"testschema1.p3_sales_1_prt_1_2_prt_1_3_prt_usa",
+				"testschema1.p3_sales_1_prt_1_2_prt_2",
+				"testschema1.p3_sales_1_prt_1_2_prt_2_3_prt_europe",
+				"testschema1.p3_sales_1_prt_1_2_prt_2_3_prt_usa",
+				"testschema1.p3_sales_1_prt_2",
+				"testschema1.p3_sales_1_prt_2_2_prt_1",
+				"testschema1.p3_sales_1_prt_2_2_prt_1_3_prt_europe",
+				"testschema1.p3_sales_1_prt_2_2_prt_1_3_prt_usa",
+				"testschema1.p3_sales_1_prt_2_2_prt_2",
+				"testschema1.p3_sales_1_prt_2_2_prt_2_3_prt_europe",
+				"testschema1.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
+			})
+			assertArtifactsCleaned(restoreConn, timestamp)
+			testhelper.AssertQueryRuns(backupConn,
+				`DROP SCHEMA IF EXISTS testschema1 CASCADE`)
+		})
+		It("runs gpbackup and gprestore with leaf-partition-data and exclude-table leaf partition backup flags", func() {
+			testhelper.AssertQueryRuns(backupConn,
+				`DROP SCHEMA IF EXISTS testschema2 CASCADE; CREATE SCHEMA testschema2`)
+			testhelper.AssertQueryRuns(backupConn,
+				`CREATE TABLE testschema2.p3_sales (id int, a int, b int, region text)
 				WITH (appendoptimized=true)
 				DISTRIBUTED BY (id)
 				PARTITION BY RANGE (a)
@@ -453,7 +492,7 @@ PARTITION BY LIST (gender)
 							SUBPARTITION europe VALUES ('europe'))
 				( START (1) END (3) EVERY (1))`)
 			testhelper.AssertQueryRuns(backupConn,
-				`INSERT INTO testschema.p3_sales VALUES
+				`INSERT INTO testschema2.p3_sales VALUES
 					(1, 1, 1, 'usa'),
 					(1, 1, 1, 'europe'),
 					(1, 1, 2, 'usa'),
@@ -463,94 +502,84 @@ PARTITION BY LIST (gender)
 					(1, 2, 2, 'usa'),
 					(1, 2, 2, 'europe')
 				`)
-		})
-		AfterEach(func() {
-			testhelper.AssertQueryRuns(backupConn,
-				"DROP SCHEMA IF EXISTS testschema CASCADE")
-
-		})
-		It("runs gpbackup and gprestore with leaf-partition-data and exclude-table root partition backup flags", func() {
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--exclude-table", "testschema.p3_sales")
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--exclude-table", "testschema2.p3_sales_1_prt_1_2_prt_1_3_prt_usa")
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
-			assertTablesNotRestored(restoreConn, []string{
-				"testschema.p3_sales",
-				"testschema.p3_sales_1_prt_1",
-				"testschema.p3_sales_1_prt_1_2_prt_1",
-				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_europe",
-				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa",
-				"testschema.p3_sales_1_prt_1_2_prt_2",
-				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_europe",
-				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_usa",
-				"testschema.p3_sales_1_prt_2",
-				"testschema.p3_sales_1_prt_2_2_prt_1",
-				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_europe",
-				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_usa",
-				"testschema.p3_sales_1_prt_2_2_prt_2",
-				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_europe",
-				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
-			})
-			assertArtifactsCleaned(restoreConn, timestamp)
-		})
-		It("runs gpbackup and gprestore with leaf-partition-data and exclude-table leaf partition backup flags", func() {
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--exclude-table", "testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa")
-			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
-			assertDataRestored(restoreConn, map[string]int{
-				"testschema.p3_sales":                              7,
-				"testschema.p3_sales_1_prt_1":                      3,
-				"testschema.p3_sales_1_prt_1_2_prt_1":              1,
-				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_europe": 1,
-				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa":    0,
-				"testschema.p3_sales_1_prt_1_2_prt_2":              2,
-				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_europe": 1,
-				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_usa":    1,
-				"testschema.p3_sales_1_prt_2":                      4,
-				"testschema.p3_sales_1_prt_2_2_prt_1":              2,
-				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_europe": 1,
-				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_usa":    1,
-				"testschema.p3_sales_1_prt_2_2_prt_2":              2,
-				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_europe": 1,
-				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_usa":    1,
-			})
 			assertTablesRestored(restoreConn, []string{
-				"testschema.p3_sales",
-				"testschema.p3_sales_1_prt_1",
-				"testschema.p3_sales_1_prt_1_2_prt_1",
-				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_europe",
-				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa",
-				"testschema.p3_sales_1_prt_1_2_prt_2",
-				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_europe",
-				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_usa",
-				"testschema.p3_sales_1_prt_2",
-				"testschema.p3_sales_1_prt_2_2_prt_1",
-				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_europe",
-				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_usa",
-				"testschema.p3_sales_1_prt_2_2_prt_2",
-				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_europe",
-				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
+				"testschema2.p3_sales",
+				"testschema2.p3_sales_1_prt_1",
+				"testschema2.p3_sales_1_prt_1_2_prt_1",
+				"testschema2.p3_sales_1_prt_1_2_prt_1_3_prt_europe",
+				"testschema2.p3_sales_1_prt_1_2_prt_1_3_prt_usa",
+				"testschema2.p3_sales_1_prt_1_2_prt_2",
+				"testschema2.p3_sales_1_prt_1_2_prt_2_3_prt_europe",
+				"testschema2.p3_sales_1_prt_1_2_prt_2_3_prt_usa",
+				"testschema2.p3_sales_1_prt_2",
+				"testschema2.p3_sales_1_prt_2_2_prt_1",
+				"testschema2.p3_sales_1_prt_2_2_prt_1_3_prt_europe",
+				"testschema2.p3_sales_1_prt_2_2_prt_1_3_prt_usa",
+				"testschema2.p3_sales_1_prt_2_2_prt_2",
+				"testschema2.p3_sales_1_prt_2_2_prt_2_3_prt_europe",
+				"testschema2.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
+			})
+			assertDataRestored(restoreConn, map[string]int{
+				"testschema2.p3_sales":                              7,
+				"testschema2.p3_sales_1_prt_1":                      3,
+				"testschema2.p3_sales_1_prt_1_2_prt_1":              1,
+				"testschema2.p3_sales_1_prt_1_2_prt_1_3_prt_europe": 1,
+				"testschema2.p3_sales_1_prt_1_2_prt_1_3_prt_usa":    0,
+				"testschema2.p3_sales_1_prt_1_2_prt_2":              2,
+				"testschema2.p3_sales_1_prt_1_2_prt_2_3_prt_europe": 1,
+				"testschema2.p3_sales_1_prt_1_2_prt_2_3_prt_usa":    1,
+				"testschema2.p3_sales_1_prt_2":                      4,
+				"testschema2.p3_sales_1_prt_2_2_prt_1":              2,
+				"testschema2.p3_sales_1_prt_2_2_prt_1_3_prt_europe": 1,
+				"testschema2.p3_sales_1_prt_2_2_prt_1_3_prt_usa":    1,
+				"testschema2.p3_sales_1_prt_2_2_prt_2":              2,
+				"testschema2.p3_sales_1_prt_2_2_prt_2_3_prt_europe": 1,
+				"testschema2.p3_sales_1_prt_2_2_prt_2_3_prt_usa":    1,
 			})
 			assertArtifactsCleaned(restoreConn, timestamp)
+			testhelper.AssertQueryRuns(backupConn,
+				`DROP SCHEMA IF EXISTS testschema2 CASCADE`)
 		})
 		It("runs gpbackup and gprestore without leaf-partition-data and with exclude-table root partition backup flags", func() {
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--exclude-table", "testschema.p3_sales")
+			testhelper.AssertQueryRuns(backupConn,
+				`DROP SCHEMA IF EXISTS testschema3 CASCADE; CREATE SCHEMA testschema3`)
+			testhelper.AssertQueryRuns(backupConn,
+				`CREATE TABLE testschema3.p3_sales (id int, a int, b int, region text)
+				WITH (appendoptimized=true)
+				DISTRIBUTED BY (id)
+				PARTITION BY RANGE (a)
+					SUBPARTITION BY RANGE (b)
+					SUBPARTITION TEMPLATE (
+						START (1) END (3) EVERY (1))
+						SUBPARTITION BY LIST (region)
+							SUBPARTITION TEMPLATE (
+							SUBPARTITION usa VALUES ('usa'),
+							SUBPARTITION europe VALUES ('europe'))
+				( START (1) END (3) EVERY (1))`)
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--exclude-table", "testschema3.p3_sales")
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
 			assertTablesNotRestored(restoreConn, []string{
-				"testschema.p3_sales",
-				"testschema.p3_sales_1_prt_1",
-				"testschema.p3_sales_1_prt_1_2_prt_1",
-				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_europe",
-				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa",
-				"testschema.p3_sales_1_prt_1_2_prt_2",
-				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_europe",
-				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_usa",
-				"testschema.p3_sales_1_prt_2",
-				"testschema.p3_sales_1_prt_2_2_prt_1",
-				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_europe",
-				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_usa",
-				"testschema.p3_sales_1_prt_2_2_prt_2",
-				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_europe",
-				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
+				"testschema3.p3_sales",
+				"testschema3.p3_sales_1_prt_1",
+				"testschema3.p3_sales_1_prt_1_2_prt_1",
+				"testschema3.p3_sales_1_prt_1_2_prt_1_3_prt_europe",
+				"testschema3.p3_sales_1_prt_1_2_prt_1_3_prt_usa",
+				"testschema3.p3_sales_1_prt_1_2_prt_2",
+				"testschema3.p3_sales_1_prt_1_2_prt_2_3_prt_europe",
+				"testschema3.p3_sales_1_prt_1_2_prt_2_3_prt_usa",
+				"testschema3.p3_sales_1_prt_2",
+				"testschema3.p3_sales_1_prt_2_2_prt_1",
+				"testschema3.p3_sales_1_prt_2_2_prt_1_3_prt_europe",
+				"testschema3.p3_sales_1_prt_2_2_prt_1_3_prt_usa",
+				"testschema3.p3_sales_1_prt_2_2_prt_2",
+				"testschema3.p3_sales_1_prt_2_2_prt_2_3_prt_europe",
+				"testschema3.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
 			})
 			assertArtifactsCleaned(restoreConn, timestamp)
+			testhelper.AssertQueryRuns(backupConn,
+				`DROP SCHEMA IF EXISTS testschema3 CASCADE`)
 		})
 	})
 })
