@@ -5,7 +5,6 @@ import (
 
 	"github.com/greenplum-db/gp-common-go-libs/iohelper"
 	"github.com/greenplum-db/gp-common-go-libs/testhelper"
-	"github.com/greenplum-db/gpbackup/history"
 	"github.com/greenplum-db/gpbackup/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -459,38 +458,71 @@ PARTITION BY LIST (gender)
 				"DROP SCHEMA IF EXISTS testschema CASCADE")
 
 		})
-		It("1. --leaf-partition-data is set and --exclude-table is set for root partition", func() {
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--include-schema", "testschema", "--exclude-table", "testschema.p3_sales")
-			defer assertArtifactsCleaned(restoreConn, timestamp)
-			historyDB, err := history.InitializeHistoryDatabase(historyFilePath)
-			Expect(err).ToNot(HaveOccurred())
-			backupConfig, err := history.GetBackupConfig(timestamp, historyDB)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(backupConfig.LeafPartitionData).To(BeTrue())
-			Expect(backupConfig.RestorePlan).To(HaveLen(0))
+		It("runs gpbackup and gprestore with leaf-partition-data and exclude-table root partition backup flags", func() {
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--exclude-table", "testschema.p3_sales")
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
+			assertTablesNotRestored(restoreConn, []string{
+				"testschema.p3_sales",
+				"testschema.p3_sales_1_prt_1",
+				"testschema.p3_sales_1_prt_1_2_prt_1",
+				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_europe",
+				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa",
+				"testschema.p3_sales_1_prt_1_2_prt_2",
+				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_europe",
+				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_usa",
+				"testschema.p3_sales_1_prt_2",
+				"testschema.p3_sales_1_prt_2_2_prt_1",
+				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_europe",
+				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_usa",
+				"testschema.p3_sales_1_prt_2_2_prt_2",
+				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_europe",
+				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
+			})
+			assertArtifactsCleaned(restoreConn, timestamp)
 		})
-		It("2. --leaf-partition-data is set and --exclude-table is set for leaf partition", func() {
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--include-schema", "testschema", "--exclude-table", "testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa")
-			defer assertArtifactsCleaned(restoreConn, timestamp)
-			historyDB, err := history.InitializeHistoryDatabase(historyFilePath)
-			Expect(err).ToNot(HaveOccurred())
-			backupConfig, err := history.GetBackupConfig(timestamp, historyDB)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(backupConfig.LeafPartitionData).To(BeTrue())
-			Expect(backupConfig.RestorePlan).To(HaveLen(1))
-			Expect(backupConfig.RestorePlan[0].Timestamp).To(Equal(timestamp))
-			Expect(backupConfig.RestorePlan[0].TableFQNs).To(HaveLen(7))
-			Expect(backupConfig.RestorePlan[0].TableFQNs).ToNot(ContainElement(`testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa`))
+		It("runs gpbackup and gprestore with leaf-partition-data and exclude-table leaf partition backup flags", func() {
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--exclude-table", "testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa")
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
+			assertTablesRestored(restoreConn, []string{
+				"testschema.p3_sales",
+				"testschema.p3_sales_1_prt_1",
+				"testschema.p3_sales_1_prt_1_2_prt_1",
+				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_europe",
+				"testschema.p3_sales_1_prt_1_2_prt_2",
+				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_europe",
+				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_usa",
+				"testschema.p3_sales_1_prt_2",
+				"testschema.p3_sales_1_prt_2_2_prt_1",
+				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_europe",
+				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_usa",
+				"testschema.p3_sales_1_prt_2_2_prt_2",
+				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_europe",
+				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
+			})
+			assertTablesNotRestored(restoreConn, []string{"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa"})
+			assertArtifactsCleaned(restoreConn, timestamp)
 		})
-		It("3. --leaf-partition-data is not set and --exclude-table is set for root partition", func() {
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--include-schema", "testschema", "--exclude-table", "testschema.p3_sales")
-			defer assertArtifactsCleaned(restoreConn, timestamp)
-			historyDB, err := history.InitializeHistoryDatabase(historyFilePath)
-			Expect(err).ToNot(HaveOccurred())
-			backupConfig, err := history.GetBackupConfig(timestamp, historyDB)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(backupConfig.LeafPartitionData).To(BeFalse())
-			Expect(backupConfig.RestorePlan).To(HaveLen(0))
+		It("runs gpbackup and gprestore without leaf-partition-data and with exclude-table root partition backup flags", func() {
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--exclude-table", "testschema.p3_sales")
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
+			assertTablesNotRestored(restoreConn, []string{
+				"testschema.p3_sales",
+				"testschema.p3_sales_1_prt_1",
+				"testschema.p3_sales_1_prt_1_2_prt_1",
+				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_europe",
+				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa",
+				"testschema.p3_sales_1_prt_1_2_prt_2",
+				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_europe",
+				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_usa",
+				"testschema.p3_sales_1_prt_2",
+				"testschema.p3_sales_1_prt_2_2_prt_1",
+				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_europe",
+				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_usa",
+				"testschema.p3_sales_1_prt_2_2_prt_2",
+				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_europe",
+				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
+			})
+			assertArtifactsCleaned(restoreConn, timestamp)
 		})
 	})
 })
