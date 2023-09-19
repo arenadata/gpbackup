@@ -452,6 +452,7 @@ PARTITION BY LIST (gender)
 							SUBPARTITION usa VALUES ('usa'),
 							SUBPARTITION europe VALUES ('europe'))
 				( START (1) END (3) EVERY (1))`)
+			defer testhelper.AssertQueryRuns(backupConn, `DROP SCHEMA IF EXISTS testschema1 CASCADE`)
 			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--exclude-table", "testschema1.p3_sales")
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
 			assertTablesNotRestored(restoreConn, []string{
@@ -472,8 +473,6 @@ PARTITION BY LIST (gender)
 				"testschema1.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
 			})
 			assertArtifactsCleaned(restoreConn, timestamp)
-			testhelper.AssertQueryRuns(backupConn,
-				`DROP SCHEMA IF EXISTS testschema1 CASCADE`)
 		})
 		It("runs gpbackup and gprestore with leaf-partition-data and exclude-table leaf partition backup flags", func() {
 			testhelper.AssertQueryRuns(backupConn,
@@ -502,6 +501,7 @@ PARTITION BY LIST (gender)
 					(1, 2, 2, 'usa'),
 					(1, 2, 2, 'europe')
 				`)
+			defer testhelper.AssertQueryRuns(backupConn, `DROP SCHEMA IF EXISTS testschema2 CASCADE`)
 			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--exclude-table", "testschema2.p3_sales_1_prt_1_2_prt_1_3_prt_usa")
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
 			assertTablesRestored(restoreConn, []string{
@@ -539,8 +539,6 @@ PARTITION BY LIST (gender)
 				"testschema2.p3_sales_1_prt_2_2_prt_2_3_prt_usa":    1,
 			})
 			assertArtifactsCleaned(restoreConn, timestamp)
-			testhelper.AssertQueryRuns(backupConn,
-				`DROP SCHEMA IF EXISTS testschema2 CASCADE`)
 		})
 		It("runs gpbackup and gprestore without leaf-partition-data and with exclude-table root partition backup flags", func() {
 			testhelper.AssertQueryRuns(backupConn,
@@ -558,6 +556,7 @@ PARTITION BY LIST (gender)
 							SUBPARTITION usa VALUES ('usa'),
 							SUBPARTITION europe VALUES ('europe'))
 				( START (1) END (3) EVERY (1))`)
+			defer testhelper.AssertQueryRuns(backupConn, `DROP SCHEMA IF EXISTS testschema3 CASCADE`)
 			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--exclude-table", "testschema3.p3_sales")
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
 			assertTablesNotRestored(restoreConn, []string{
@@ -578,8 +577,6 @@ PARTITION BY LIST (gender)
 				"testschema3.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
 			})
 			assertArtifactsCleaned(restoreConn, timestamp)
-			testhelper.AssertQueryRuns(backupConn,
-				`DROP SCHEMA IF EXISTS testschema3 CASCADE`)
 		})
 	})
 })
