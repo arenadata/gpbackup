@@ -438,7 +438,7 @@ PARTITION BY LIST (gender)
 	Describe("Exclude subpartitions for given root partition in leaf-partition-data mode", func() {
 		BeforeEach(func() {
 			testhelper.AssertQueryRuns(backupConn,
-				"CREATE SCHEMA testschema")
+				`CREATE SCHEMA testschema`)
 			testhelper.AssertQueryRuns(backupConn,
 				`CREATE TABLE testschema.p3_sales (id int, a int, b int, region text)
 				WITH (appendoptimized=true)
@@ -452,6 +452,17 @@ PARTITION BY LIST (gender)
 							SUBPARTITION usa VALUES ('usa'),
 							SUBPARTITION europe VALUES ('europe'))
 				( START (1) END (3) EVERY (1))`)
+			testhelper.AssertQueryRuns(backupConn,
+				`INSERT INTO testschema.p3_sales VALUES
+					(1, 1, 1, 'usa'),
+					(1, 1, 1, 'europe'),
+					(1, 1, 2, 'usa'),
+					(1, 1, 2, 'europe'),
+					(1, 2, 1, 'usa'),
+					(1, 2, 1, 'europe'),
+					(1, 2, 2, 'usa'),
+					(1, 2, 2, 'europe')
+				`)
 		})
 		AfterEach(func() {
 			testhelper.AssertQueryRuns(backupConn,
@@ -483,11 +494,29 @@ PARTITION BY LIST (gender)
 		It("runs gpbackup and gprestore with leaf-partition-data and exclude-table leaf partition backup flags", func() {
 			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--exclude-table", "testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa")
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
+			assertDataRestored(restoreConn, map[string]int{
+				"testschema.p3_sales":                              7,
+				"testschema.p3_sales_1_prt_1":                      3,
+				"testschema.p3_sales_1_prt_1_2_prt_1":              1,
+				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_europe": 1,
+				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa":    0,
+				"testschema.p3_sales_1_prt_1_2_prt_2":              2,
+				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_europe": 1,
+				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_usa":    1,
+				"testschema.p3_sales_1_prt_2":                      4,
+				"testschema.p3_sales_1_prt_2_2_prt_1":              2,
+				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_europe": 1,
+				"testschema.p3_sales_1_prt_2_2_prt_1_3_prt_usa":    1,
+				"testschema.p3_sales_1_prt_2_2_prt_2":              2,
+				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_europe": 1,
+				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_usa":    1,
+			})
 			assertTablesRestored(restoreConn, []string{
 				"testschema.p3_sales",
 				"testschema.p3_sales_1_prt_1",
 				"testschema.p3_sales_1_prt_1_2_prt_1",
 				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_europe",
+				"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa",
 				"testschema.p3_sales_1_prt_1_2_prt_2",
 				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_europe",
 				"testschema.p3_sales_1_prt_1_2_prt_2_3_prt_usa",
@@ -499,7 +528,6 @@ PARTITION BY LIST (gender)
 				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_europe",
 				"testschema.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
 			})
-			assertTablesNotRestored(restoreConn, []string{"testschema.p3_sales_1_prt_1_2_prt_1_3_prt_usa"})
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
 		It("runs gpbackup and gprestore without leaf-partition-data and with exclude-table root partition backup flags", func() {
