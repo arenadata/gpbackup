@@ -27,7 +27,7 @@ func relationAndSchemaFilterClause() string {
 		quotedExcludeRelations, err := options.QuoteTableNames(connectionPool, MustGetFlagStringArray(options.EXCLUDE_RELATION))
 		gplog.FatalOnError(err)
 
-		excludeOids := getOidsFromRelationList(connectionPool, quotedExcludeRelations)
+		excludeOids := getExcludedRelationOidsList(connectionPool, quotedExcludeRelations)
 		if len(excludeOids) > 0 {
 			filterRelationClause += fmt.Sprintf("\nAND c.oid NOT IN (%s)", strings.Join(excludeOids, ", "))
 		}
@@ -40,6 +40,41 @@ func relationAndSchemaFilterClause() string {
 		filterRelationClause += fmt.Sprintf("\nAND c.oid IN (%s)", strings.Join(includeOids, ", "))
 	}
 	return filterRelationClause
+}
+
+func getExcludedRelationOidsList(connectionPool *dbconn.DBConn, quotedIncludeRelations []string) []string {
+	relList := utils.SliceToQuotedString(quotedIncludeRelations)
+
+	query := ""
+	if connectionPool.Version.Before("6") {
+		query = fmt.Sprintf(`
+		WITH root_oids AS (
+			SELECT c.oid AS string
+			FROM pg_class c
+				JOIN pg_namespace n ON c.relnamespace = n.oid
+				WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
+		)
+		SELECT string FROM root_oids
+		UNION
+		SELECT r.parchildrelid AS string
+		FROM pg_partition p JOIN pg_partition_rule r ON p.oid = r.paroid
+			JOIN root_oids oids ON p.parrelid = oids.string WHERE r.parchildrelid IS NOT NULL
+		`, relList)
+	} else {
+		query = fmt.Sprintf(`
+		WITH recursive cte AS (
+			SELECT c.oid AS string
+			FROM pg_class c
+				JOIN pg_namespace n ON c.relnamespace = n.oid
+			WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
+			UNION ALL
+			SELECT inhrelid AS strings
+			FROM cte
+				LEFT JOIN pg_inherits ON inhparent = string
+			WHERE inhrelid IS NOT NULL
+		) SELECT * FROM cte`, relList)
+	}
+	return dbconn.MustSelectStringSlice(connectionPool, query)
 }
 
 func getOidsFromRelationList(connectionPool *dbconn.DBConn, quotedIncludeRelations []string) []string {
@@ -98,17 +133,29 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 	}
 
 	query := fmt.Sprintf(`
-	SELECT n.oid AS schemaoid,
-		c.oid AS oid,
-		quote_ident(n.nspname) AS schema,
-		quote_ident(c.relname) AS name
-	FROM pg_class c
+	SELECT schemaoid, oid, schema, name FROM (
+		SELECT n.oid AS schemaoid,
+			c.oid AS oid,
+			quote_ident(n.nspname) AS schema,
+			quote_ident(c.relname) AS name,
+			coalesce(prt.pages, c.relpages) AS pages
+		FROM pg_class c
 		JOIN pg_namespace n ON c.relnamespace = n.oid
-	WHERE %s
-		%s
-		AND relkind IN (%s)
-		AND %s
-		ORDER BY c.oid`,
+		LEFT JOIN (
+			SELECT
+				p.parrelid,
+				sum(pc.relpages) AS pages
+			FROM pg_partition_rule AS pr
+			JOIN pg_partition AS p ON pr.paroid = p.oid
+			JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
+			GROUP BY p.parrelid
+		) AS prt ON prt.parrelid = c.oid
+		WHERE %s
+			%s
+			AND relkind IN (%s)
+			AND %s
+	) res
+	ORDER BY pages DESC, oid`,
 		relationAndSchemaFilterClause(), childPartitionFilter, relkindFilter, ExtensionFilterClause("c"))
 
 	results := make([]Relation, 0)
@@ -128,15 +175,27 @@ func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, in
 	includeOids := getOidsFromRelationList(connectionPool, includedRelationsQuoted)
 	oidStr := strings.Join(includeOids, ", ")
 	query := fmt.Sprintf(`
-	SELECT n.oid AS schemaoid,
-		c.oid AS oid,
-		quote_ident(n.nspname) AS schema,
-		quote_ident(c.relname) AS name
-	FROM pg_class c
+	SELECT schemaoid, oid, schema, name FROM (
+		SELECT n.oid AS schemaoid,
+			c.oid AS oid,
+			quote_ident(n.nspname) AS schema,
+			quote_ident(c.relname) AS name,
+			coalesce(prt.pages, c.relpages) AS pages
+		FROM pg_class c
 		JOIN pg_namespace n ON c.relnamespace = n.oid
-	WHERE c.oid IN (%s)
+		LEFT JOIN (
+			SELECT
+				p.parrelid,
+				sum(pc.relpages) AS pages
+			FROM pg_partition_rule AS pr
+			JOIN pg_partition AS p ON pr.paroid = p.oid
+			JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
+			GROUP BY p.parrelid
+		) AS prt ON prt.parrelid = c.oid
+		WHERE c.oid IN (%s)
 		AND relkind IN (%s)
-	ORDER BY c.oid`, oidStr, relkindFilter)
+	) res
+	ORDER BY pages DESC, oid`, oidStr, relkindFilter)
 
 	results := make([]Relation, 0)
 	err := connectionPool.Select(&results, query)
