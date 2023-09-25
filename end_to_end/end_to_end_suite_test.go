@@ -420,43 +420,6 @@ func extractSavedTarFile(backupDir string, tarBaseName string) string {
 	return extractDirectory
 }
 
-// Move extracted data files to the proper directory for a larger-to-smaller restore, if necessary
-// Assumes all saved backups have a name in the format "N-segment-db-..." where N is the original cluster size
-func moveSegmentBackupFiles(tarBaseName string, extractDirectory string, isMultiNode bool, timestamps ...string) {
-	re := regexp.MustCompile("^([0-9]+)-.*")
-	origSize, _ := strconv.Atoi(re.FindStringSubmatch(tarBaseName)[1])
-	for _, ts := range timestamps {
-		if ts != "" {
-			baseDir := fmt.Sprintf("%s/demoDataDir%s/backups/%s/%s", extractDirectory, "%d", ts[0:8], ts)
-			if isMultiNode {
-				remoteOutput := backupCluster.GenerateAndExecuteCommand("Create backup directories on segments", cluster.ON_SEGMENTS, func(contentID int) string {
-					return fmt.Sprintf("mkdir -p %s", fmt.Sprintf(baseDir, contentID))
-				})
-				backupCluster.CheckClusterError(remoteOutput, "Unable to create directories", func(contentID int) string {
-					return ""
-				})
-				for i := 0; i < origSize; i++ {
-					origDir := fmt.Sprintf(baseDir, i)
-					destDir := fmt.Sprintf(baseDir, i%segmentCount)
-					_, err := backupCluster.ExecuteLocalCommand(fmt.Sprintf(`rsync -r -e ssh %s/ %s:%s`, origDir, backupCluster.GetHostForContent(i%segmentCount), destDir))
-					if err != nil {
-						Fail(fmt.Sprintf("Could not copy %s to %s: %v", origDir, destDir, err))
-					}
-				}
-			} else {
-				for i := segmentCount; i < origSize; i++ {
-					origDir := fmt.Sprintf(baseDir, i)
-					destDir := fmt.Sprintf(baseDir, i%segmentCount)
-					files, _ := path.Glob(fmt.Sprintf("%s/*", origDir))
-					for _, dataFile := range files {
-						os.Rename(dataFile, fmt.Sprintf("%s/%s", destDir, path.Base(dataFile)))
-					}
-				}
-			}
-		}
-	}
-}
-
 func TestEndToEnd(t *testing.T) {
 	format.MaxLength = 0
 	RegisterFailHandler(Fail)
@@ -1948,11 +1911,6 @@ LANGUAGE plpgsql NO SQL;`)
 				defer testhelper.AssertQueryRuns(restoreConn, `DROP SCHEMA IF EXISTS schematwo CASCADE;`)
 				defer testhelper.AssertQueryRuns(restoreConn, `DROP SCHEMA IF EXISTS schemathree CASCADE;`)
 
-				if !testUsesPlugin { // No need to manually move files when using a plugin
-					isMultiNode := (backupCluster.GetHostForContent(0) != backupCluster.GetHostForContent(-1))
-					moveSegmentBackupFiles(tarBaseName, extractDirectory, isMultiNode, fullTimestamp, incrementalTimestamp)
-				}
-
 				// This block stops the test if it hangs.  It was introduced to prevent hangs causing timeout failures in Concourse CI.
 				// These hangs are still being observed only in CI, and a definitive RCA has not yet been accomplished
 				completed := make(chan bool)
@@ -2096,9 +2054,6 @@ LANGUAGE plpgsql NO SQL;`)
 					}
 					extractDirectory := extractSavedTarFile(backupDir, tarBaseName)
 					defer testhelper.AssertQueryRuns(restoreConn, `DROP SCHEMA IF EXISTS schemaone CASCADE;`)
-
-					isMultiNode := (backupCluster.GetHostForContent(0) != backupCluster.GetHostForContent(-1))
-					moveSegmentBackupFiles(tarBaseName, extractDirectory, isMultiNode, fullTimestamp)
 
 					gprestoreArgs := []string{
 						"--timestamp", fullTimestamp,

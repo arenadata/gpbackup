@@ -382,6 +382,7 @@ func doRestoreAgent() error {
 
 func constructSingleTableFilename(name string, contentToRestore int, oid int) string {
 	name = strings.ReplaceAll(name, fmt.Sprintf("gpbackup_%d", *content), fmt.Sprintf("gpbackup_%d", contentToRestore))
+	name = strings.ReplaceAll(name, fmt.Sprintf("%d/backups/", *content), fmt.Sprintf("%d/backups/", contentToRestore))
 	nameParts := strings.Split(name, ".")
 	filename := fmt.Sprintf("%s_%d", nameParts[0], oid)
 	if len(nameParts) > 1 { // We only expect filenames ending in ".gz" or ".zst", but they can contain dots so handle arbitrary numbers of dots

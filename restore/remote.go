@@ -38,8 +38,25 @@ func VerifyBackupDirectoriesExistOnAllHosts() {
 }
 
 func VerifyBackupFileCountOnSegments() {
+	origSize, destSize, isResizeRestore := GetResizeClusterInfo()
+	cmdMap := make(map[int][]int, destSize)
+	for i := 0; i < origSize; i++ {
+		cmdMap[i%destSize] = append(cmdMap[i%destSize], []int{i}...)
+	}
+	for i := origSize; i < destSize; i++ {
+		cmdMap[i] = append(cmdMap[i], []int{i}...)
+	}
+
+	GetDirsForContent := func(i int) string {
+		dirs := ""
+		for _, e := range cmdMap[i] {
+			dirs += " " + fmt.Sprintf(`"%s"`, globalFPInfo.GetDirForContent(e))
+		}
+		return dirs
+	}
+
 	remoteOutput := globalCluster.GenerateAndExecuteCommand("Verifying backup file count", cluster.ON_SEGMENTS, func(contentID int) string {
-		return fmt.Sprintf("find %s -type f | wc -l", globalFPInfo.GetDirForContent(contentID))
+		return fmt.Sprintf(`find %s -type f | wc -l`, GetDirsForContent(contentID))
 	})
 	globalCluster.CheckClusterError(remoteOutput, "Could not verify backup file count", func(contentID int) string {
 		return "Could not verify backup file count"
@@ -51,7 +68,6 @@ func VerifyBackupFileCountOnSegments() {
 		fileCount = len(globalTOC.DataEntries)
 	}
 
-	origSize, destSize, isResizeRestore := GetResizeClusterInfo()
 	batchMap := make(map[int]int, len(remoteOutput.Commands))
 	for i := 0; i < origSize; i++ {
 		batchMap[i%destSize] += fileCount
