@@ -139,6 +139,25 @@ func InitializeHistoryDatabase(historyDBPath string) (*sql.DB, error) {
 		return nil, err
 	}
 
+	// It should be solved by implementing migration tool but who cares?
+	// caused by c5c177f
+	row := tx.QueryRow(`
+		SELECT 1 FROM pragma_table_info('backups')
+		WHERE name = 'segment_count';`)
+	err = row.Scan()
+	if (err == sql.ErrNoRows) {
+		_, err = tx.Exec("ALTER TABLE backups ADD COLUMN segment_count INT;")
+		if err != nil {
+			tx.Rollback()
+			db.Close()
+			return nil, err
+		}
+	} else if err != nil {
+		tx.Rollback()
+		db.Close()
+		return nil, err
+	}
+
 	createAuxTableQuery := `
 		CREATE TABLE IF NOT EXISTS %s (
 			timestamp TEXT NOT NULL,
