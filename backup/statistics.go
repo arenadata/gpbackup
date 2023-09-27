@@ -27,7 +27,7 @@ func PrintStatisticsStatements(statisticsFile *utils.FileWithByteCount, tocfile 
 	}
 }
 
-func printStatisticsStatementForTable(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, table Table, query string){
+func printStatisticsStatementForTable(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, table Table, query string) {
 	start := statisticsFile.ByteCount
 	statisticsFile.MustPrintf("\n\n%s\n", query)
 	entry := toc.MetadataEntry{Schema: table.Schema, Name: table.Name, ObjectType: "STATISTICS"}
@@ -162,11 +162,11 @@ func generateAttributeSlotsQuery7(attStat AttributeStatistic) string {
 			realValues(attStat.Numbers3),
 			realValues(attStat.Numbers4),
 			realValues(attStat.Numbers5),
-			AnyValues(attStat.Values1, attStat.Type),
-			AnyValues(attStat.Values2, attStat.Type),
-			AnyValues(attStat.Values3, attStat.Type),
-			AnyValues(attStat.Values4, attStat.Type),
-			AnyValues(attStat.Values5, attStat.Type))
+			AnyValues(attStat.Values1, attStat.Type, attStat.Kind1),
+			AnyValues(attStat.Values2, attStat.Type, attStat.Kind2),
+			AnyValues(attStat.Values3, attStat.Type, attStat.Kind3),
+			AnyValues(attStat.Values4, attStat.Type, attStat.Kind4),
+			AnyValues(attStat.Values5, attStat.Type, attStat.Kind5))
 	}
 	return attributeQuery
 }
@@ -230,11 +230,11 @@ func generateAttributeSlotsQuery6(attStat AttributeStatistic) string {
 			realValues(attStat.Numbers3),
 			realValues(attStat.Numbers4),
 			realValues(attStat.Numbers5),
-			AnyValues(attStat.Values1, attStat.Type),
-			AnyValues(attStat.Values2, attStat.Type),
-			AnyValues(attStat.Values3, attStat.Type),
-			AnyValues(attStat.Values4, attStat.Type),
-			AnyValues(attStat.Values5, attStat.Type))
+			AnyValues(attStat.Values1, attStat.Type, attStat.Kind1),
+			AnyValues(attStat.Values2, attStat.Type, attStat.Kind2),
+			AnyValues(attStat.Values3, attStat.Type, attStat.Kind3),
+			AnyValues(attStat.Values4, attStat.Type, attStat.Kind4),
+			AnyValues(attStat.Values5, attStat.Type, attStat.Kind5))
 	}
 	return attributeQuery
 }
@@ -286,10 +286,10 @@ func generateAttributeSlotsQuery4(attStat AttributeStatistic) string {
 			realValues(attStat.Numbers2),
 			realValues(attStat.Numbers3),
 			realValues(attStat.Numbers4),
-			AnyValues(attStat.Values1, attStat.Type),
-			AnyValues(attStat.Values2, attStat.Type),
-			AnyValues(attStat.Values3, attStat.Type),
-			AnyValues(attStat.Values4, attStat.Type))
+			AnyValues(attStat.Values1, attStat.Type, attStat.Kind1),
+			AnyValues(attStat.Values2, attStat.Type, attStat.Kind2),
+			AnyValues(attStat.Values3, attStat.Type, attStat.Kind3),
+			AnyValues(attStat.Values4, attStat.Type, attStat.Kind4))
 	}
 	return attributeQuery
 }
@@ -318,8 +318,11 @@ func realValues(reals pq.StringArray) string {
  * A given type is not guaranteed to have a corresponding array type, so we need
  * to use array_in() instead of casting to an array.
  */
-func AnyValues(any pq.StringArray, typ string) string {
+func AnyValues(any pq.StringArray, typ string, kind int) string {
 	if len(any) > 0 {
+		if kind == 99 || kind == 98 { // HLL and FULLHLL are storead as BYTEA
+			typ = `bytea`
+		}
 		return fmt.Sprintf(`array_in(%s, '%s'::regtype::oid, -1)`, SliceToPostgresArray(any), typ)
 	}
 	return fmt.Sprintf("NULL")

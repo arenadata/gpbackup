@@ -234,11 +234,11 @@ WHERE oid = '"""test''schema"""."""test''table"""'::regclass::oid;`))
 	})
 	Describe("AnyValues", func() {
 		It("returns properly casted string when length of anyvalues is greater than 0", func() {
-			castedString := backup.AnyValues([]string{"1", "2"}, "int")
+			castedString := backup.AnyValues([]string{"1", "2"}, "int", 0)
 			Expect(castedString).To(Equal(`array_in('{"1","2"}', 'int'::regtype::oid, -1)`))
 		})
 		It("returns NULL if anyvalues is of length 0", func() {
-			castedString := backup.AnyValues([]string{}, "int")
+			castedString := backup.AnyValues([]string{}, "int", 0)
 			Expect(castedString).To(Equal(`NULL`))
 		})
 	})
