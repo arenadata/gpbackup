@@ -1,31 +1,30 @@
 ---
 groups:
-- name: All
+- name: all
   jobs:
   # these are kept as separate jobs to avoid race bugs when they're tasks in the same job
   - build_binaries_rhel6
   - build_binaries_rhel7
   - build_binaries_rhel8
   - build_gppkgs
-  - GPDB5
+  - gpdb5
 {% if is_prod or "gpbackup-release" == pipeline_name %}
   - build_binaries_ubuntu
-  - GPDB6-ubuntu
   - ddboost_plugin_and_boostfs_tests_5x
 {% endif %}
 {% if is_prod and "gpbackup-release" != pipeline_name %}
   - scale-5x
   - scale-6x
-  - scale-GPDB7
+  - scale-gpdb7
   - s3_plugin_perf
   - ddboost_plugin_perf
 {% endif %}
   - gpbackup-manager-tests
 {% if "gpbackup-release" != pipeline_name %}
 {% endif %}
-  - GPDB6
-  - GPDB6-7-seg-cluster
-  - GPDB7
+  - gpdb6
+  - gpdb6-7-seg-cluster
+  - gpdb7
   - s3_plugin_tests
   - backward-compatibility
   - ddboost_plugin_and_boostfs_tests_6x
@@ -38,9 +37,9 @@ groups:
   - final_gate
 {% endif %}
 
-- name: GPDB5
+- name: gpdb5
   jobs:
-  - GPDB5
+  - gpdb5
 {% if is_prod or "gpbackup-release" == pipeline_name %}
   - ddboost_plugin_and_boostfs_tests_5x
 {% endif %}
@@ -50,38 +49,35 @@ groups:
   - s3_plugin_tests
   - backward-compatibility
 
-- name: GPDB6
+- name: gpdb6
   jobs:
-  - GPDB6
-  - GPDB6-7-seg-cluster
-{% if is_prod or "gpbackup-release" == pipeline_name %}
-  - GPDB6-ubuntu
-{% endif %}
+  - gpdb6
+  - gpdb6-7-seg-cluster
 {% if is_prod and "gpbackup-release" != pipeline_name %}
   - scale-6x
-{% endif %}
-  - ddboost_plugin_and_boostfs_tests_6x
   - s3_plugin_perf
   - ddboost_plugin_perf
+{% endif %}
+  - ddboost_plugin_and_boostfs_tests_6x
 
-- name: GPDB7
+- name: gpdb7
   jobs:
-  - GPDB7
+  - gpdb7
 {% if is_prod and "gpbackup-release" != pipeline_name %}
-  - scale-GPDB7
+  - scale-gpdb7
 {% endif %}
 
 {% if is_prod and "gpbackup-release" != pipeline_name %}
-- name: Scale
+- name: scale
   jobs:
   - scale-5x
   - scale-6x
-  - scale-GPDB7
+  - scale-gpdb7
   - s3_plugin_perf
   - ddboost_plugin_perf
 {% endif %}
 
-- name: Plugins
+- name: plugins
   jobs:
   - s3_plugin_tests
   - ddboost_plugin_and_boostfs_tests_6x
@@ -92,7 +88,7 @@ groups:
 {% endif %}
 
 {% if "gpbackup-release" == pipeline_name %}
-- name: Packaging and Release
+- name: packaging_and_release
   jobs:
   - build_binaries_rhel6
   - build_binaries_rhel7
@@ -110,11 +106,7 @@ anchors:
   delete_on_failure: true
   generate_random_name: true
   plugin_dir: ../../terraform.d/plugin-cache/linux_amd64
-  terraform_source: ccp_src/google/
-
-- &ccp_default_vars
-  instance_type: n1-standard-1
-  PLATFORM: centos6
+  terraform_source: ccp_src/google-nvme-block-device/
 
 - &ccp_gen_cluster_default_params
   AWS_ACCESS_KEY_ID: ((tf-machine-access-key-id))
@@ -164,10 +156,10 @@ anchors:
         run:
           path: 'ccp_src/google/ccp_failed_test.sh'
         params:
-          GOOGLE_CREDENTIALS: ((dp/$$DEV_PROD$$/google-service-account-key))
-          GOOGLE_PROJECT_ID: ((dp/$$DEV_PROD$$/google-project-id))
-          GOOGLE_ZONE: ((dp/$$DEV_PROD$$/google-zone))
-          GOOGLE_SERVICE_ACCOUNT: ((dp/$$DEV_PROD$$/google-service-account))
+          GOOGLE_CREDENTIALS: ((dp/dev/google-service-account-key))
+          GOOGLE_PROJECT_ID: ((dp/dev/google-project-id))
+          GOOGLE_ZONE: ((dp/dev/google-zone))
+          GOOGLE_SERVICE_ACCOUNT: ((dp/dev/google-service-account))
           AWS_ACCESS_KEY_ID: ((tf-machine-access-key-id))
           AWS_SECRET_ACCESS_KEY: ((tf-machine-secret-access-key))
           AWS_DEFAULT_REGION: ((dp/tf-machine-region))
@@ -180,9 +172,9 @@ anchors:
     env:
       AWS_ACCESS_KEY_ID: ((tf-machine-access-key-id))
       AWS_SECRET_ACCESS_KEY: ((tf-machine-secret-access-key))
-      GOOGLE_CREDENTIALS: ((dp/$$DEV_PROD$$/google-service-account-key))
+      GOOGLE_CREDENTIALS: ((dp/dev/google-service-account-key))
     vars:
-      project_id: ((dp/$$DEV_PROD$$/google-project-id))
+      project_id: ((dp/dev/google-project-id))
     storage:
       access_key_id: ((tf-machine-access-key-id))
       secret_access_key: ((tf-machine-secret-access-key))
@@ -193,13 +185,13 @@ anchors:
       bucket_path: clusters-google/
 
 - &ddboost_params
-  DD_SOURCE_HOST: ((dp/$$DEV_PROD$$/datadomain_711_source_host_gcp))
+  DD_SOURCE_HOST: ((dp/dev/datadomain_711_source_host_gcp))
   DD_USER: ((dp/prod/datadomain_user))
   DD_PW: ((dp/prod/datadomain_711_password_gcp))
-  DD_DEST_HOST: ((dp/$$DEV_PROD$$/datadomain_711_dest_host_gcp))
+  DD_DEST_HOST: ((dp/dev/datadomain_711_dest_host_gcp))
   DD_ENCRYPTED_PW: ((dp/prod/encrypted_datadomain_711_password_gcp))
 
-{% if is_prod or "gpbackup-release" == pipeline_name %}
+{% if should_alert and (is_prod or "gpbackup-release" == pipeline_name) %}
 - &slack_alert
   put: slack-alert
   params:
@@ -248,13 +240,7 @@ resources:
     repository: gcr.io/data-gpdb-public-images/gpdb5-centos7-build-test
     tag: latest
 
-- name: centos7-gpdb6-build-image
-  type: registry-image
-  source:
-    repository: gcr.io/data-gpdb-public-images/gpdb6-centos7-build
-    tag: latest
-
-- name: centos7-gpdb6-golang-image
+- name: centos7-gpdb6-image
   type: registry-image
   source:
     repository: gcr.io/data-gpdb-public-images/gpdb6-centos7-test-golang
@@ -273,13 +259,7 @@ resources:
     tag: latest
 
 {% if is_prod or "gpbackup-release" == pipeline_name %}
-- name: ubuntu-debian-image
-  type: registry-image
-  source:
-    repository: gcr.io/data-gpdb-public-images/gpdb6-ubuntu20.04-build
-    tag: latest
-
-- name: ubuntu-debian-test-image
+- name: ubuntu20.04-gpdb6-image
   type: registry-image
   source:
     repository: gcr.io/data-gpdb-public-images/gpdb6-ubuntu20.04-test
@@ -304,7 +284,7 @@ resources:
   type: git
   icon: github-circle
   source:
-    branch: ((dp/$$DEV_PROD$$/gpbackup-s3-plugin-git-branch))
+    branch: main
     uri: https://github.com/greenplum-db/gpbackup-s3-plugin
 {% if "gpbackup-release" == pipeline_name %}
     tag_filter: 1.*
@@ -314,7 +294,7 @@ resources:
   type: git
   icon: github-circle
   source:
-    branch: ((dp/gpbackup-ddboost-plugin-branch))
+    branch: main
     private_key: ((dp/gpbackup-ddboost-plugin-remote-key))
     uri: ((dp/gpbackup-ddboost-plugin-git-remote))
 {% if "gpbackup-release" == pipeline_name %}
@@ -371,13 +351,13 @@ resources:
 
 ##### Binaries #####
 {% if is_prod or "gpbackup-release" == pipeline_name %}
-- name: bin_gpdb_6x_stable_ubuntu
+- name: bin_gpdb_6x_ubuntu
   type: gcs
   icon: google
   source:
     bucket: ((dp/prod/gcs-ci-bucket))
     json_key: ((concourse-gcs-resources-service-account-key))
-    regexp: server/published/gpdb6/server-rc-(.*)-ubuntu20.04_x86_64((dp/$$DEV_PROD$$/rc-build-type-gcs)).debug.tar.gz
+    regexp: server/published/gpdb6/server-rc-(.*)-ubuntu20.04_x86_64.debug.tar.gz
 {% endif %}
 
 - name: bin_gpdb_7x_rhel8
@@ -388,7 +368,7 @@ resources:
     json_key: ((concourse-gcs-resources-service-account-key))
     regexp: server/published/main/server-rc-(.*)-el8_x86_64.tar.gz
 
-- name: bin_gpdb_5x_stable_centos6
+- name: bin_gpdb_5x_centos6
   type: s3
   icon: amazon
   source:
@@ -398,7 +378,7 @@ resources:
     access_key_id: ((aws-bucket-access-key-id))
     secret_access_key: ((aws-bucket-secret-access-key))
 
-- name: bin_gpdb_5x_stable_centos7
+- name: bin_gpdb_5x_centos7
   type: s3
   icon: amazon
   source:
@@ -408,28 +388,20 @@ resources:
     access_key_id: ((aws-bucket-access-key-id))
     secret_access_key: ((aws-bucket-secret-access-key))
 
-- name: bin_gpdb_6x_stable_centos6
+- name: bin_gpdb_6x_centos7
   type: gcs
   icon: google
   source:
     bucket: ((dp/prod/gcs-ci-bucket))
     json_key: ((concourse-gcs-resources-service-account-key))
-    regexp: server/published/gpdb6/server-rc-(.*)-rhel6_x86_64((dp/$$DEV_PROD$$/rc-build-type-gcs)).tar.gz
-
-- name: bin_gpdb_6x_stable_centos7
-  type: gcs
-  icon: google
-  source:
-    bucket: ((dp/prod/gcs-ci-bucket))
-    json_key: ((concourse-gcs-resources-service-account-key))
-    regexp: server/published/gpdb6/server-rc-(.*)-rhel7_x86_64((dp/$$DEV_PROD$$/rc-build-type-gcs)).tar.gz
+    regexp: server/published/gpdb6/server-rc-(.*)-rhel7_x86_64.tar.gz
 
 - name: bin_gpdb_6x_rhel8
   type: gcs
   source:
     bucket: ((dp/prod/gcs-ci-bucket))
     json_key: ((concourse-gcs-resources-service-account-key))
-    regexp: server/published/gpdb6/server-rc-(.*)-rhel8_x86_64((dp/$$DEV_PROD$$/rc-build-type-gcs)).tar.gz
+    regexp: server/published/gpdb6/server-rc-(.*)-rhel8_x86_64.tar.gz
 
 # These binaries are used for backwards-compatibility testing only
 - name: bin_gpbackup_1.0.0_and_1.7.1
@@ -471,6 +443,17 @@ resources:
     json_key: ((dp/dev/gcp_svc_acct_key))
     regexp: dummy_seclabel_gpdb7-v(.*).so
 
+# used for centos6 since the OS is EOL and can't download
+- name: libyaml-0.1.7
+  type: s3
+  icon: amazon
+  source:
+    bucket: gpbackup-dependencies
+    versioned_file: gpbackup-dependencies/libyaml-0.1.7.tar.gz
+    region_name: us-west-2
+    access_key_id: ((aws-bucket-access-key-id))
+    secret_access_key: ((aws-bucket-secret-access-key))
+
 - name: terraform
   <<: *terraform_cluster
 
@@ -506,7 +489,7 @@ resources:
     secret_access_key: ((gpdb4-bucket-secret-access-key))
     versioned_file: DDBoostFS-1.1.0.1-565598.rhel.x86_64.rpm
 
-{% if is_prod or "gpbackup-release" == pipeline_name %}
+{% if should_alert and (is_prod or "gpbackup-release" == pipeline_name) %}
 - name: slack-alert
   type: slack-notification
   source:
@@ -782,10 +765,10 @@ jobs:
     - get: gpbackup
 {% endif %}
     - get: pivnet_release_cache
-    - get: centos7-gpdb6-build-image
+    - get: centos7-gpdb6-image
   - task: build-go-binaries-rhel7
     file: gpbackup/ci/tasks/build-go-binaries.yml
-    image: centos7-gpdb6-build-image
+    image: centos7-gpdb6-image
     params:
       OS: RHEL7
   - put: gpbackup-go-components-rhel7
@@ -835,10 +818,10 @@ jobs:
     - get: gpbackup
 {% endif %}
     - get: pivnet_release_cache
-    - get: ubuntu-debian-image
+    - get: ubuntu20.04-gpdb6-image
   - task: build-go-binaries-ubuntu
     file: gpbackup/ci/tasks/build-go-binaries.yml
-    image: ubuntu-debian-image
+    image: ubuntu20.04-gpdb6-image
     params:
       OS: UBUNTU
   - put: gpbackup-go-components-ubuntu
@@ -849,14 +832,15 @@ jobs:
 - name: build_gppkgs
   plan:
   - in_parallel:
+    - get: centos6-gpdb5-image
+    - get: centos7-gpdb5-image
     - get: rocky8-gpdb6-image
     - get: gpdb_src
       resource: gpdb6_src
     - get: gp-pkg
 {% if is_prod or "gpbackup-release" == pipeline_name %}
-    - get: ubuntu-debian-image
-    - get: ubuntu-debian-test-image
-    - get: bin_gpdb_6x_stable_ubuntu
+    - get: ubuntu20.04-gpdb6-image
+    - get: bin_gpdb_6x_ubuntu
     - get: gpbackup-go-components-ubuntu
       passed: [build_binaries_ubuntu]
 {% endif %}
@@ -867,7 +851,10 @@ jobs:
     - get: gpbackup-go-components-rhel8
       trigger: true
       passed: [build_binaries_rhel8]
+    - get: bin_gpdb_5x_centos6
+    - get: bin_gpdb_6x_centos7
     - get: bin_gpdb_6x_rhel8
+    - get: libyaml-0.1.7
     - get: gpbackup
 {% if is_prod or "gpbackup-release" == pipeline_name %}
       passed: [build_binaries_rhel6, build_binaries_rhel7, build_binaries_rhel8, build_binaries_ubuntu]
@@ -882,65 +869,65 @@ jobs:
     file: gpbackup/ci/tasks/gpbackup-tools-versions.yml
   - in_parallel:
     - do: # RHEL6
-      - task: build-ddboost-RHEL6
-        image: rocky8-gpdb6-image
+      - task: build-ddboost-rhel6
+        image: centos6-gpdb5-image
         file: gpbackup/ci/tasks/build-ddboost.yml
         input_mapping:
-          bin_gpdb: bin_gpdb_6x_rhel8
-      - task: tar-binaries-RHEL6
-        image: rocky8-gpdb6-image
+          bin_gpdb: bin_gpdb_5x_centos6
+      - task: tar-binaries-rhel6
+        image: centos6-gpdb5-image
         file: gpbackup/ci/tasks/build-os-tars.yml
         input_mapping:
           gpbackup-go-components: gpbackup-go-components-rhel6
         output_mapping:
           gpbackup_tar: gpbackup_tar_rhel6
-      - task: build_gppkgs-RHEL6
-        image: rocky8-gpdb6-image
+      - task: build_gppkgs-rhel6
+        image: centos6-gpdb5-image
         file: gpbackup/ci/tasks/build-gppkg.yml
         input_mapping:
-          bin_gpdb: bin_gpdb_6x_rhel8
+          bin_gpdb: bin_gpdb_5x_centos6
           gpbackup_tar: gpbackup_tar_rhel6
         output_mapping:
           gppkgs: rhel6-gppkg
         params:
           OS: RHEL6
     - do: # RHEL7
-      - task: build-ddboost-RHEL7
-        image: rocky8-gpdb6-image
+      - task: build-ddboost-rhel7
+        image: centos7-gpdb5-image
         file: gpbackup/ci/tasks/build-ddboost.yml
         input_mapping:
-          bin_gpdb: bin_gpdb_6x_rhel8
-      - task: tar-binaries-RHEL7
-        image: rocky8-gpdb6-image
+          bin_gpdb: bin_gpdb_6x_centos7
+      - task: tar-binaries-rhel7
+        image: centos7-gpdb5-image
         file: gpbackup/ci/tasks/build-os-tars.yml
         input_mapping:
           gpbackup-go-components: gpbackup-go-components-rhel7
         output_mapping:
           gpbackup_tar: gpbackup_tar_rhel7
-      - task: build_gppkgs-RHEL7
-        image: rocky8-gpdb6-image
+      - task: build_gppkgs-rhel7
+        image: centos7-gpdb5-image
         file: gpbackup/ci/tasks/build-gppkg.yml
         input_mapping:
-          bin_gpdb: bin_gpdb_6x_rhel8
+          bin_gpdb: bin_gpdb_6x_centos7
           gpbackup_tar: gpbackup_tar_rhel7
         output_mapping:
           gppkgs: rhel7-gppkg
         params:
           OS: RHEL7
     - do: # RHEL8
-      - task: build-ddboost-RHEL8
+      - task: build-ddboost-rhel8
         image: rocky8-gpdb6-image
         file: gpbackup/ci/tasks/build-ddboost.yml
         input_mapping:
           bin_gpdb: bin_gpdb_6x_rhel8
-      - task: tar-binaries-RHEL8
+      - task: tar-binaries-rhel8
         image: rocky8-gpdb6-image
         file: gpbackup/ci/tasks/build-os-tars.yml
         input_mapping:
           gpbackup-go-components: gpbackup-go-components-rhel8
         output_mapping:
           gpbackup_tar: gpbackup_tar_rhel8
-      - task: build_gppkgs-RHEL8
+      - task: build_gppkgs-rhel8
         image: rocky8-gpdb6-image
         file: gpbackup/ci/tasks/build-gppkg.yml
         input_mapping:
@@ -953,22 +940,22 @@ jobs:
 {% if is_prod or "gpbackup-release" == pipeline_name %}
     - do: # ubuntu
         - task: build-ddboost-ubuntu
-          image: ubuntu-debian-image
+          image: ubuntu20.04-gpdb6-image
           file: gpbackup/ci/tasks/build-ddboost.yml
           input_mapping:
-            bin_gpdb: bin_gpdb_6x_stable_ubuntu
+            bin_gpdb: bin_gpdb_6x_ubuntu
         - task: tar-binaries-ubuntu
-          image: ubuntu-debian-image
+          image: ubuntu20.04-gpdb6-image
           file: gpbackup/ci/tasks/build-os-tars.yml
           input_mapping:
             gpbackup-go-components: gpbackup-go-components-ubuntu
           output_mapping:
             gpbackup_tar: gpbackup_tar_ubuntu
         - task: build_gppkgs-ubuntu
-          image: ubuntu-debian-test-image
+          image: ubuntu20.04-gpdb6-image
           file: gpbackup/ci/tasks/build-gppkg.yml
           input_mapping:
-            bin_gpdb: bin_gpdb_6x_stable_ubuntu
+            bin_gpdb: bin_gpdb_6x_ubuntu
             gpbackup_tar: gpbackup_tar_ubuntu
           output_mapping:
             gppkgs: ubuntu-gppkg
@@ -1024,8 +1011,9 @@ jobs:
       - put: terraform
         params:
           <<: *ccp_default_params
+          terraform_source: ccp_src/google/
           vars:
-            <<: *ccp_default_vars
+            instance_type: n1-standard-1
             PLATFORM: rocky8
       - task: gen_cluster
         file: ccp_src/ci/tasks/gen_cluster.yml
@@ -1034,11 +1022,9 @@ jobs:
           PLATFORM: rocky8
       - task: gpinitsystem
         file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: setup-centos-env
+  - task: setup-cluster-env
     image: rocky8-gpdb6-image
-    params:
-      default_ami_user: rocky
-    file: gpbackup/ci/tasks/setup-centos-env.yml
+    file: gpbackup/ci/tasks/setup-cluster-env.yml
   - task: run_tests
     image: rocky8-gpdb6-image
     file: gpbackup/ci/tasks/s3-plugin-tests.yml
@@ -1046,20 +1032,21 @@ jobs:
       REGION: us-west-2
       AWS_ACCESS_KEY_ID: ((aws-bucket-access-key-id))
       AWS_SECRET_ACCESS_KEY: ((aws-bucket-secret-access-key))
-      BUCKET: ((dp/$$DEV_PROD$$/gpbackup-s3-plugin-test-bucket))
+      BUCKET: ((dp/prod/gpbackup-s3-plugin-test-bucket))
   on_success:
     <<: *ccp_destroy
-{% if is_prod or "gpbackup-release" == pipeline_name %}
+{% if should_alert and (is_prod or "gpbackup-release" == pipeline_name) %}
   on_failure:
     *slack_alert
 {% endif %}
   ensure:
     <<: *set_failed
 
+{% if is_prod and "gpbackup-release" != pipeline_name %}
 - name: s3_plugin_perf
   plan:
   - in_parallel:
-    - get: rocky8-gpdb7-image
+    - get: rocky8-gpdb6-image
     - get: gpbackup_s3_plugin
 {% if is_prod or "gpbackup-release" == pipeline_name %}
       passed: [build_binaries_rhel6, build_binaries_rhel7, build_binaries_rhel8, build_binaries_ubuntu]
@@ -1071,7 +1058,7 @@ jobs:
     - get: gpdb_src
       resource: gpdb6_src
     - get: gpdb_binary
-      resource: bin_gpdb_6x_stable_centos6
+      resource: bin_gpdb_6x_rhel8
     - get: gppkgs
       passed: [build_gppkgs]
       trigger: true
@@ -1083,9 +1070,8 @@ jobs:
       - put: terraform
         params:
           <<: *ccp_default_params
-          terraform_source: ccp_src/google-nvme-block-device/
           vars:
-            PLATFORM: centos7
+            PLATFORM: rocky8
             number_of_nodes: 4
             segments_per_host: 4
             instance_type: n1-standard-8
@@ -1094,34 +1080,35 @@ jobs:
         file: ccp_src/ci/tasks/gen_cluster.yml
         params:
           <<: *ccp_gen_cluster_default_params
-          PLATFORM: centos7
+          PLATFORM: rocky8
       - task: gpinitsystem
         file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: setup-centos-env
-    image: rocky8-gpdb7-image
-    file: gpbackup/ci/tasks/setup-centos-env.yml
+  - task: setup-cluster-env
+    file: gpbackup/ci/tasks/setup-cluster-env.yml
+    image: rocky8-gpdb6-image
   - task: run_perf
-    image: rocky8-gpdb7-image
+    image: rocky8-gpdb6-image
     file: gpbackup/ci/tasks/s3-plugin-perf.yml
     params:
       REGION: us-west-2
       AWS_ACCESS_KEY_ID: ((aws-bucket-access-key-id))
       AWS_SECRET_ACCESS_KEY: ((aws-bucket-secret-access-key))
-      BUCKET: ((dp/$$DEV_PROD$$/gpbackup-s3-plugin-test-bucket))
+      BUCKET: ((dp/prod/gpbackup-s3-plugin-test-bucket))
       SCALE_FACTOR: 1
   on_success:
     <<: *ccp_destroy
-{% if is_prod or "gpbackup-release" == pipeline_name %}
+{% if should_alert and (is_prod or "gpbackup-release" == pipeline_name) %}
   on_failure:
     *slack_alert
 {% endif %}
   ensure:
     <<: *set_failed
+{% endif %}
 
 - name: gpbackup-manager-tests
   plan:
   - in_parallel:
-    - get: centos7-gpdb6-golang-image
+    - get: rocky8-gpdb6-image
     - get: gpbackup_manager_src
 {% if is_prod or "gpbackup-release" == pipeline_name %}
       passed: [build_binaries_rhel6, build_binaries_rhel7, build_binaries_rhel8, build_binaries_ubuntu]
@@ -1131,14 +1118,14 @@ jobs:
     - get: gpbackup
       passed: [build_gppkgs]
     - get: bin_gpdb
-      resource: bin_gpdb_6x_stable_centos6
+      resource: bin_gpdb_6x_rhel8
     - get: gpdb_src
       resource: gpdb6_src
     - get: gppkgs
       trigger: true
       passed: [build_gppkgs]
   - task: run_tests
-    image: centos7-gpdb6-golang-image
+    image: rocky8-gpdb6-image
     file: gpbackup/ci/tasks/test-gpbackup-manager.yml
 
 {% if is_prod or "gpbackup-release" == pipeline_name %}
@@ -1148,8 +1135,8 @@ jobs:
     - get: gpdb_src
       resource: gpdb5_src
     - get: gpdb_binary
-      resource: bin_gpdb_5x_stable_centos6
-    - get: rocky8-gpdb7-image
+      resource: bin_gpdb_5x_centos7
+    - get: centos7-gpdb6-image
     - get: gpbackup_ddboost_plugin
       passed: [build_gppkgs]
     - get: gpbackup
@@ -1165,7 +1152,6 @@ jobs:
   - put: terraform
     params:
       <<: *ccp_default_params
-      terraform_source: ccp_src/google-nvme-block-device/
       vars:
         instance_type: n1-standard-8
         PLATFORM: centos7
@@ -1176,16 +1162,19 @@ jobs:
     file: ccp_src/ci/tasks/gen_cluster.yml
   - task: gpinitsystem
     file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: setup-centos-env
-    file: gpbackup/ci/tasks/setup-centos-env.yml
-    image: rocky8-gpdb7-image
+  - task: setup-cluster-env
+    file: gpbackup/ci/tasks/setup-cluster-env.yml
+    image: centos7-gpdb6-image
+    params:
+      default_ami_user: centos
   - task: install-boostfs
     file: gpbackup/ci/tasks/boostfs-install.yml
-    image: rocky8-gpdb7-image
+    image: centos7-gpdb6-image
     params:
+      default_ami_user: centos
       <<: *ddboost_params
   - task: run_tests
-    image: rocky8-gpdb7-image
+    image: centos7-gpdb6-image
     file: gpbackup/ci/tasks/ddboost-plugin-tests.yml
     params:
       <<: *ddboost_params
@@ -1204,7 +1193,7 @@ jobs:
       resource: bin_gpdb_6x_rhel8
     - get: dummy_seclabel
       resource: dummy_seclabel_linux_gpdb6
-    - get: rocky8-gpdb7-image
+    - get: rocky8-gpdb6-image
     - get: gpbackup_ddboost_plugin
       passed: [build_gppkgs]
     - get: gpbackup
@@ -1220,30 +1209,26 @@ jobs:
   - put: terraform
     params:
       <<: *ccp_default_params
-      terraform_source: ccp_src/google-nvme-block-device/
       vars:
         instance_type: n1-standard-8
-        PLATFORM: rhel8
+        PLATFORM: rocky8
   - task: gen_cluster
     params:
       <<: *ccp_gen_cluster_default_params
-      PLATFORM: rhel8
+      PLATFORM: rocky8
     file: ccp_src/ci/tasks/gen_cluster.yml
   - task: gpinitsystem
     file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: setup-centos-env
-    file: gpbackup/ci/tasks/setup-centos-env.yml
-    image: rocky8-gpdb7-image
-    params:
-      default_ami_user: rhel
+  - task: setup-cluster-env
+    file: gpbackup/ci/tasks/setup-cluster-env.yml
+    image: rocky8-gpdb6-image
   - task: install-boostfs
     file: gpbackup/ci/tasks/boostfs-install.yml
-    image: rocky8-gpdb7-image
+    image: rocky8-gpdb6-image
     params:
-      default_ami_user: rhel
       <<: *ddboost_params
   - task: run_tests
-    image: rocky8-gpdb7-image
+    image: rocky8-gpdb6-image
     file: gpbackup/ci/tasks/ddboost-plugin-tests.yml
     params:
       <<: *ddboost_params
@@ -1252,10 +1237,11 @@ jobs:
   ensure:
     <<: *set_failed
 
+{% if is_prod and "gpbackup-release" != pipeline_name %}
 - name: ddboost_plugin_perf
   plan:
   - in_parallel:
-    - get: rocky8-gpdb7-image
+    - get: rocky8-gpdb6-image
     - get: gpbackup_ddboost_plugin
       passed: [build_gppkgs]
     - get: gpbackup
@@ -1265,7 +1251,7 @@ jobs:
     - get: gpdb_src
       resource: gpdb6_src
     - get: gpdb_binary
-      resource: bin_gpdb_6x_stable_centos7
+      resource: bin_gpdb_6x_rhel8
     - get: gppkgs
       passed: [build_gppkgs]
       trigger: true
@@ -1275,92 +1261,38 @@ jobs:
   - put: terraform
     params:
       <<: *ccp_default_params
-      terraform_source: ccp_src/google-nvme-block-device/
       vars:
         instance_type: n1-standard-8
         number_of_nodes: 4
         segments_per_host: 4
-        PLATFORM: centos7
+        PLATFORM: rocky8
   - task: gen_cluster
     params:
       <<: *ccp_gen_cluster_default_params
-      PLATFORM: centos7
+      PLATFORM: rocky8
     file: ccp_src/ci/tasks/gen_cluster.yml
   - task: gpinitsystem
     file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: setup-centos-env
-    image: rocky8-gpdb7-image
-    file: gpbackup/ci/tasks/setup-centos-env.yml
+  - task: setup-cluster-env
+    image: rocky8-gpdb6-image
+    file: gpbackup/ci/tasks/setup-cluster-env.yml
   - task: run_perf
-    image: rocky8-gpdb7-image
+    image: rocky8-gpdb6-image
     file: gpbackup/ci/tasks/ddboost-plugin-perf.yml
     params:
       <<: *ddboost_params
       REGION: us-west-2
       AWS_ACCESS_KEY_ID: ((aws-bucket-access-key-id))
       AWS_SECRET_ACCESS_KEY: ((aws-bucket-secret-access-key))
-      BUCKET: ((dp/$$DEV_PROD$$/gpbackup-s3-plugin-test-bucket))
+      BUCKET: ((dp/prod/gpbackup-s3-plugin-test-bucket))
       SCALE_FACTOR: 1
     on_success:
       <<: *ccp_destroy_nvme
   ensure:
     <<: *set_failed
-
-{% if "gpbackup-release" != pipeline_name %}
 {% endif %}
 
-{% if is_prod or "gpbackup-release" == pipeline_name %}
-- name: GPDB6-ubuntu
-  plan:
-  - in_parallel:
-    - get: gpbackup
-      passed: [build_gppkgs]
-    - get: gpdb_binary
-      resource: bin_gpdb_6x_stable_ubuntu
-{% if "gpbackup-release" != pipeline_name %}
-      trigger: true
-{% endif %}
-    - get: ccp_src
-    - get: gpdb_src
-      resource: gpdb6_src
-    - get: dummy_seclabel
-      resource: dummy_seclabel_linux_gpdb6
-    - get: ubuntu-debian-test-image
-    - get: gppkgs
-      passed: [build_gppkgs]
-      trigger: true
-    - get: terraform.d
-      params:
-        unpack: true
-  - put: terraform
-    params:
-      <<: *ccp_default_params
-      vars:
-        <<: *ccp_default_vars
-        PLATFORM: ubuntu20.04
-        default_image_user: root
-  - task: gen_cluster
-    params:
-      <<: *ccp_gen_cluster_default_params
-      PLATFORM: ubuntu
-    file: ccp_src/ci/tasks/gen_cluster.yml
-  - task: gpinitsystem
-    file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: integration-tests
-    image: ubuntu-debian-test-image
-    file: gpbackup/ci/tasks/gpbackup-tests.yml
-    params:
-      OS: ubuntu
-      default_ami_user: ubuntu
-  on_success:
-    <<: *ccp_destroy
-  on_failure:
-    *slack_alert
-  ensure:
-    <<: *set_failed
-{% endif %}
-
-- name: GPDB7
+- name: gpdb7
   plan:
   - in_parallel:
     - get: rocky8-gpdb7-image
@@ -1384,23 +1316,23 @@ jobs:
       OS: RHEL8
     input_mapping:
       bin_gpdb: bin_gpdb_7x_rhel8
-{% if is_prod or "gpbackup-release" == pipeline_name %}
+{% if should_alert and (is_prod or "gpbackup-release" == pipeline_name) %}
   on_failure:
     *slack_alert
 {% endif %}
 
-- name: GPDB5
+- name: gpdb5
   plan:
   - in_parallel:
     - get: centos6-gpdb5-image
     - get: centos7-gpdb5-image
     - get: gpbackup
       passed: [build_gppkgs]
-    - get: bin_gpdb_5x_stable_centos6
+    - get: bin_gpdb_5x_centos6
 {% if "gpbackup-release" != pipeline_name %}
       trigger: true
 {% endif %}
-    - get: bin_gpdb_5x_stable_centos7
+    - get: bin_gpdb_5x_centos7
     - get: gpdb_src
       resource: gpdb5_src
     - get: gppkgs
@@ -1411,38 +1343,37 @@ jobs:
       image: centos6-gpdb5-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
       input_mapping:
-        bin_gpdb: bin_gpdb_5x_stable_centos6
+        bin_gpdb: bin_gpdb_5x_centos6
       params:
           OS: RHEL6
     - task: run-tests-locally-centos7
       image: centos7-gpdb5-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
       input_mapping:
-        bin_gpdb: bin_gpdb_5x_stable_centos7
+        bin_gpdb: bin_gpdb_5x_centos7
       params:
           OS: RHEL7
-{% if is_prod or "gpbackup-release" == pipeline_name %}
+{% if should_alert and (is_prod or "gpbackup-release" == pipeline_name) %}
   on_failure:
     *slack_alert
 {% endif %}
 
-- name: GPDB6
+- name: gpdb6
   plan:
   - in_parallel:
-    - get: centos7-gpdb6-golang-image
     - get: rocky8-gpdb6-image
+    - get: centos7-gpdb6-image
 {% if is_prod or "gpbackup-release" == pipeline_name %}
-    - get: ubuntu-debian-test-image
-    - get: bin_gpdb_6x_stable_ubuntu
+    - get: ubuntu20.04-gpdb6-image
+    - get: bin_gpdb_6x_ubuntu
 {% endif %}
-    - get: bin_gpdb_6x_rhel8
     - get: gpbackup
       passed: [build_gppkgs]
-    - get: bin_gpdb_6x_stable_centos6
+    - get: bin_gpdb_6x_rhel8
 {% if "gpbackup-release" != pipeline_name %}
       trigger: true
 {% endif %}
-    - get: bin_gpdb_6x_stable_centos7
+    - get: bin_gpdb_6x_centos7
     - get: gpdb_src
       resource: gpdb6_src
     - get: dummy_seclabel
@@ -1452,13 +1383,13 @@ jobs:
       passed: [build_gppkgs]
   - in_parallel:
     - task: run-tests-locally-centos7
-      image: centos7-gpdb6-golang-image
+      image: centos7-gpdb6-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
       params:
         REQUIRES_DUMMY_SEC: true
         OS: RHEL7
       input_mapping:
-        bin_gpdb: bin_gpdb_6x_stable_centos7
+        bin_gpdb: bin_gpdb_6x_centos7
     - task: run-tests-locally-rocky8
       image: rocky8-gpdb6-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
@@ -1468,35 +1399,36 @@ jobs:
       input_mapping:
         bin_gpdb: bin_gpdb_6x_rhel8
 {% if is_prod or "gpbackup-release" == pipeline_name %}
-    - task: run-tests-locally-ubuntu-debian
-      image: ubuntu-debian-test-image
+    - task: run-tests-locally-ubuntu20.04
+      image: ubuntu20.04-gpdb6-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
       params:
         REQUIRES_DUMMY_SEC: true
         OS: ubuntu
       input_mapping:
-        bin_gpdb: bin_gpdb_6x_stable_ubuntu
+        bin_gpdb: bin_gpdb_6x_ubuntu
+{% if should_alert %}
   on_failure:
     *slack_alert
 {% endif %}
+{% endif %}
 
-- name: GPDB6-7-seg-cluster
+- name: gpdb6-7-seg-cluster
   plan:
   - in_parallel:
-    - get: centos7-gpdb6-golang-image
     - get: rocky8-gpdb6-image
+    - get: centos7-gpdb6-image
 {% if is_prod or "gpbackup-release" == pipeline_name %}
-    - get: ubuntu-debian-test-image
-    - get: bin_gpdb_6x_stable_ubuntu
+    - get: ubuntu20.04-gpdb6-image
+    - get: bin_gpdb_6x_ubuntu
 {% endif %}
     - get: gpbackup
       passed: [build_gppkgs]
-    - get: bin_gpdb_6x_stable_centos6
 {% if "gpbackup-release" != pipeline_name %}
       trigger: true
 {% endif %}
     - get: bin_gpdb_6x_rhel8
-    - get: bin_gpdb_6x_stable_centos7
+    - get: bin_gpdb_6x_centos7
     - get: gpdb_src
       resource: gpdb6_src
     - get: dummy_seclabel
@@ -1506,14 +1438,14 @@ jobs:
       passed: [build_gppkgs]
   - in_parallel:
     - task: run-tests-locally-centos7
-      image: centos7-gpdb6-golang-image
+      image: centos7-gpdb6-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
       params:
         REQUIRES_DUMMY_SEC: true
         LOCAL_CLUSTER_SIZE: 7
         OS: RHEL7
       input_mapping:
-        bin_gpdb: bin_gpdb_6x_stable_centos7
+        bin_gpdb: bin_gpdb_6x_centos7
     - task: run-tests-locally-rocky8
       image: rocky8-gpdb6-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
@@ -1524,27 +1456,29 @@ jobs:
       input_mapping:
         bin_gpdb: bin_gpdb_6x_rhel8
 {% if is_prod or "gpbackup-release" == pipeline_name %}
-    - task: run-tests-locally-ubuntu-debian
-      image: ubuntu-debian-test-image
+    - task: run-tests-locally-ubuntu20.04
+      image: ubuntu20.04-gpdb6-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
       params:
         REQUIRES_DUMMY_SEC: true
         LOCAL_CLUSTER_SIZE: 7
         OS: ubuntu
       input_mapping:
-        bin_gpdb: bin_gpdb_6x_stable_ubuntu
+        bin_gpdb: bin_gpdb_6x_ubuntu
+{% if should_alert %}
   on_failure:
     *slack_alert
+{% endif %}
 {% endif %}
 
 - name: backward-compatibility
   plan:
   - in_parallel:
-    - get: rocky8-gpdb7-image
+    - get: centos7-gpdb6-image
     - get: gpbackup
       passed: [build_gppkgs]
     - get: gpdb_binary
-      resource: bin_gpdb_5x_stable_centos7
+      resource: bin_gpdb_5x_centos7
 {% if "gpbackup-release" != pipeline_name %}
       trigger: true
 {% endif %}
@@ -1561,8 +1495,9 @@ jobs:
   - put: terraform
     params:
       <<: *ccp_default_params
+      terraform_source: ccp_src/google/
       vars:
-        <<: *ccp_default_vars
+        instance_type: n1-standard-1
         PLATFORM: centos7
   - task: gen_cluster
     params:
@@ -1571,17 +1506,19 @@ jobs:
     file: ccp_src/ci/tasks/gen_cluster.yml
   - task: gpinitsystem
     file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: setup-centos-env
-    file: gpbackup/ci/tasks/setup-centos-env.yml
-    image: rocky8-gpdb7-image
+  - task: setup-cluster-env
+    file: gpbackup/ci/tasks/setup-cluster-env.yml
+    image: centos7-gpdb6-image
+    params:
+      default_ami_user: centos
   - task: backup-1.0.0-restore-latest
-    image: rocky8-gpdb7-image
+    image: centos7-gpdb6-image
     file: gpbackup/ci/tasks/all-tests.yml
     params:
       GPBACKUP_VERSION: "1.0.0"
       OS: RHEL7
   - task: backup-1.7.1-restore-latest
-    image: rocky8-gpdb7-image
+    image: centos7-gpdb6-image
     file: gpbackup/ci/tasks/all-tests.yml
     params:
       GPBACKUP_VERSION: "1.7.1"
@@ -1592,7 +1529,7 @@ jobs:
     <<: *set_failed
 
 {% if is_prod and "gpbackup-release" != pipeline_name %}
-- name: scale-GPDB7
+- name: scale-gpdb7
   plan:
   - in_parallel:
     - get: rocky8-gpdb7-image
@@ -1617,22 +1554,19 @@ jobs:
   - put: terraform
     params:
       <<: *ccp_default_params
-      terraform_source: ccp_src/google-nvme-block-device/
       vars:
         instance_type: n1-standard-8
-        PLATFORM: rhel8-gpdb7
+        PLATFORM: rocky8-gpdb7
   - task: gen_cluster
     params:
       <<: *ccp_gen_cluster_default_params
-      PLATFORM: rhel8-gpdb7
+      PLATFORM: rocky8-gpdb7
     file: ccp_src/ci/tasks/gen_cluster.yml
   - task: gpinitsystem
     file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: setup-centos-env
+  - task: setup-cluster-env
     image: rocky8-gpdb7-image
-    params:
-      default_ami_user: rhel
-    file: gpbackup/ci/tasks/setup-centos-env.yml
+    file: gpbackup/ci/tasks/setup-cluster-env.yml
   - task: scale-tests
     image: rocky8-gpdb7-image
     file: gpbackup/ci/tasks/scale-tests.yml
@@ -1640,19 +1574,21 @@ jobs:
       OS: RHEL8
   on_success:
     <<: *ccp_destroy_nvme
+{% if should_alert %}
   on_failure:
     *slack_alert
+{% endif %}
   ensure:
     <<: *set_failed
 
 - name: scale-6x
   plan:
   - in_parallel:
-    - get: rocky8-gpdb7-image
+    - get: rocky8-gpdb6-image
     - get: gpbackup
       passed: [build_gppkgs]
     - get: gpdb_binary
-      resource: bin_gpdb_6x_stable_centos7
+      resource: bin_gpdb_6x_rhel8
     - get: ccp_src
     - get: gpdb_src
       resource: gpdb6_src
@@ -1669,40 +1605,41 @@ jobs:
   - put: terraform
     params:
       <<: *ccp_default_params
-      terraform_source: ccp_src/google-nvme-block-device/
       vars:
         instance_type: n1-standard-8
-        PLATFORM: centos7
+        PLATFORM: rocky8
   - task: gen_cluster
     params:
       <<: *ccp_gen_cluster_default_params
-      PLATFORM: centos7
+      PLATFORM: rocky8
     file: ccp_src/ci/tasks/gen_cluster.yml
   - task: gpinitsystem
     file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: setup-centos-env
-    image: rocky8-gpdb7-image
-    file: gpbackup/ci/tasks/setup-centos-env.yml
+  - task: setup-cluster-env
+    image: rocky8-gpdb6-image
+    file: gpbackup/ci/tasks/setup-cluster-env.yml
   - task: scale-tests
-    image: rocky8-gpdb7-image
+    image: rocky8-gpdb6-image
     file: gpbackup/ci/tasks/scale-tests.yml
     params:
       OS: RHEL7
   on_success:
     <<: *ccp_destroy_nvme
+{% if should_alert %}
   on_failure:
     *slack_alert
+{% endif %}
   ensure:
     <<: *set_failed
 
 - name: scale-5x
   plan:
   - in_parallel:
-    - get: rocky8-gpdb7-image
+    - get: centos7-gpdb6-image
     - get: gpbackup
       passed: [build_gppkgs]
     - get: gpdb_binary
-      resource: bin_gpdb_5x_stable_centos6
+      resource: bin_gpdb_5x_centos7
     - get: ccp_src
     - get: gpdb_src
       resource: gpdb5_src
@@ -1719,27 +1656,32 @@ jobs:
   - put: terraform
     params:
       <<: *ccp_default_params
-      terraform_source: ccp_src/google-nvme-block-device/
       vars:
         instance_type: n1-standard-8
+        PLATFORM: centos7
   - task: gen_cluster
     params:
       <<: *ccp_gen_cluster_default_params
+      PLATFORM: centos7
     file: ccp_src/ci/tasks/gen_cluster.yml
   - task: gpinitsystem
     file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: setup-centos-env
-    image: rocky8-gpdb7-image
-    file: gpbackup/ci/tasks/setup-centos-env.yml
+  - task: setup-cluster-env
+    image: centos7-gpdb6-image
+    file: gpbackup/ci/tasks/setup-cluster-env.yml
+    params:
+      default_ami_user: centos
   - task: scale-tests
-    image: rocky8-gpdb7-image
+    image: centos7-gpdb6-image
     file: gpbackup/ci/tasks/scale-tests.yml
     params:
-      OS: RHEL6
+      OS: RHEL7
   on_success:
     <<: *ccp_destroy_nvme
+{% if should_alert %}
   on_failure:
     *slack_alert
+{% endif %}
   ensure:
     <<: *set_failed
 {% endif %}
@@ -1752,9 +1694,8 @@ jobs:
       trigger: true
       passed:
         - build_gppkgs
-        - GPDB5
-        - GPDB6-ubuntu
-        - GPDB6
+        - gpdb5
+        - gpdb6
         - s3_plugin_tests
         - backward-compatibility
         - ddboost_plugin_and_boostfs_tests_5x
@@ -1813,7 +1754,7 @@ jobs:
       - get: pivnet_release_cache
       - get: rocky8-gpdb7-image
       - get: tanzunet_client
-    - task: update metadata.yml
+    - task: update_metadata.yml
       image: rocky8-gpdb7-image
       file: gpbackup/ci/tasks/update-metadata.yml
       params:
@@ -1865,13 +1806,12 @@ jobs:
       trigger: true
       passed:
         - build_gppkgs
-        - GPDB5
-        - GPDB6
-        - GPDB7
+        - gpdb5
+        - gpdb6
+        - gpdb7
         - s3_plugin_tests
         - backward-compatibility
 {% if is_prod %}
-        - GPDB6-ubuntu
         - ddboost_plugin_and_boostfs_tests_5x
 {% endif %}
         - ddboost_plugin_and_boostfs_tests_6x
