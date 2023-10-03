@@ -162,11 +162,11 @@ func generateAttributeSlotsQuery7(attStat AttributeStatistic) string {
 			realValues(attStat.Numbers3),
 			realValues(attStat.Numbers4),
 			realValues(attStat.Numbers5),
-			AnyValues(attStat.Values1, attStat.Type, attStat.Kind1),
-			AnyValues(attStat.Values2, attStat.Type, attStat.Kind2),
-			AnyValues(attStat.Values3, attStat.Type, attStat.Kind3),
-			AnyValues(attStat.Values4, attStat.Type, attStat.Kind4),
-			AnyValues(attStat.Values5, attStat.Type, attStat.Kind5))
+			AnyValues(attStat.Values1, attStat.Type),
+			AnyValues(attStat.Values2, attStat.Type),
+			AnyValues(attStat.Values3, attStat.Type),
+			AnyValues(attStat.Values4, attStat.Type),
+			ByteaValues(attStat.Values5))
 	}
 	return attributeQuery
 }
@@ -230,11 +230,11 @@ func generateAttributeSlotsQuery6(attStat AttributeStatistic) string {
 			realValues(attStat.Numbers3),
 			realValues(attStat.Numbers4),
 			realValues(attStat.Numbers5),
-			AnyValues(attStat.Values1, attStat.Type, attStat.Kind1),
-			AnyValues(attStat.Values2, attStat.Type, attStat.Kind2),
-			AnyValues(attStat.Values3, attStat.Type, attStat.Kind3),
-			AnyValues(attStat.Values4, attStat.Type, attStat.Kind4),
-			AnyValues(attStat.Values5, attStat.Type, attStat.Kind5))
+			AnyValues(attStat.Values1, attStat.Type),
+			AnyValues(attStat.Values2, attStat.Type),
+			AnyValues(attStat.Values3, attStat.Type),
+			AnyValues(attStat.Values4, attStat.Type),
+			ByteaValues(attStat.Values5))
 	}
 	return attributeQuery
 }
@@ -286,10 +286,10 @@ func generateAttributeSlotsQuery4(attStat AttributeStatistic) string {
 			realValues(attStat.Numbers2),
 			realValues(attStat.Numbers3),
 			realValues(attStat.Numbers4),
-			AnyValues(attStat.Values1, attStat.Type, attStat.Kind1),
-			AnyValues(attStat.Values2, attStat.Type, attStat.Kind2),
-			AnyValues(attStat.Values3, attStat.Type, attStat.Kind3),
-			AnyValues(attStat.Values4, attStat.Type, attStat.Kind4))
+			AnyValues(attStat.Values1, attStat.Type),
+			AnyValues(attStat.Values2, attStat.Type),
+			AnyValues(attStat.Values3, attStat.Type),
+			ByteaValues(attStat.Values4))
 	}
 	return attributeQuery
 }
@@ -318,12 +318,16 @@ func realValues(reals pq.StringArray) string {
  * A given type is not guaranteed to have a corresponding array type, so we need
  * to use array_in() instead of casting to an array.
  */
-func AnyValues(any pq.StringArray, typ string, kind int) string {
+func AnyValues(any pq.StringArray, typ string) string {
 	if len(any) > 0 {
-		if kind == 99 || kind == 98 { // HLL and FULLHLL are storead as BYTEA
-			typ = `bytea`
-		}
 		return fmt.Sprintf(`array_in(%s, '%s'::regtype::oid, -1)`, SliceToPostgresArray(any), typ)
+	}
+	return fmt.Sprintf("NULL")
+}
+
+func ByteaValues(any pq.StringArray) string {
+	if len(any) > 0 {
+		return fmt.Sprintf(`array_in(%s, 'bytea'::regtype::oid, -1)`, SliceToPostgresArray(any))
 	}
 	return fmt.Sprintf("NULL")
 }
