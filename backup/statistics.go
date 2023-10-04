@@ -166,6 +166,9 @@ func generateAttributeSlotsQuery7(attStat AttributeStatistic) string {
 			AnyValues(attStat.Values2, attStat.Type),
 			AnyValues(attStat.Values3, attStat.Type),
 			AnyValues(attStat.Values4, attStat.Type),
+			// Hyperloglog data structure for STATISTIC_KIND_HLL and
+			// STATISTIC_KIND_FULLHLL is converted into a bytea and
+			// always stored in last slot
 			ByteaValues(attStat.Values5))
 	}
 	return attributeQuery
@@ -234,6 +237,9 @@ func generateAttributeSlotsQuery6(attStat AttributeStatistic) string {
 			AnyValues(attStat.Values2, attStat.Type),
 			AnyValues(attStat.Values3, attStat.Type),
 			AnyValues(attStat.Values4, attStat.Type),
+			// Hyperloglog data structure for STATISTIC_KIND_HLL and
+			// STATISTIC_KIND_FULLHLL is converted into a bytea and
+			// always stored in last slot
 			ByteaValues(attStat.Values5))
 	}
 	return attributeQuery
@@ -289,6 +295,8 @@ func generateAttributeSlotsQuery4(attStat AttributeStatistic) string {
 			AnyValues(attStat.Values1, attStat.Type),
 			AnyValues(attStat.Values2, attStat.Type),
 			AnyValues(attStat.Values3, attStat.Type),
+			// Hyperloglog data structure for STATISTIC_KIND_HLL is
+			// converted into a bytea and always stored in last slot
 			ByteaValues(attStat.Values4))
 	}
 	return attributeQuery
@@ -325,9 +333,9 @@ func AnyValues(any pq.StringArray, typ string) string {
 	return fmt.Sprintf("NULL")
 }
 
-func ByteaValues(any pq.StringArray) string {
-	if len(any) > 0 {
-		return fmt.Sprintf(`array_in(%s, 'bytea'::regtype::oid, -1)`, SliceToPostgresArray(any))
+func ByteaValues(bytea pq.StringArray) string {
+	if len(bytea) > 0 {
+		return fmt.Sprintf(`array_in(%s, 'bytea'::regtype::oid, -1)`, SliceToPostgresArray(bytea))
 	}
 	return fmt.Sprintf("NULL")
 }
