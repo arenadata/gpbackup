@@ -12,20 +12,20 @@ backup_data() {
 }
 
 # functions for API compatibility
-setup_plugin_for_backup(){
+setup_plugin_for_backup() {
   echo "setup_plugin_for_backup" >> /tmp/plugin_out.txt
 }
 
-setup_plugin_for_restore(){
+setup_plugin_for_restore() {
   echo "restore not supported" 1>&2;
   exit 1
 }
 
-cleanup_plugin_for_backup(){
+cleanup_plugin_for_backup() {
   echo "cleanup_plugin_for_backup: nothing to do" >> /tmp/plugin_out.txt
 }
 
-cleanup_plugin_for_restore(){
+cleanup_plugin_for_restore() {
   echo "restore not supported" 1>&2;
   exit 1
 }
@@ -53,12 +53,12 @@ delete_directory() {
   echo "delete_directory: nothing to do" >> /tmp/plugin_out.txt
 }
 
-plugin_api_version(){
+plugin_api_version() {
   echo "0.5.0"
   echo "0.5.0" >> /tmp/plugin_out.txt
 }
 
---version(){
+--version() {
   echo "null_plugin version 1.0.0"
   echo "null_plugin version 1.0.0" >> /tmp/plugin_out.txt
 }
