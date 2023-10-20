@@ -7,13 +7,14 @@ inputs:
 - name: gpbackup
 - name: ccp_src
 - name: cluster_env_files
-- name: dummy_seclabel
-  optional: true
 - name: gppkgs
 
+outputs:
+- name: cluster-metadata
+
 params:
-  default_ami_user: root
-  OS:
+  GOOGLE_CREDENTIALS:
+  OS: RHEL
 
 run:
-  path: gpbackup/ci/scripts/gpbackup-tests.bash
+  path: gpbackup/ci/scripts/scale-perf-load.bash
