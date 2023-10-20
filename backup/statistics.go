@@ -165,7 +165,10 @@ func generateAttributeSlotsQuery7(attStat AttributeStatistic) string {
 			AnyValues(attStat.Values2, attStat.Type),
 			AnyValues(attStat.Values3, attStat.Type),
 			AnyValues(attStat.Values4, attStat.Type),
-			AnyValues(attStat.Values5, attStat.Type))
+			// Hyperloglog data structure for STATISTIC_KIND_HLL and
+			// STATISTIC_KIND_FULLHLL is converted into a bytea and
+			// always stored in last slot
+			AnyValues(attStat.Values5, "bytea"))
 	}
 	return attributeQuery
 }
@@ -233,7 +236,10 @@ func generateAttributeSlotsQuery6(attStat AttributeStatistic) string {
 			AnyValues(attStat.Values2, attStat.Type),
 			AnyValues(attStat.Values3, attStat.Type),
 			AnyValues(attStat.Values4, attStat.Type),
-			AnyValues(attStat.Values5, attStat.Type))
+			// Hyperloglog data structure for STATISTIC_KIND_HLL and
+			// STATISTIC_KIND_FULLHLL is converted into a bytea and
+			// always stored in last slot
+			AnyValues(attStat.Values5, "bytea"))
 	}
 	return attributeQuery
 }
@@ -288,7 +294,9 @@ func generateAttributeSlotsQuery4(attStat AttributeStatistic) string {
 			AnyValues(attStat.Values1, attStat.Type),
 			AnyValues(attStat.Values2, attStat.Type),
 			AnyValues(attStat.Values3, attStat.Type),
-			AnyValues(attStat.Values4, attStat.Type))
+			// Hyperloglog data structure for STATISTIC_KIND_HLL is
+			// converted into a bytea and always stored in last slot
+			AnyValues(attStat.Values4, "bytea"))
 	}
 	return attributeQuery
 }
