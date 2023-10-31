@@ -831,13 +831,37 @@ func (e Extension) FQN() string {
 func GetExtensions(connectionPool *dbconn.DBConn) []Extension {
 	results := make([]Extension, 0)
 
-	query := fmt.Sprintf(`
-	SELECT e.oid,
-		quote_ident(extname) AS name,
-		quote_ident(n.nspname) AS schema
-	FROM pg_extension e
-		JOIN pg_namespace n ON e.extnamespace = n.oid
-	WHERE e.oid >= %d`, FIRST_NORMAL_OBJECT_ID)
+	query := ""
+	if connectionPool.Version.Before("6") {
+		query = fmt.Sprintf(`
+		SELECT e.oid,
+			quote_ident(extname) AS name,
+			quote_ident(n.nspname) AS schema
+		FROM pg_extension e
+			JOIN pg_namespace n ON e.extnamespace = n.oid
+		WHERE e.oid >= %d
+		ORDER BY 1`, FIRST_NORMAL_OBJECT_ID)
+	} else {
+		query = fmt.Sprintf(`
+		WITH recursive cte AS (
+			SELECT e.oid FROM pg_catalog.pg_extension AS e
+				LEFT JOIN pg_catalog.pg_depend ON objid = oid
+					AND classid = 'pg_catalog.pg_extension'::pg_catalog.regclass
+					AND refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass
+				WHERE objid IS NULL
+			UNION ALL
+			SELECT objid AS oid FROM cte
+				LEFT JOIN pg_catalog.pg_depend ON refobjid = oid
+					WHERE classid = 'pg_catalog.pg_extension'::pg_catalog.regclass
+						AND refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass
+		) SELECT e.oid,
+				quote_ident(extname) AS name,
+				quote_ident(n.nspname) AS schema
+		FROM cte
+			JOIN pg_catalog.pg_extension AS e ON e.oid = cte.oid
+			JOIN pg_catalog.pg_namespace AS n ON e.extnamespace = n.oid
+		WHERE e.oid >= %d`, FIRST_NORMAL_OBJECT_ID)
+	}
 	err := connectionPool.Select(&results, query)
 	gplog.FatalOnError(err)
 	return results
