@@ -1160,6 +1160,36 @@ var _ = Describe("backup and restore end to end tests", func() {
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
 	})
+	Describe("Extensions dependency", func() {
+		It("runs gpbackup and gprestores with dependent extensions", func() {
+			_ = os.Chdir("resources")
+			command := exec.Command("make", "USE_PGXS=1", "install")
+			mustRunCommand(command)
+			_ = os.Chdir("..")
+
+			testhelper.AssertQueryRuns(backupConn, `
+				CREATE EXTENSION test_ext3;
+				CREATE EXTENSION test_ext5;
+				CREATE EXTENSION test_ext2;
+				CREATE EXTENSION test_ext4;
+				CREATE EXTENSION test_ext1;
+			`)
+			defer testhelper.AssertQueryRuns(backupConn, `
+				DROP EXTENSION test_ext1;
+				DROP EXTENSION test_ext4;
+				DROP EXTENSION test_ext2;
+				DROP EXTENSION test_ext5;
+				DROP EXTENSION test_ext3;
+			`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				"--metadata-only")
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
+				"--redirect-db", "restoredb")
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+	})
 	Describe("Restore with truncate-table", func() {
 		It("runs gpbackup and gprestore with truncate-table and include-table flags", func() {
 			timestamp := gpbackup(gpbackupPath, backupHelperPath)
