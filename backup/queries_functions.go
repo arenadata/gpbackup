@@ -849,7 +849,7 @@ func GetExtensions(connectionPool *dbconn.DBConn) []Extension {
 					AND classid = 'pg_catalog.pg_extension'::pg_catalog.regclass
 					AND refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass
 				WHERE objid IS NULL
-			UNION ALL
+			UNION
 			SELECT objid AS oid, level + 1 AS level FROM cte
 				LEFT JOIN pg_catalog.pg_depend ON refobjid = oid
 					WHERE classid = 'pg_catalog.pg_extension'::pg_catalog.regclass
