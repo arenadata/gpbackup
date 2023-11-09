@@ -1,4 +1,4 @@
 comment = 'Test extension 1'
 default_version = '1.0'
 relocatable = true
-requires = 'test_ext2,test_ext4'
+requires = 'test_ext2,test_ext4,test_ext5'

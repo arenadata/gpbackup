@@ -849,7 +849,7 @@ func GetExtensions(connectionPool *dbconn.DBConn) []Extension {
 					AND classid = 'pg_catalog.pg_extension'::pg_catalog.regclass
 					AND refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass
 				WHERE objid IS NULL
-			UNION
+			UNION DISTINCT
 			SELECT objid AS oid, level + 1 AS level FROM cte
 				LEFT JOIN pg_catalog.pg_depend ON refobjid = oid
 					WHERE classid = 'pg_catalog.pg_extension'::pg_catalog.regclass
@@ -860,7 +860,7 @@ func GetExtensions(connectionPool *dbconn.DBConn) []Extension {
 		FROM cte
 			JOIN pg_catalog.pg_extension AS e ON e.oid = cte.oid
 			JOIN pg_catalog.pg_namespace AS n ON e.extnamespace = n.oid
-		WHERE e.oid >= %d ORDER BY level`, FIRST_NORMAL_OBJECT_ID)
+		WHERE e.oid >= %d GROUP BY 1, 2, 3 ORDER BY min(level)`, FIRST_NORMAL_OBJECT_ID)
 	}
 	err := connectionPool.Select(&results, query)
 	gplog.FatalOnError(err)
