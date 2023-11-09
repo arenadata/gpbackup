@@ -844,22 +844,21 @@ func GetExtensions(connectionPool *dbconn.DBConn) []Extension {
 	} else {
 		query = `
 		WITH recursive e AS (
-			SELECT e.oid, refobjid, extname, extnamespace
+			SELECT e.oid, objid, extname, extnamespace
 			FROM pg_catalog.pg_extension e
-			LEFT JOIN pg_catalog.pg_depend ON objid = oid
+			LEFT JOIN pg_catalog.pg_depend ON refobjid = oid
 				AND classid = 'pg_catalog.pg_extension'::pg_catalog.regclass
 				AND refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass
 			WHERE e.oid >= %d
 		), cte AS (
 			SELECT oid, 1 level, extname, extnamespace
-			FROM e WHERE refobjid IS NULL
+			FROM e WHERE objid IS NULL
 			UNION DISTINCT
 			SELECT e.oid, level + 1, e.extname, e.extnamespace
-			FROM cte JOIN e ON cte.oid = e.refobjid
-		)
-		SELECT oid, quote_ident(extname) name, quote_ident(nspname) schema
+			FROM cte JOIN e ON cte.oid = e.objid
+		) SELECT oid, quote_ident(extname) name, quote_ident(nspname) schema
 		FROM cte JOIN pg_catalog.pg_namespace n ON extnamespace = n.oid
-		GROUP BY 1, 2, 3 ORDER BY min(level)`
+		GROUP BY 1, 2, 3 ORDER BY max(level) DESC`
 	}
 	err := connectionPool.Select(&results, fmt.Sprintf(query, FIRST_NORMAL_OBJECT_ID))
 	gplog.FatalOnError(err)
