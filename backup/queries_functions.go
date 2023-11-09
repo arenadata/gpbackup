@@ -833,16 +833,16 @@ func GetExtensions(connectionPool *dbconn.DBConn) []Extension {
 
 	query := ""
 	if connectionPool.Version.Before("6") {
-		query = fmt.Sprintf(`
+		query = `
 		SELECT e.oid,
 			quote_ident(extname) AS name,
 			quote_ident(n.nspname) AS schema
 		FROM pg_extension e
 			JOIN pg_namespace n ON e.extnamespace = n.oid
 		WHERE e.oid >= %d
-		ORDER BY 1`, FIRST_NORMAL_OBJECT_ID)
+		ORDER BY 1`
 	} else {
-		query = fmt.Sprintf(`
+		query = `
 		WITH recursive cte AS (
 			SELECT e.oid, 1 AS level FROM pg_catalog.pg_extension AS e
 				LEFT JOIN pg_catalog.pg_depend ON objid = oid
@@ -860,9 +860,9 @@ func GetExtensions(connectionPool *dbconn.DBConn) []Extension {
 		FROM cte
 			JOIN pg_catalog.pg_extension AS e ON e.oid = cte.oid
 			JOIN pg_catalog.pg_namespace AS n ON e.extnamespace = n.oid
-		WHERE e.oid >= %d GROUP BY 1, 2, 3 ORDER BY min(level)`, FIRST_NORMAL_OBJECT_ID)
+		WHERE e.oid >= %d GROUP BY 1, 2, 3 ORDER BY min(level)`
 	}
-	err := connectionPool.Select(&results, query)
+	err := connectionPool.Select(&results, fmt.Sprintf(query, FIRST_NORMAL_OBJECT_ID))
 	gplog.FatalOnError(err)
 	return results
 }
