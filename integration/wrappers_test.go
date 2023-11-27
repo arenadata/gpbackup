@@ -37,7 +37,7 @@ var _ = Describe("Wrappers Integration", func() {
 			connectionPool.MustBegin(0)
 			defer connectionPool.MustCommit(0)
 
-			_, dataTables := backup.RetrieveAndProcessTables()
+			_, dataTables, _ := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(2))
 			Expect(dataTables[0].Name).To(Equal("foo"))
 			Expect(dataTables[1].Name).To(Equal(`"BAR"`))
@@ -67,7 +67,7 @@ var _ = Describe("Wrappers Integration", func() {
 			Expect(err).To(Not(HaveOccurred()))
 			backup.ValidateAndProcessFilterLists(subject)
 
-			_, dataTables := backup.RetrieveAndProcessTables()
+			_, dataTables, _ := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(3))
 			Expect(dataTables[0].Name).To(Equal("thousands"))
 			Expect(dataTables[1].Name).To(Equal("ten"))
@@ -87,7 +87,7 @@ var _ = Describe("Wrappers Integration", func() {
 			Expect(err).To(Not(HaveOccurred()))
 			backup.ValidateAndProcessFilterLists(subject)
 
-			_, dataTables := backup.RetrieveAndProcessTables()
+			_, dataTables, _ := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(2))
 			Expect(dataTables[0].Name).To(Equal("ten"))
 			Expect(dataTables[1].Name).To(Equal("empty"))
@@ -105,7 +105,7 @@ var _ = Describe("Wrappers Integration", func() {
 			Expect(err).To(Not(HaveOccurred()))
 			backup.ValidateAndProcessFilterLists(subject)
 
-			_, dataTables := backup.RetrieveAndProcessTables()
+			_, dataTables, _ := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(2))
 			Expect(dataTables[0].Name).To(Equal("ten"))
 			Expect(dataTables[1].Name).To(Equal("empty"))
@@ -142,7 +142,7 @@ var _ = Describe("Wrappers Integration", func() {
 			Expect(err).To(Not(HaveOccurred()))
 			backup.ValidateAndProcessFilterLists(subject)
 
-			_, dataTables := backup.RetrieveAndProcessTables()
+			_, dataTables, _ := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(2))
 			Expect(dataTables[0].Name).To(Equal("thousands"))
 			Expect(dataTables[1].Name).To(Equal("empty"))
@@ -160,7 +160,7 @@ var _ = Describe("Wrappers Integration", func() {
 			Expect(err).To(Not(HaveOccurred()))
 			backup.ValidateAndProcessFilterLists(subject)
 
-			_, dataTables := backup.RetrieveAndProcessTables()
+			_, dataTables, _ := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(2))
 			Expect(dataTables[0].Name).To(Equal("thousands"))
 			Expect(dataTables[1].Name).To(Equal("empty"))
@@ -201,7 +201,7 @@ var _ = Describe("Wrappers Integration", func() {
 			err = backup.ExpandIncludesForPartitions(connectionPool, subject, includeOids, backupCmdFlags)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			_, dataTables := backup.RetrieveAndProcessTables()
+			_, dataTables, _ := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(2))
 			Expect(dataTables[0].Name).To(Equal("partition_table"))
 			Expect(dataTables[1].Name).To(Equal("ten"))
@@ -221,7 +221,7 @@ var _ = Describe("Wrappers Integration", func() {
 			err = backup.ExpandIncludesForPartitions(connectionPool, subject, includeOids, backupCmdFlags)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			_, dataTables := backup.RetrieveAndProcessTables()
+			_, dataTables, _ := backup.RetrieveAndProcessTables()
 
 			Expect(len(dataTables)).To(Equal(3))
 			Expect(dataTables[0].Name).To(Equal("partition_table_1_prt_girls"))
@@ -256,7 +256,7 @@ var _ = Describe("Wrappers Integration", func() {
 			Expect(err).To(Not(HaveOccurred()))
 			backup.ValidateAndProcessFilterLists(subject)
 
-			_, dataTables := backup.RetrieveAndProcessTables()
+			_, dataTables, _ := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(3))
 
 			Expect(dataTables[0].Name).To(Equal("thousands"))
@@ -279,7 +279,7 @@ var _ = Describe("Wrappers Integration", func() {
 			Expect(err).To(Not(HaveOccurred()))
 			backup.ValidateAndProcessFilterLists(subject)
 
-			_, dataTables := backup.RetrieveAndProcessTables()
+			_, dataTables, _ := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(3))
 
 			Expect(dataTables[0].Name).To(Equal("thousands"))
