@@ -205,7 +205,7 @@ func createBackupDirectoriesOnAllHosts() {
  * Metadata retrieval wrapper functions
  */
 
-func RetrieveAndProcessTables() ([]Table, []Table) {
+func RetrieveAndProcessTables() ([]Table, []Table, []Table) {
 	includedRelations := GetIncludedUserTableRelations(connectionPool, IncludedRelationFqns)
 	tableRelations := ConvertRelationsOptionsToBackup(includedRelations)
 
@@ -215,12 +215,12 @@ func RetrieveAndProcessTables() ([]Table, []Table) {
 		tableRelations = append(tableRelations, GetForeignTableRelations(connectionPool)...)
 	}
 
-	tables := ConstructDefinitionsForTables(connectionPool, tableRelations)
+	allTables := ConstructDefinitionsForTables(connectionPool, tableRelations)
 
-	metadataTables, dataTables := SplitTablesByPartitionType(tables, IncludedRelationFqns)
+	metadataTables, dataTables := SplitTablesByPartitionType(allTables, IncludedRelationFqns)
 	objectCounts["Tables"] = len(metadataTables)
 
-	return metadataTables, dataTables
+	return metadataTables, dataTables, allTables
 }
 
 func retrieveFunctions(sortables *[]Sortable, metadataMap MetadataMap) ([]Function, map[uint32]FunctionInfo) {
