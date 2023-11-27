@@ -128,7 +128,7 @@ func DoBackup() {
 	}
 
 	gplog.Info("Gathering table state information")
-	metadataTables, dataTables := RetrieveAndProcessTables()
+	metadataTables, dataTables, allTables := RetrieveAndProcessTables()
 	dataTables, numExtOrForeignTables := GetBackupDataSet(dataTables)
 	if len(dataTables) == 0 && !backupReport.MetadataOnly {
 		gplog.Warn("No tables in backup set contain data. Performing metadata-only backup instead.")
@@ -195,7 +195,7 @@ func DoBackup() {
 
 	printDataBackupWarnings(numExtOrForeignTables)
 	if MustGetFlagBool(options.WITH_STATS) {
-		backupStatistics(metadataTables)
+		backupStatistics(allTables)
 	}
 
 	globalTOC.WriteToFileAndMakeReadOnly(globalFPInfo.GetTOCFilePath())
