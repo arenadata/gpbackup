@@ -43,10 +43,10 @@ func VerifyBackupFileCountOnSegments() {
 	remoteOutput := globalCluster.GenerateAndExecuteCommand("Verifying backup file count", cluster.ON_SEGMENTS, func(contentID int) string {
 		dirs := ""
 		for contentID < origSize || contentID < destSize {
-			dirs += " " + fmt.Sprintf(`"%s"`, globalFPInfo.GetDirForContent(contentID))
+			dirs += " " + fmt.Sprintf("%s", globalFPInfo.GetDirForContent(contentID))
 			contentID += destSize
 		}
-		return fmt.Sprintf(`find %s -type f | wc -l`, dirs)
+		return fmt.Sprintf("find %s -type f | wc -l", dirs)
 	})
 	globalCluster.CheckClusterError(remoteOutput, "Could not verify backup file count", func(contentID int) string {
 		return "Could not verify backup file count"
