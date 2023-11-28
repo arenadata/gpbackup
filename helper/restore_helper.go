@@ -382,6 +382,7 @@ func doRestoreAgent() error {
 
 func constructSingleTableFilename(name string, contentToRestore int, oid int) string {
 	name = strings.ReplaceAll(name, fmt.Sprintf("gpbackup_%d", *content), fmt.Sprintf("gpbackup_%d", contentToRestore))
+	// change the path to the file being restored, replacing not only the file name, but also the directory name
 	name = strings.ReplaceAll(name, fmt.Sprintf("%d/backups/", *content), fmt.Sprintf("%d/backups/", contentToRestore))
 	nameParts := strings.Split(name, ".")
 	filename := fmt.Sprintf("%s_%d", nameParts[0], oid)

@@ -42,6 +42,10 @@ func VerifyBackupFileCountOnSegments() {
 
 	remoteOutput := globalCluster.GenerateAndExecuteCommand("Verifying backup file count", cluster.ON_SEGMENTS, func(contentID int) string {
 		dirs := ""
+		/*
+		 * collect actual data not only from the directory for one segment, but also
+		 * from the remaining directories that will be restored on this segment
+		 */
 		for contentID < origSize || contentID < destSize {
 			dirs += " " + fmt.Sprintf("%s", globalFPInfo.GetDirForContent(contentID))
 			contentID += destSize
