@@ -1,4 +1,4 @@
-Pkgname: greenplum_backup_restore
+Pkgname: gpbackup_tools
 Format: V2
 Architecture: ${ARCH}
 OS: ${OS}
