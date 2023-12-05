@@ -250,43 +250,38 @@ func GetIndexes(connectionPool *dbconn.DBConn) []IndexDefinition {
 
 func GetRenameExchangedPartitionQuery(connection *dbconn.DBConn) string {
 	// In the case of exchanged partition tables, restoring index constraints with system-generated
-	// will cause a name collision in GPDB7+. Rename those constraints to match their new owning
-	// tables. In GPDB6 and below this renaming was done automatically by server code.
+	// will cause a name collision in GPDB7+.  Rename those constraints to match their new owning
+	// tables.  In GPDB6 and below this renaming was done automatically by server code.
 	cteClause := ""
 	if connectionPool.Version.Before("7") {
-		cteClause = fmt.Sprintf(`
-            SELECT c.relname
-            FROM pg_class c
-                INNER JOIN pg_partition_rule p
-                    ON c.oid = p.parchildrelid
-                INNER JOIN pg_namespace n ON c.relnamespace = n.oid
-            WHERE %s`, relationAndSchemaFilterClause())
+		cteClause = `SELECT c.relname
+             FROM pg_class c
+             INNER JOIN pg_partition_rule p
+             ON c.oid = p.parchildrelid`
 	} else {
-		cteClause = fmt.Sprintf(`
-            SELECT DISTINCT c.relname
-            FROM pg_class c
-                INNER JOIN pg_namespace n ON c.relnamespace = n.oid
-            WHERE %s
-                AND c.relkind IN ('r', 'f')
-                AND c.relispartition = true
-                AND c.relhassubclass = false`, relationAndSchemaFilterClause())
+		cteClause = `SELECT DISTINCT cl.relname
+             FROM pg_class cl
+             WHERE
+                cl.relkind IN ('r', 'f')
+                AND cl.relispartition = true
+                AND cl.relhassubclass = false`
 	}
 	query := fmt.Sprintf(`
         WITH table_cte AS (%s)
         SELECT
             ic.relname AS origname,
-            c.relname || SUBSTRING(ic.relname, LENGTH(ch.relname)+1, LENGTH(ch.relname)) AS newname
+            rc.relname || SUBSTRING(ic.relname, LENGTH(ch.relname)+1, LENGTH(ch.relname)) AS newname
         FROM
             pg_index i
-            INNER JOIN pg_class ic ON i.indexrelid = ic.oid
-            INNER JOIN pg_class c
-                ON i.indrelid = c.oid
-                AND c.relname != SUBSTRING(ic.relname, 1, LENGTH(c.relname))
-            INNER JOIN pg_namespace n ON c.relnamespace = n.oid
+            JOIN pg_class ic ON i.indexrelid = ic.oid
+            JOIN pg_class rc
+                ON i.indrelid = rc.oid
+                AND rc.relname != SUBSTRING(ic.relname, 1, LENGTH(rc.relname))
+            JOIN pg_namespace n ON rc.relnamespace = n.oid
             INNER JOIN table_cte ch
                 ON SUBSTRING(ic.relname, 1, LENGTH(ch.relname)) = ch.relname
-                AND c.relname != ch.relname
-        WHERE %s;`, cteClause, relationAndSchemaFilterClause())
+                AND rc.relname != ch.relname
+        WHERE %s;`, cteClause, SchemaFilterClause("n"))
 	return query
 }
 
