@@ -1137,6 +1137,36 @@ var _ = Describe("backup and restore end to end tests", func() {
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
 	})
+	Describe("Extensions dependency", func() {
+		It("runs gpbackup and gprestores with dependent extensions", func() {
+			_ = os.Chdir("resources")
+			command := exec.Command("make", "USE_PGXS=1", "install")
+			mustRunCommand(command)
+			_ = os.Chdir("..")
+
+			testhelper.AssertQueryRuns(backupConn, `
+				CREATE EXTENSION test_ext3;
+				CREATE EXTENSION test_ext5;
+				CREATE EXTENSION test_ext2;
+				CREATE EXTENSION test_ext4;
+				CREATE EXTENSION test_ext1;
+			`)
+			defer testhelper.AssertQueryRuns(backupConn, `
+				DROP EXTENSION test_ext1;
+				DROP EXTENSION test_ext4;
+				DROP EXTENSION test_ext2;
+				DROP EXTENSION test_ext5;
+				DROP EXTENSION test_ext3;
+			`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				"--metadata-only")
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
+				"--redirect-db", "restoredb")
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+	})
 	Describe("Restore with truncate-table", func() {
 		It("runs gpbackup and gprestore with truncate-table and include-table flags", func() {
 			timestamp := gpbackup(gpbackupPath, backupHelperPath)
@@ -1496,6 +1526,35 @@ var _ = Describe("backup and restore end to end tests", func() {
 			// gpbackup before version 1.18.0 does not dump pg_class statistics correctly
 			skipIfOldBackupVersionBefore("1.18.0")
 
+			testhelper.AssertQueryRuns(backupConn, `
+				CREATE TABLE et (
+					id character varying(13),
+					flg smallint,
+					dttm timestamp without time zone,
+					src character varying(80)
+				) WITH (appendonly='true', orientation='row', compresstype=zstd, compresslevel='3') DISTRIBUTED BY (id);
+
+				CREATE TABLE pt (
+					id character varying(13),
+					flg smallint,
+					dttm timestamp without time zone,
+					src character varying(80)
+				) WITH (appendonly='true', orientation='row', compresstype=zstd, compresslevel='3') DISTRIBUTED BY (id) PARTITION BY LIST(src) (
+					PARTITION src_mdm VALUES('val') WITH (tablename='pt_1_prt_src_mdm', appendonly='true', orientation='row', compresstype=zstd, compresslevel='3' )
+				);
+
+				INSERT INTO pt(id, flg, dttm, src) VALUES (1, 1, now(), 'val');
+				INSERT INTO et(id, flg, dttm, src) VALUES (2, 2, now(), 'val');
+
+				ANALYZE pt;
+				ANALYZE et;
+				ANALYZE ROOTPARTITION pt;
+
+				ALTER TABLE pt EXCHANGE PARTITION src_mdm WITH TABLE et;
+			`)
+
+			defer testhelper.AssertQueryRuns(backupConn,
+				`DROP TABLE et CASCADE; DROP TABLE pt CASCADE;`)
 			timestamp := gpbackup(gpbackupPath, backupHelperPath,
 				"--with-stats",
 				"--backup-dir", backupDir, "--single-backup-dir")
@@ -1515,7 +1574,7 @@ var _ = Describe("backup and restore end to end tests", func() {
 			assertPGClassStatsRestored(backupConn, restoreConn, publicSchemaTupleCounts)
 			assertPGClassStatsRestored(backupConn, restoreConn, schema2TupleCounts)
 
-			statsQuery := fmt.Sprintf(`SELECT count(*) AS string FROM pg_statistic st left join pg_class cl on st.starelid = cl.oid left join pg_namespace nm on cl.relnamespace = nm.oid where %s;`, backup.SchemaFilterClause("nm"))
+			statsQuery := fmt.Sprintf(`SELECT count(*) AS string FROM pg_statistic st left join pg_class cl on st.starelid = cl.oid left join pg_namespace nm on cl.relnamespace = nm.oid where cl.relname != 'pt_1_prt_src_mdm' AND %s;`, backup.SchemaFilterClause("nm"))
 			backupStatisticCount := dbconn.MustSelectString(backupConn, statsQuery)
 			restoredStatisticsCount := dbconn.MustSelectString(restoreConn, statsQuery)
 
