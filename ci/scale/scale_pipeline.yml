@@ -274,9 +274,9 @@ jobs:
     file: ccp_src/ci/tasks/gen_cluster.yml
   - task: gpinitsystem
     file: ccp_src/ci/tasks/gpinitsystem.yml
-  - task: setup-cluster-env
+  - task: setup-centos-env
     image: rocky8-gpdb7-image
-    file: gpbackup/ci/tasks/setup-cluster-env.yml
+    file: gpbackup/ci/tasks/setup-centos-env.yml
   - task: scale-perf-load
     image: rocky8-gpdb7-image
     file: gpbackup/ci/tasks/scale-perf-load.yml
