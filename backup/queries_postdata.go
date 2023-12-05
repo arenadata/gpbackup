@@ -254,10 +254,12 @@ func GetRenameExchangedPartitionQuery(connection *dbconn.DBConn) string {
 	// tables.  In GPDB6 and below this renaming was done automatically by server code.
 	cteClause := ""
 	if connectionPool.Version.Before("7") {
-		cteClause = `SELECT c.relname
-             FROM pg_class c
-             INNER JOIN pg_partition_rule p
-             ON c.oid = p.parchildrelid`
+		cteClause = `SELECT DISTINCT cl.relname
+            FROM pg_class cl
+                INNER JOIN pg_partitions pts
+					ON cl.relname = pts.partitiontablename
+					AND cl.relname != pts.tablename
+            WHERE cl.relkind IN ('r', 'f')`
 	} else {
 		cteClause = `SELECT DISTINCT cl.relname
              FROM pg_class cl
