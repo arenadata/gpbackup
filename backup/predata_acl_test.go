@@ -57,14 +57,8 @@ ALTER TABLE public.tablename OWNER TO testrole;`)
 			testhelper.ExpectRegexp(buffer, `
 
 REVOKE ALL ON TABLE public.tablename FROM PUBLIC;
-
-
 GRANT ALL ON TABLE public.tablename TO anothertestrole;
-
-
 GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES ON TABLE public.tablename TO testrole;
-
-
 GRANT TRIGGER ON TABLE public.tablename TO PUBLIC;`)
 		})
 		It("prints a block of REVOKE and GRANT statements WITH GRANT OPTION", func() {
@@ -73,14 +67,8 @@ GRANT TRIGGER ON TABLE public.tablename TO PUBLIC;`)
 			testhelper.ExpectRegexp(buffer, `
 
 REVOKE ALL ON TABLE public.tablename FROM PUBLIC;
-
-
 GRANT ALL ON TABLE public.tablename TO anothertestrole WITH GRANT OPTION;
-
-
 GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES ON TABLE public.tablename TO testrole WITH GRANT OPTION;
-
-
 GRANT TRIGGER ON TABLE public.tablename TO PUBLIC WITH GRANT OPTION;`)
 		})
 		It("prints a block of REVOKE and GRANT statements, some with WITH GRANT OPTION, some without", func() {
@@ -89,11 +77,7 @@ GRANT TRIGGER ON TABLE public.tablename TO PUBLIC WITH GRANT OPTION;`)
 			testhelper.ExpectRegexp(buffer, `
 
 REVOKE ALL ON TABLE public.tablename FROM PUBLIC;
-
-
 GRANT ALL ON TABLE public.tablename TO anothertestrole;
-
-
 GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES ON TABLE public.tablename TO testrole WITH GRANT OPTION;`)
 		})
 		It("prints both an ALTER TABLE ... OWNER TO statement and a table comment", func() {
@@ -115,17 +99,9 @@ ALTER TABLE public.tablename OWNER TO testrole;
 
 
 REVOKE ALL ON TABLE public.tablename FROM PUBLIC;
-
-
 REVOKE ALL ON TABLE public.tablename FROM testrole;
-
-
 GRANT ALL ON TABLE public.tablename TO anothertestrole;
-
-
 GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES ON TABLE public.tablename TO testrole;
-
-
 GRANT TRIGGER ON TABLE public.tablename TO PUBLIC;`)
 		})
 		It("prints both a block of REVOKE and GRANT statements and a table comment", func() {
@@ -137,14 +113,8 @@ COMMENT ON TABLE public.tablename IS 'This is a table comment.';
 
 
 REVOKE ALL ON TABLE public.tablename FROM PUBLIC;
-
-
 GRANT ALL ON TABLE public.tablename TO anothertestrole;
-
-
 GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES ON TABLE public.tablename TO testrole;
-
-
 GRANT TRIGGER ON TABLE public.tablename TO PUBLIC;`)
 		})
 		It("prints REVOKE and GRANT statements, an ALTER TABLE ... OWNER TO statement, and comments", func() {
@@ -159,17 +129,9 @@ ALTER TABLE public.tablename OWNER TO testrole;
 
 
 REVOKE ALL ON TABLE public.tablename FROM PUBLIC;
-
-
 REVOKE ALL ON TABLE public.tablename FROM testrole;
-
-
 GRANT ALL ON TABLE public.tablename TO anothertestrole;
-
-
 GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES ON TABLE public.tablename TO testrole;
-
-
 GRANT TRIGGER ON TABLE public.tablename TO PUBLIC;`)
 		})
 		It("prints SERVER for ALTER and FOREIGN SERVER for GRANT/REVOKE for a foreign server", func() {
@@ -183,11 +145,7 @@ ALTER SERVER foreignserver OWNER TO testrole;
 
 
 REVOKE ALL ON FOREIGN SERVER foreignserver FROM PUBLIC;
-
-
 REVOKE ALL ON FOREIGN SERVER foreignserver FROM testrole;
-
-
 GRANT ALL ON FOREIGN SERVER foreignserver TO testrole;`)
 		})
 		It("prints FUNCTION for REVOKE and AGGREGATE for ALTER for an aggregate function", func() {
@@ -201,8 +159,6 @@ ALTER AGGREGATE public.testagg(*) OWNER TO testrole;
 
 
 REVOKE ALL ON FUNCTION public.testagg(*) FROM PUBLIC;
-
-
 REVOKE ALL ON FUNCTION public.testagg(*) FROM testrole;`)
 		})
 		Context("Views and sequences have owners", func() {
