@@ -32,6 +32,9 @@ set -ex
     export COORDINATOR_DATA_DIRECTORY=/data/gpdata/coordinator/gpseg-1
     export MASTER_DATA_DIRECTORY=/data/gpdata/coordinator/gpseg-1
     export PATH=\\\${GOPATH}/bin:/usr/local/go/bin:\\\${PATH}
+    if [[ -f /opt/gcc_env.sh ]]; then
+        source /opt/gcc_env.sh
+    fi
 ENV_SCRIPT
 
 export GOPATH=/home/gpadmin/go
