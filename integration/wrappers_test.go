@@ -18,12 +18,12 @@ var _ = Describe("Wrappers Integration", func() {
 	Describe("RetrieveAndProcessTables", func() {
 		BeforeEach(func() {
 			rootCmd := &cobra.Command{}
-			includes := []string{"--include-table", "public.foo", "--include-table", "public.BAR"}
-			rootCmd.SetArgs(options.HandleSingleDashes(includes))
 			backup.DoInit(rootCmd) // initialize the ObjectCount
-			rootCmd.Execute()
 		})
 		It("returns the data tables that have names with special characters", func() {
+			_ = backupCmdFlags.Set(options.INCLUDE_RELATION, "public.foo")
+			_ = backupCmdFlags.Set(options.INCLUDE_RELATION, "public.BAR")
+
 			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.foo(i int); INSERT INTO public.foo VALUES (1);")
 			testhelper.AssertQueryRuns(connectionPool, `CREATE TABLE public."BAR"(i int); INSERT INTO public."BAR" VALUES (1);`)
 			defer testhelper.AssertQueryRuns(connectionPool, "DROP TABLE public.foo;")
@@ -63,6 +63,10 @@ var _ = Describe("Wrappers Integration", func() {
 			rootCmd := &cobra.Command{}
 			backup.DoInit(rootCmd) // initialize the ObjectCount
 
+			subject, err := options.NewOptions(backupCmdFlags)
+			Expect(err).To(Not(HaveOccurred()))
+			backup.ValidateAndProcessFilterLists(subject)
+
 			_, dataTables := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(3))
 			Expect(dataTables[0].Name).To(Equal("thousands"))
@@ -76,6 +80,13 @@ var _ = Describe("Wrappers Integration", func() {
 			backup.DoInit(rootCmd) // initialize the ObjectCount
 			rootCmd.Execute()
 
+			_ = backupCmdFlags.Set(options.INCLUDE_RELATION, "public.empty")
+			_ = backupCmdFlags.Set(options.INCLUDE_RELATION, "public.ten")
+
+			subject, err := options.NewOptions(backupCmdFlags)
+			Expect(err).To(Not(HaveOccurred()))
+			backup.ValidateAndProcessFilterLists(subject)
+
 			_, dataTables := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(2))
 			Expect(dataTables[0].Name).To(Equal("ten"))
@@ -87,6 +98,12 @@ var _ = Describe("Wrappers Integration", func() {
 			rootCmd.SetArgs(options.HandleSingleDashes(includes))
 			backup.DoInit(rootCmd) // initialize the ObjectCount
 			rootCmd.Execute()
+
+			_ = backupCmdFlags.Set(options.EXCLUDE_RELATION, "public.thousands")
+
+			subject, err := options.NewOptions(backupCmdFlags)
+			Expect(err).To(Not(HaveOccurred()))
+			backup.ValidateAndProcessFilterLists(subject)
 
 			_, dataTables := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(2))
@@ -119,6 +136,12 @@ var _ = Describe("Wrappers Integration", func() {
 			backup.DoInit(rootCmd) // initialize the ObjectCount
 			rootCmd.Execute()
 
+			_ = backupCmdFlags.Set(options.INCLUDE_SCHEMA, "filterschema")
+
+			subject, err := options.NewOptions(backupCmdFlags)
+			Expect(err).To(Not(HaveOccurred()))
+			backup.ValidateAndProcessFilterLists(subject)
+
 			_, dataTables := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(2))
 			Expect(dataTables[0].Name).To(Equal("thousands"))
@@ -130,6 +153,12 @@ var _ = Describe("Wrappers Integration", func() {
 			rootCmd.SetArgs(options.HandleSingleDashes(includes))
 			backup.DoInit(rootCmd) // initialize the ObjectCount
 			rootCmd.Execute()
+
+			_ = backupCmdFlags.Set(options.EXCLUDE_SCHEMA, "public")
+
+			subject, err := options.NewOptions(backupCmdFlags)
+			Expect(err).To(Not(HaveOccurred()))
+			backup.ValidateAndProcessFilterLists(subject)
 
 			_, dataTables := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(2))
@@ -164,8 +193,12 @@ var _ = Describe("Wrappers Integration", func() {
 			rootCmd := &cobra.Command{}
 			backup.DoInit(rootCmd) // initialize the ObjectCount
 
-			opts, _ := options.NewOptions(rootCmd.Flags())
-			err := opts.ExpandIncludesForPartitions(connectionPool, rootCmd.Flags())
+			subject, err := options.NewOptions(backupCmdFlags)
+			Expect(err).To(Not(HaveOccurred()))
+			backup.ValidateAndProcessFilterLists(subject)
+
+			includeOids := backup.GetOidsFromRelationList(backup.IncludedRelationFqns)
+			err = backup.ExpandIncludesForPartitions(connectionPool, subject, includeOids, backupCmdFlags)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			_, dataTables := backup.RetrieveAndProcessTables()
@@ -180,8 +213,12 @@ var _ = Describe("Wrappers Integration", func() {
 			backup.DoInit(rootCmd) // initialize the ObjectCount
 			rootCmd.Execute()
 
-			opts, _ := options.NewOptions(rootCmd.Flags())
-			err := opts.ExpandIncludesForPartitions(connectionPool, rootCmd.Flags())
+			subject, err := options.NewOptions(backupCmdFlags)
+			Expect(err).To(Not(HaveOccurred()))
+			backup.ValidateAndProcessFilterLists(subject)
+
+			includeOids := backup.GetOidsFromRelationList(backup.IncludedRelationFqns)
+			err = backup.ExpandIncludesForPartitions(connectionPool, subject, includeOids, backupCmdFlags)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			_, dataTables := backup.RetrieveAndProcessTables()
@@ -215,6 +252,10 @@ var _ = Describe("Wrappers Integration", func() {
 			rootCmd := &cobra.Command{}
 			backup.DoInit(rootCmd) // initialize the ObjectCount
 
+			subject, err := options.NewOptions(backupCmdFlags)
+			Expect(err).To(Not(HaveOccurred()))
+			backup.ValidateAndProcessFilterLists(subject)
+
 			_, dataTables := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(3))
 
@@ -233,6 +274,10 @@ var _ = Describe("Wrappers Integration", func() {
 
 			rootCmd := &cobra.Command{}
 			backup.DoInit(rootCmd) // initialize the ObjectCount
+
+			subject, err := options.NewOptions(backupCmdFlags)
+			Expect(err).To(Not(HaveOccurred()))
+			backup.ValidateAndProcessFilterLists(subject)
 
 			_, dataTables := backup.RetrieveAndProcessTables()
 			Expect(len(dataTables)).To(Equal(3))
