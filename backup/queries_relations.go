@@ -114,49 +114,75 @@ func (r Relation) GetUniqueID() UniqueID {
  * it is currently much simpler than the include case.
  */
 func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
-	childPartitionFilter := ""
-	if !MustGetFlagBool(options.LEAF_PARTITION_DATA) && connectionPool.Version.Before("7") {
-		// Filter out non-external child partitions in GPDB6 and earlier.
-		// In GPDB7+ we do not want to exclude child partitions, they function as separate tables.
-		childPartitionFilter = `
-	AND c.oid NOT IN (
-		SELECT p.parchildrelid
-		FROM pg_partition_rule p
-			LEFT JOIN pg_exttable e ON p.parchildrelid = e.reloid
-		WHERE e.reloid IS NULL)`
-	}
+	var query string
 
-	// In GPDB 7+, root partitions are marked as relkind 'p'.
-	relkindFilter := `'r'`
 	if connectionPool.Version.AtLeast("7") {
-		relkindFilter = `'r', 'p'`
-	}
+		relkindFilter := `'r', 'p'`
 
-	query := fmt.Sprintf(`
-	SELECT schemaoid, oid, schema, name FROM (
-		SELECT n.oid AS schemaoid,
-			c.oid AS oid,
-			quote_ident(n.nspname) AS schema,
-			quote_ident(c.relname) AS name,
-			coalesce(prt.pages, c.relpages) AS pages
-		FROM pg_class c
-		JOIN pg_namespace n ON c.relnamespace = n.oid
-		LEFT JOIN (
-			SELECT
-				p.parrelid,
-				sum(pc.relpages) AS pages
-			FROM pg_partition_rule AS pr
-			JOIN pg_partition AS p ON pr.paroid = p.oid
-			JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
-			GROUP BY p.parrelid
-		) AS prt ON prt.parrelid = c.oid
+		query = fmt.Sprintf(`
+		SELECT
+			n.oid as schemaoid,
+			c.oid as oid,
+			quote_ident(nspname) as schema,
+			quote_ident(relname) as name FROM (
+				SELECT
+					oid,
+					relname,
+					relnamespace,
+					coalesce(
+						(SELECT sum(relpages) FROM pg_partition_tree(oid) left JOIN pg_class on relid = oid),
+						relpages
+					) AS sum
+				FROM pg_class
+				WHERE relkind IN (%s)
+				AND %s
+			) c
+		LEFT JOIN pg_namespace n
+		ON c.relnamespace = n.oid
 		WHERE %s
-			%s
-			AND relkind IN (%s)
-			AND %s
-	) res
-	ORDER BY pages DESC, oid`,
-		relationAndSchemaFilterClause(), childPartitionFilter, relkindFilter, ExtensionFilterClause("c"))
+		ORDER BY c.sum DESC, c.oid`,
+			relkindFilter, ExtensionFilterClause("pg_class"), relationAndSchemaFilterClause())
+	} else {
+		var childPartitionFilter string
+		relkindFilter := `'r'`
+
+		if !MustGetFlagBool(options.LEAF_PARTITION_DATA) {
+			// Filter out non-external child partitions in GPDB6 and earlier.
+			// In GPDB7+ we do not want to exclude child partitions, they function as separate tables.
+			childPartitionFilter = `
+			AND c.oid NOT IN (
+				SELECT p.parchildrelid
+				FROM pg_partition_rule p
+					LEFT JOIN pg_exttable e ON p.parchildrelid = e.reloid
+				WHERE e.reloid IS NULL)`
+		}
+
+		query = fmt.Sprintf(`
+		SELECT schemaoid, oid, schema, name FROM (
+			SELECT n.oid AS schemaoid,
+				c.oid AS oid,
+				quote_ident(n.nspname) AS schema,
+				quote_ident(c.relname) AS name,
+				coalesce(prt.pages, c.relpages) AS pages
+			FROM pg_class c
+			JOIN pg_namespace n ON c.relnamespace = n.oid
+			LEFT JOIN (
+				SELECT
+					p.parrelid,
+					sum(pc.relpages) AS pages
+				FROM pg_partition_rule AS pr
+				JOIN pg_partition AS p ON pr.paroid = p.oid
+				JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
+				GROUP BY p.parrelid
+			) AS prt ON prt.parrelid = c.oid
+			WHERE %s
+				%s
+				AND relkind IN (%s)
+				AND %s
+		) res
+		ORDER BY pages DESC, oid`,
+			relationAndSchemaFilterClause(), childPartitionFilter, relkindFilter, ExtensionFilterClause("c"))
+	}
 
 	results := make([]Relation, 0)
 	err := connectionPool.Select(&results, query)
@@ -166,36 +192,60 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 }
 
 func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, includedRelationsQuoted []string) []Relation {
-	// In GPDB 7+, root partitions are marked as relkind 'p'.
-	relkindFilter := `'r'`
-	if connectionPool.Version.AtLeast("7") {
-		relkindFilter = `'r', 'p'`
-	}
+	var query string
+	var relkindFilter string
 
 	includeOids := getOidsFromRelationList(connectionPool, includedRelationsQuoted)
 	oidStr := strings.Join(includeOids, ", ")
-	query := fmt.Sprintf(`
-	SELECT schemaoid, oid, schema, name FROM (
-		SELECT n.oid AS schemaoid,
-			c.oid AS oid,
-			quote_ident(n.nspname) AS schema,
-			quote_ident(c.relname) AS name,
-			coalesce(prt.pages, c.relpages) AS pages
-		FROM pg_class c
-		JOIN pg_namespace n ON c.relnamespace = n.oid
-		LEFT JOIN (
-			SELECT
-				p.parrelid,
-				sum(pc.relpages) AS pages
-			FROM pg_partition_rule AS pr
-			JOIN pg_partition AS p ON pr.paroid = p.oid
-			JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
-			GROUP BY p.parrelid
-		) AS prt ON prt.parrelid = c.oid
-		WHERE c.oid IN (%s)
-		AND relkind IN (%s)
-	) res
-	ORDER BY pages DESC, oid`, oidStr, relkindFilter)
+
+	if connectionPool.Version.AtLeast("7") {
+		relkindFilter = `'r', 'p'`
+		query = fmt.Sprintf(`
+		SELECT
+			n.oid as schemaoid,
+			sums.oid as oid,
+			quote_ident(nspname) as schema,
+			quote_ident(relname) as name FROM (
+				SELECT
+					oid,
+					relname,
+					relnamespace,
+					coalesce(
+						(SELECT sum(relpages) FROM pg_partition_tree(oid) left JOIN pg_class on relid = oid),
+						relpages
+					) AS sum
+				FROM pg_class
+				WHERE oid IN (%s)
+				AND relkind IN (%s)
+			) sums
+		LEFT JOIN pg_namespace n
+		ON sums.relnamespace = n.oid
+		ORDER BY sums.sum DESC, sums.oid`, oidStr, relkindFilter)
+	} else {
+		relkindFilter := `'r'`
+		query = fmt.Sprintf(`
+		SELECT schemaoid, oid, schema, name FROM (
+			SELECT n.oid AS schemaoid,
+				c.oid AS oid,
+				quote_ident(n.nspname) AS schema,
+				quote_ident(c.relname) AS name,
+				coalesce(prt.pages, c.relpages) AS pages
+			FROM pg_class c
+			JOIN pg_namespace n ON c.relnamespace = n.oid
+			LEFT JOIN (
+				SELECT
+					p.parrelid,
+					sum(pc.relpages) AS pages
+				FROM pg_partition_rule AS pr
+				JOIN pg_partition AS p ON pr.paroid = p.oid
+				JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
+				GROUP BY p.parrelid
+			) AS prt ON prt.parrelid = c.oid
+			WHERE c.oid IN (%s)
+			AND relkind IN (%s)
+		) res
+		ORDER BY pages DESC, oid`, oidStr, relkindFilter)
+	}
 
 	results := make([]Relation, 0)
 	err := connectionPool.Select(&results, query)
