@@ -425,6 +425,7 @@ func formatContents(slice []string) string {
 }
 
 func formatDiffs(actual []string, expected []string) string {
+	Expect(len(actual)).To(Equal(len(expected)))
 	dmp := diffmatchpatch.New()
 	diffs := ""
 	for idx := range actual {
