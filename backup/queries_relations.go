@@ -117,8 +117,6 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 	var query string
 
 	if connectionPool.Version.AtLeast("7") {
-		relkindFilter := `'r', 'p'`
-
 		query = fmt.Sprintf(`
 		SELECT
 			n.oid as schemaoid,
@@ -134,17 +132,16 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 						relpages
 					) AS sum
 				FROM pg_class
-				WHERE relkind IN (%s)
+				WHERE relkind IN ('r', 'p')
 				AND %s
 			) c
 		LEFT JOIN pg_namespace n
 		ON c.relnamespace = n.oid
 		WHERE %s
 		ORDER BY c.sum DESC, c.oid`,
-			relkindFilter, ExtensionFilterClause("pg_class"), relationAndSchemaFilterClause())
+			ExtensionFilterClause("pg_class"), relationAndSchemaFilterClause())
 	} else {
 		var childPartitionFilter string
-		relkindFilter := `'r'`
 
 		if !MustGetFlagBool(options.LEAF_PARTITION_DATA) {
 			// Filter out non-external child partitions in GPDB6 and earlier.
@@ -177,11 +174,11 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 			) AS prt ON prt.parrelid = c.oid
 			WHERE %s
 				%s
-				AND relkind IN (%s)
+				AND relkind IN ('r')
 				AND %s
 		) res
 		ORDER BY pages DESC, oid`,
-			relationAndSchemaFilterClause(), childPartitionFilter, relkindFilter, ExtensionFilterClause("c"))
+			relationAndSchemaFilterClause(), childPartitionFilter, ExtensionFilterClause("c"))
 	}
 
 	results := make([]Relation, 0)
@@ -193,13 +190,11 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 
 func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, includedRelationsQuoted []string) []Relation {
 	var query string
-	var relkindFilter string
 
 	includeOids := getOidsFromRelationList(connectionPool, includedRelationsQuoted)
 	oidStr := strings.Join(includeOids, ", ")
 
 	if connectionPool.Version.AtLeast("7") {
-		relkindFilter = `'r', 'p'`
 		query = fmt.Sprintf(`
 		SELECT
 			n.oid as schemaoid,
@@ -216,13 +211,12 @@ func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, in
 					) AS sum
 				FROM pg_class
 				WHERE oid IN (%s)
-				AND relkind IN (%s)
+				AND relkind IN ('r', 'p')
 			) sums
 		LEFT JOIN pg_namespace n
 		ON sums.relnamespace = n.oid
-		ORDER BY sums.sum DESC, sums.oid`, oidStr, relkindFilter)
+		ORDER BY sums.sum DESC, sums.oid`, oidStr)
 	} else {
-		relkindFilter := `'r'`
 		query = fmt.Sprintf(`
 		SELECT schemaoid, oid, schema, name FROM (
 			SELECT n.oid AS schemaoid,
@@ -242,9 +236,9 @@ func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, in
 				GROUP BY p.parrelid
 			) AS prt ON prt.parrelid = c.oid
 			WHERE c.oid IN (%s)
-			AND relkind IN (%s)
+			AND relkind IN ('r')
 		) res
-		ORDER BY pages DESC, oid`, oidStr, relkindFilter)
+		ORDER BY pages DESC, oid`, oidStr)
 	}
 
 	results := make([]Relation, 0)
