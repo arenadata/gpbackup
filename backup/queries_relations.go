@@ -114,72 +114,53 @@ func (r Relation) GetUniqueID() UniqueID {
  * it is currently much simpler than the include case.
  */
 func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
-	var query string
-
-	if connectionPool.Version.AtLeast("7") {
-		query = fmt.Sprintf(`
-		SELECT
-			n.oid as schemaoid,
-			c.oid as oid,
-			quote_ident(nspname) as schema,
-			quote_ident(relname) as name FROM (
-				SELECT
-					oid,
-					relname,
-					relnamespace,
-					coalesce(
-						(SELECT sum(relpages) FROM pg_partition_tree(oid) left JOIN pg_class on relid = oid),
-						relpages
-					) AS sum
-				FROM pg_class
-				WHERE relkind IN ('r', 'p')
-				AND %s
-			) c
-		LEFT JOIN pg_namespace n
-		ON c.relnamespace = n.oid
-		WHERE %s
-		ORDER BY c.sum DESC, c.oid`,
-			ExtensionFilterClause("pg_class"), relationAndSchemaFilterClause())
-	} else {
-		var childPartitionFilter string
-
-		if !MustGetFlagBool(options.LEAF_PARTITION_DATA) {
-			// Filter out non-external child partitions in GPDB6 and earlier.
-			// In GPDB7+ we do not want to exclude child partitions, they function as separate tables.
-			childPartitionFilter = `
-			AND c.oid NOT IN (
-				SELECT p.parchildrelid
-				FROM pg_partition_rule p
-					LEFT JOIN pg_exttable e ON p.parchildrelid = e.reloid
-				WHERE e.reloid IS NULL)`
-		}
-
-		query = fmt.Sprintf(`
-		SELECT schemaoid, oid, schema, name FROM (
-			SELECT n.oid AS schemaoid,
-				c.oid AS oid,
-				quote_ident(n.nspname) AS schema,
-				quote_ident(c.relname) AS name,
-				coalesce(prt.pages, c.relpages) AS pages
-			FROM pg_class c
-			JOIN pg_namespace n ON c.relnamespace = n.oid
-			LEFT JOIN (
-				SELECT
-					p.parrelid,
-					sum(pc.relpages) AS pages
-				FROM pg_partition_rule AS pr
-				JOIN pg_partition AS p ON pr.paroid = p.oid
-				JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
-				GROUP BY p.parrelid
-			) AS prt ON prt.parrelid = c.oid
-			WHERE %s
-				%s
-				AND relkind IN ('r')
-				AND %s
-		) res
-		ORDER BY pages DESC, oid`,
-			relationAndSchemaFilterClause(), childPartitionFilter, ExtensionFilterClause("c"))
+	childPartitionFilter := ""
+	if !MustGetFlagBool(options.LEAF_PARTITION_DATA) && connectionPool.Version.Before("7") {
+		// Filter out non-external child partitions in GPDB6 and earlier.
+		// In GPDB7+ we do not want to exclude child partitions, they function as separate tables.
+		childPartitionFilter = `
+	AND c.oid NOT IN (
+		SELECT p.parchildrelid
+		FROM pg_partition_rule p
+			LEFT JOIN pg_exttable e ON p.parchildrelid = e.reloid
+		WHERE e.reloid IS NULL)`
 	}
+
+	prtPages := "prt.pages"
+	prt := `LEFT JOIN (
+		SELECT
+			p.parrelid,
+			sum(pc.relpages) AS pages
+		FROM pg_partition_rule AS pr
+		JOIN pg_partition AS p ON pr.paroid = p.oid
+		JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
+		GROUP BY p.parrelid
+	) AS prt ON prt.parrelid = c.oid`
+	// In GPDB 7+, root partitions are marked as relkind 'p'.
+	relkindFilter := `'r'`
+	if connectionPool.Version.AtLeast("7") {
+		relkindFilter = `'r', 'p'`
+		prtPages = "(SELECT sum(relpages) FROM pg_partition_tree(c.oid) JOIN pg_class ON relid = oid)"
+		prt = ""
+	}
+
+	query := fmt.Sprintf(`
+	SELECT schemaoid, oid, schema, name FROM (
+		SELECT n.oid AS schemaoid,
+			c.oid AS oid,
+			quote_ident(n.nspname) AS schema,
+			quote_ident(c.relname) AS name,
+			coalesce(%s, c.relpages) AS pages
+		FROM pg_class c
+		JOIN pg_namespace n ON c.relnamespace = n.oid
+		%s
+		WHERE %s
+			%s
+			AND relkind IN (%s)
+			AND %s
+	) res
+	ORDER BY pages DESC, oid`, prtPages, prt,
+		relationAndSchemaFilterClause(), childPartitionFilter, relkindFilter, ExtensionFilterClause("c"))
 
 	results := make([]Relation, 0)
 	err := connectionPool.Select(&results, query)
@@ -189,57 +170,40 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 }
 
 func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, includedRelationsQuoted []string) []Relation {
-	var query string
+	prtPages := "prt.pages"
+	prt := `LEFT JOIN (
+		SELECT
+			p.parrelid,
+			sum(pc.relpages) AS pages
+		FROM pg_partition_rule AS pr
+		JOIN pg_partition AS p ON pr.paroid = p.oid
+		JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
+		GROUP BY p.parrelid
+	) AS prt ON prt.parrelid = c.oid`
+	// In GPDB 7+, root partitions are marked as relkind 'p'.
+	relkindFilter := `'r'`
+	if connectionPool.Version.AtLeast("7") {
+		relkindFilter = `'r', 'p'`
+		prtPages = "(SELECT sum(relpages) FROM pg_partition_tree(c.oid) JOIN pg_class ON relid = oid)"
+		prt = ""
+	}
 
 	includeOids := getOidsFromRelationList(connectionPool, includedRelationsQuoted)
 	oidStr := strings.Join(includeOids, ", ")
-
-	if connectionPool.Version.AtLeast("7") {
-		query = fmt.Sprintf(`
-		SELECT
-			n.oid as schemaoid,
-			sums.oid as oid,
-			quote_ident(nspname) as schema,
-			quote_ident(relname) as name FROM (
-				SELECT
-					oid,
-					relname,
-					relnamespace,
-					coalesce(
-						(SELECT sum(relpages) FROM pg_partition_tree(oid) left JOIN pg_class on relid = oid),
-						relpages
-					) AS sum
-				FROM pg_class
-				WHERE oid IN (%s)
-				AND relkind IN ('r', 'p')
-			) sums
-		LEFT JOIN pg_namespace n
-		ON sums.relnamespace = n.oid
-		ORDER BY sums.sum DESC, sums.oid`, oidStr)
-	} else {
-		query = fmt.Sprintf(`
-		SELECT schemaoid, oid, schema, name FROM (
-			SELECT n.oid AS schemaoid,
-				c.oid AS oid,
-				quote_ident(n.nspname) AS schema,
-				quote_ident(c.relname) AS name,
-				coalesce(prt.pages, c.relpages) AS pages
-			FROM pg_class c
-			JOIN pg_namespace n ON c.relnamespace = n.oid
-			LEFT JOIN (
-				SELECT
-					p.parrelid,
-					sum(pc.relpages) AS pages
-				FROM pg_partition_rule AS pr
-				JOIN pg_partition AS p ON pr.paroid = p.oid
-				JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
-				GROUP BY p.parrelid
-			) AS prt ON prt.parrelid = c.oid
-			WHERE c.oid IN (%s)
-			AND relkind IN ('r')
-		) res
-		ORDER BY pages DESC, oid`, oidStr)
-	}
+	query := fmt.Sprintf(`
+	SELECT schemaoid, oid, schema, name FROM (
+		SELECT n.oid AS schemaoid,
+			c.oid AS oid,
+			quote_ident(n.nspname) AS schema,
+			quote_ident(c.relname) AS name,
+			coalesce(%s, c.relpages) AS pages
+		FROM pg_class c
+		JOIN pg_namespace n ON c.relnamespace = n.oid
+		%s
+		WHERE c.oid IN (%s)
+		AND relkind IN (%s)
+	) res
+	ORDER BY pages DESC, oid`, prtPages, prt, oidStr, relkindFilter)
 
 	results := make([]Relation, 0)
 	err := connectionPool.Select(&results, query)
