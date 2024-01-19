@@ -202,16 +202,9 @@ func doRestoreAgent() error {
 		contentToRestore := *content
 
 		for b := 0; b < batches; b++ {
-			if replicatedTables != nil {
-				tableIsNotYetRestored, tableIsPresent := replicatedTables[oid]
-				if tableIsPresent && tableIsNotYetRestored {
-					// this is the first batch encountering this replicated table.
-					// restore it and mark it for no further restoration
-					replicatedTables[oid] = false
-				} else if !tableIsNotYetRestored {
-					// table was already restored to this segment in a previous batch
-					continue
-				}
+			if replicatedTables != nil && replicatedTables[oid] && b > 0 {
+				// table was already restored to this segment in a previous batch
+				continue
 			}
 			if *singleDataFile {
 				start[contentToRestore] = tocEntries[contentToRestore][uint(oid)].StartByte
@@ -334,13 +327,22 @@ func doRestoreAgent() error {
 			log(fmt.Sprintf("Oid %d: Copied %d bytes into the pipe", oid, bytesRead))
 
 			log(fmt.Sprintf("Closing pipe for oid %d: %s", oid, currentPipe))
-			err = flushAndCloseRestoreWriter(currentPipe, oid)
-			if err != nil {
-				log(fmt.Sprintf("Oid %d: Failed to flush and close pipe", oid))
-				goto LoopEnd
-			}
 
 			// Recreate pipe to prevent data holdover bug
+			// The mentioned bug is probably caused by unsynchronized reader
+			// and writer. When reader is slow enough, writer can append
+			// another batch of data to the same pipe in the next loop cycle.
+			// In the worst case, reader can process all data in one loop
+			// cycle for the first batch.
+			// Doing recreation before flush is essential. Otherwise, fast
+			// enough reader can open the pipe which is already flushed, but
+			// not yet deleted. This race causing writer to wait endlessly in
+			// next ENXIO cycle above and the reader to wait for data on the
+			// other side of pipe.
+			// TODO: The whole batches loop looks overweighted. It seems that
+			// we can simplify and speedup it by using a single writer with
+			// single pipe. Then the problem described will cease to be
+			// relevant.
 			err = deletePipe(currentPipe)
 			if err != nil {
 				log(fmt.Sprintf("Error deleting pipe %s at end of batch loop: %v", currentPipe, err))
@@ -349,6 +351,12 @@ func doRestoreAgent() error {
 			err = createPipe(currentPipe)
 			if err != nil {
 				log(fmt.Sprintf("Error creating pipe %s at end of batch loop: %v", currentPipe, err))
+				goto LoopEnd
+			}
+
+			err = flushAndCloseRestoreWriter(currentPipe, oid)
+			if err != nil {
+				log(fmt.Sprintf("Oid %d: Failed to flush and close pipe", oid))
 				goto LoopEnd
 			}
 

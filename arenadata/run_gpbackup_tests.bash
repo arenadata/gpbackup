@@ -16,4 +16,4 @@ source /usr/local/greenplum-db-devel/greenplum_path.sh;
 source ~/gpdb_src/gpAux/gpdemo/gpdemo-env.sh;
 gpconfig -c shared_preload_libraries -v dummy_seclabel;
 gpstop -ar;
-PATH=$PATH:/opt/go/bin:~/go/bin GOPATH=~/go make depend build install test end_to_end -C /home/gpadmin/go/src/github.com/greenplum-db/gpbackup"
+PATH=$PATH:/opt/go/bin:~/go/bin GOPATH=~/go make depend build install integration end_to_end -C /home/gpadmin/go/src/github.com/greenplum-db/gpbackup"
