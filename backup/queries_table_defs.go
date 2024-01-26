@@ -151,22 +151,29 @@ type PartitionLevelInfo struct {
 	Oid      uint32
 	Level    string
 	RootName string
+	RootOid  uint32
+	Name     string
 }
 
 func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLevelInfo {
 	before7Query := `
 		SELECT pc.oid AS oid,
 			'p' AS level,
-			'' AS rootname
+			'' AS rootname,
+			0 AS rootoid,
+			quote_ident(pc.relname) AS name
 		FROM pg_partition p
 			JOIN pg_class pc ON p.parrelid = pc.oid
 		UNION ALL
 		SELECT r.parchildrelid AS oid,
 			CASE WHEN p.parlevel = levels.pl THEN 'l' ELSE 'i' END AS level,
-			quote_ident(cparent.relname) AS rootname
+			quote_ident(cparent.relname) AS rootname,
+			cparent.oid AS rootoid,
+			quote_ident(c.relname) AS name
 		FROM pg_partition p
 			JOIN pg_partition_rule r ON p.oid = r.paroid
 			JOIN pg_class cparent ON cparent.oid = p.parrelid
+			JOIN pg_class c ON c.oid = r.parchildrelid
 			JOIN (SELECT parrelid AS relid, max(parlevel) AS pl
 				FROM pg_partition GROUP BY parrelid) AS levels ON p.parrelid = levels.relid
 		WHERE r.parchildrelid != 0`
@@ -179,7 +186,9 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 			CASE WHEN p.partrelid IS NOT NULL AND c.relispartition = false THEN 'p'
 				WHEN p.partrelid IS NOT NULL AND c.relispartition = true THEN 'i'
 				ELSE 'l'
-			END AS level
+			END AS level,
+			rc.oid AS rootoid,
+			quote_ident(c.relname) AS name
 		FROM pg_class c
 			LEFT JOIN pg_partitioned_table p ON c.oid = p.partrelid
 			LEFT JOIN pg_class rc ON pg_partition_root(c.oid) = rc.oid
