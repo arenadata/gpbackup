@@ -158,6 +158,7 @@ var _ = Describe("backup integration create statement tests", func() {
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 			testTable.PartitionLevelInfo.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
+			testTable.PartitionLevelInfo.Name = "testtable"
 			testTable.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			resultTable := backup.ConstructDefinitionsForTables(connectionPool, []backup.Relation{testTable.Relation})[0]
 			structmatcher.ExpectStructsToMatchExcluding(testTable.TableDefinition, resultTable.TableDefinition, "ColumnDefs.Oid", "ExtTableDef")
@@ -250,6 +251,7 @@ SET SUBPARTITION TEMPLATE ` + `
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 			testTable.PartitionLevelInfo.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
+			testTable.PartitionLevelInfo.Name = "testtable"
 			testTable.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			resultTable := backup.ConstructDefinitionsForTables(connectionPool, []backup.Relation{testTable.Relation})[0]
 			structmatcher.ExpectStructsToMatchExcluding(testTable.TableDefinition, resultTable.TableDefinition, "ColumnDefs.Oid", "ExtTableDef")
