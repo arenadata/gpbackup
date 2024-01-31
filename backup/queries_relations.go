@@ -126,7 +126,6 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 		WHERE e.reloid IS NULL)`
 	}
 
-	prtPages := "prt.pages"
 	prt := `LEFT JOIN (
 		SELECT
 			p.parrelid,
@@ -140,8 +139,14 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 	relkindFilter := `'r'`
 	if connectionPool.Version.AtLeast("7") {
 		relkindFilter = `'r', 'p'`
-		prtPages = "(SELECT sum(relpages) FROM pg_partition_tree(c.oid) JOIN pg_class ON relid = oid)"
-		prt = ""
+		prt = `LEFT JOIN (
+			SELECT
+				p.oid,
+				sum(c.relpages) AS pages
+			FROM pg_class p, pg_partition_tree(p.oid)
+			JOIN pg_class c ON relid = c.oid
+			GROUP BY p.oid
+		) AS prt ON prt.oid = c.oid`
 	}
 
 	query := fmt.Sprintf(`
@@ -150,7 +155,7 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 			c.oid AS oid,
 			quote_ident(n.nspname) AS schema,
 			quote_ident(c.relname) AS name,
-			coalesce(%s, c.relpages) AS pages
+			coalesce(prt.pages, c.relpages) AS pages
 		FROM pg_class c
 		JOIN pg_namespace n ON c.relnamespace = n.oid
 		%s
@@ -159,7 +164,7 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 			AND relkind IN (%s)
 			AND %s
 	) res
-	ORDER BY pages DESC, oid`, prtPages, prt,
+	ORDER BY pages DESC, oid`, prt,
 		relationAndSchemaFilterClause(), childPartitionFilter, relkindFilter, ExtensionFilterClause("c"))
 
 	results := make([]Relation, 0)
@@ -170,7 +175,6 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 }
 
 func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, includedRelationsQuoted []string) []Relation {
-	prtPages := "prt.pages"
 	prt := `LEFT JOIN (
 		SELECT
 			p.parrelid,
@@ -184,8 +188,14 @@ func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, in
 	relkindFilter := `'r'`
 	if connectionPool.Version.AtLeast("7") {
 		relkindFilter = `'r', 'p'`
-		prtPages = "(SELECT sum(relpages) FROM pg_partition_tree(c.oid) JOIN pg_class ON relid = oid)"
-		prt = ""
+		prt = `LEFT JOIN (
+			SELECT
+				p.oid,
+				sum(c.relpages) AS pages
+			FROM pg_class p, pg_partition_tree(p.oid)
+			JOIN pg_class c ON relid = c.oid
+			GROUP BY p.oid
+		) AS prt ON prt.oid = c.oid`
 	}
 
 	includeOids := getOidsFromRelationList(connectionPool, includedRelationsQuoted)
@@ -196,14 +206,14 @@ func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, in
 			c.oid AS oid,
 			quote_ident(n.nspname) AS schema,
 			quote_ident(c.relname) AS name,
-			coalesce(%s, c.relpages) AS pages
+			coalesce(prt.pages, c.relpages) AS pages
 		FROM pg_class c
 		JOIN pg_namespace n ON c.relnamespace = n.oid
 		%s
 		WHERE c.oid IN (%s)
 		AND relkind IN (%s)
 	) res
-	ORDER BY pages DESC, oid`, prtPages, prt, oidStr, relkindFilter)
+	ORDER BY pages DESC, oid`, prt, oidStr, relkindFilter)
 
 	results := make([]Relation, 0)
 	err := connectionPool.Select(&results, query)
