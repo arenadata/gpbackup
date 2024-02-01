@@ -143,7 +143,12 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 			SELECT
 				p.oid,
 				sum(c.relpages) AS pages
-			FROM pg_class p, pg_partition_tree(p.oid)
+			FROM (
+				select oid
+				from pg_class
+				where relkind = 'p'
+				and oid not in (select inhrelid from pg_inherits)
+			) p, pg_partition_tree(p.oid)
 			JOIN pg_class c ON relid = c.oid
 			GROUP BY p.oid
 		) AS prt ON prt.oid = c.oid`
@@ -192,7 +197,12 @@ func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, in
 			SELECT
 				p.oid,
 				sum(c.relpages) AS pages
-			FROM pg_class p, pg_partition_tree(p.oid)
+			FROM (
+				select oid
+				from pg_class
+				where relkind = 'p'
+				and oid not in (select inhrelid from pg_inherits)
+			) p, pg_partition_tree(p.oid)
 			JOIN pg_class c ON relid = c.oid
 			GROUP BY p.oid
 		) AS prt ON prt.oid = c.oid`
