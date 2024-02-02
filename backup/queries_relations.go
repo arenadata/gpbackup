@@ -105,10 +105,27 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []options.Relation {
 		WHERE e.reloid IS NULL)`
 	}
 
+	prt := `LEFT JOIN (
+		SELECT
+			p.parrelid,
+			sum(pc.relpages) AS pages
+		FROM pg_partition_rule AS pr
+		JOIN pg_partition AS p ON pr.paroid = p.oid
+		JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
+		GROUP BY p.parrelid
+	) AS prt ON prt.parrelid = c.oid`
 	// In GPDB 7+, root partitions are marked as relkind 'p'.
 	relkindFilter := `'r'`
 	if connectionPool.Version.AtLeast("7") {
 		relkindFilter = `'r', 'p'`
+		prt = `LEFT JOIN (
+			SELECT
+				pg_partition_root(c.oid) oid,
+				sum(c.relpages) AS pages
+			FROM pg_class c
+			WHERE c.relispartition = true OR c.relkind = 'p'
+			GROUP BY 1
+		) AS prt ON prt.oid = c.oid`
 	}
 
 	query := fmt.Sprintf(`
@@ -120,21 +137,13 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []options.Relation {
 			coalesce(prt.pages, c.relpages) AS pages
 		FROM pg_class c
 		JOIN pg_namespace n ON c.relnamespace = n.oid
-		LEFT JOIN (
-			SELECT
-				p.parrelid,
-				sum(pc.relpages) AS pages
-			FROM pg_partition_rule AS pr
-			JOIN pg_partition AS p ON pr.paroid = p.oid
-			JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
-			GROUP BY p.parrelid
-		) AS prt ON prt.parrelid = c.oid
+		%s
 		WHERE %s
 			%s
 			AND relkind IN (%s)
 			AND %s
 	) res
-	ORDER BY pages DESC, oid`,
+	ORDER BY pages DESC, oid`, prt,
 		relationAndSchemaFilterClause(), childPartitionFilter, relkindFilter, ExtensionFilterClause("c"))
 
 	results := make([]options.Relation, 0)
@@ -145,10 +154,27 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []options.Relation {
 }
 
 func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, includeRelationFqns []options.Relation) []options.Relation {
+	prt := `LEFT JOIN (
+		SELECT
+			p.parrelid,
+			sum(pc.relpages) AS pages
+		FROM pg_partition_rule AS pr
+		JOIN pg_partition AS p ON pr.paroid = p.oid
+		JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
+		GROUP BY p.parrelid
+	) AS prt ON prt.parrelid = c.oid`
 	// In GPDB 7+, root partitions are marked as relkind 'p'.
 	relkindFilter := `'r'`
 	if connectionPool.Version.AtLeast("7") {
 		relkindFilter = `'r', 'p'`
+		prt = `LEFT JOIN (
+			SELECT
+				pg_partition_root(c.oid) oid,
+				sum(c.relpages) AS pages
+			FROM pg_class c
+			WHERE c.relispartition = true OR c.relkind = 'p'
+			GROUP BY 1
+		) AS prt ON prt.oid = c.oid`
 	}
 
 	includeOids := GetOidsFromRelationList(includeRelationFqns)
@@ -162,19 +188,11 @@ func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, in
 			coalesce(prt.pages, c.relpages) AS pages
 		FROM pg_class c
 		JOIN pg_namespace n ON c.relnamespace = n.oid
-		LEFT JOIN (
-			SELECT
-				p.parrelid,
-				sum(pc.relpages) AS pages
-			FROM pg_partition_rule AS pr
-			JOIN pg_partition AS p ON pr.paroid = p.oid
-			JOIN pg_class AS pc ON pr.parchildrelid = pc.oid
-			GROUP BY p.parrelid
-		) AS prt ON prt.parrelid = c.oid
+		%s
 		WHERE c.oid IN (%s)
 		AND relkind IN (%s)
 	) res
-	ORDER BY pages DESC, oid`, oidStr, relkindFilter)
+	ORDER BY pages DESC, oid`, prt, oidStr, relkindFilter)
 
 	results := make([]options.Relation, 0)
 	err := connectionPool.Select(&results, query)
