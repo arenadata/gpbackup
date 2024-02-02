@@ -141,16 +141,11 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 		relkindFilter = `'r', 'p'`
 		prt = `LEFT JOIN (
 			SELECT
-				p.oid,
+				pg_partition_root(c.oid) oid,
 				sum(c.relpages) AS pages
-			FROM (
-				select oid
-				from pg_class
-				where relkind = 'p'
-				and oid not in (select inhrelid from pg_inherits)
-			) p, pg_partition_tree(p.oid)
-			JOIN pg_class c ON relid = c.oid
-			GROUP BY p.oid
+			FROM pg_class c
+			WHERE c.relispartition = true OR c.relkind = 'p'
+			GROUP BY 1
 		) AS prt ON prt.oid = c.oid`
 	}
 
@@ -195,16 +190,11 @@ func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, in
 		relkindFilter = `'r', 'p'`
 		prt = `LEFT JOIN (
 			SELECT
-				p.oid,
+				pg_partition_root(c.oid) oid,
 				sum(c.relpages) AS pages
-			FROM (
-				select oid
-				from pg_class
-				where relkind = 'p'
-				and oid not in (select inhrelid from pg_inherits)
-			) p, pg_partition_tree(p.oid)
-			JOIN pg_class c ON relid = c.oid
-			GROUP BY p.oid
+			FROM pg_class c
+			WHERE c.relispartition = true OR c.relkind = 'p'
+			GROUP BY 1
 		) AS prt ON prt.oid = c.oid`
 	}
 
