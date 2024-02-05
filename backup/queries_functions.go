@@ -36,6 +36,7 @@ type Function struct {
 	NumRows           float32 `db:"prorows"`
 	DataAccess        string  `db:"prodataaccess"`
 	Language          string
+	IsDependOnTables  bool   `db:"prodep"`
 	Kind              string `db:"prokind"`     // GPDB 7+
 	PlannerSupport    string `db:"prosupport"`  // GPDB 7+
 	IsWindow          bool   `db:"proiswindow"` // before 7
@@ -102,6 +103,12 @@ func GetFunctionsAllVersions(connectionPool *dbconn.DBConn) []Function {
 }
 
 func GetFunctions(connectionPool *dbconn.DBConn) []Function {
+	isDependOnTablesClause := `EXISTS (
+		SELECT c.oid
+		FROM pg_class c
+		JOIN pg_type t ON t.oid IN (SELECT unnest(p.proargtypes||p.prorettype))
+		WHERE c.relkind = 'r' AND c.reltype IN (t.oid, t.typelem)
+	) AS prodep`
 	excludeImplicitFunctionsClause := ""
 	if connectionPool.Version.AtLeast("6") {
 		// This excludes implicitly created functions. Currently this is only range type functions
@@ -140,14 +147,15 @@ func GetFunctions(connectionPool *dbconn.DBConn) []Function {
 			procost,
 			prorows,
 			prodataaccess,
-			l.lanname AS language
+			l.lanname AS language,
+			%s
 		FROM pg_proc p
 			JOIN pg_catalog.pg_language l ON p.prolang = l.oid
 			LEFT JOIN pg_namespace n ON p.pronamespace = n.oid
 		WHERE %s
 			AND proisagg = 'f'
 			AND %s%s
-		ORDER BY nspname, proname, identargs`, locationAtts,
+		ORDER BY nspname, proname, identargs`, locationAtts, isDependOnTablesClause,
 		SchemaFilterClause("n"),
 		ExtensionFilterClause("p"),
 		excludeImplicitFunctionsClause)
@@ -173,6 +181,7 @@ func GetFunctions(connectionPool *dbconn.DBConn) []Function {
 			prokind,
 			prosupport,
 			l.lanname AS language,
+			%s
             coalesce(array_to_string(ARRAY(SELECT 'FOR TYPE ' || nm.nspname || '.' || typ.typname
                 from
                     unnest(p.protrftypes) as trf_unnest
@@ -187,7 +196,7 @@ func GetFunctions(connectionPool *dbconn.DBConn) []Function {
 		WHERE %s
 			AND prokind <> 'a'
 			AND %s%s
-		ORDER BY nspname, proname, identargs`, locationAtts,
+		ORDER BY nspname, proname, identargs`, locationAtts, isDependOnTablesClause,
 		SchemaFilterClause("n"),
 		ExtensionFilterClause("p"),
 		excludeImplicitFunctionsClause)
