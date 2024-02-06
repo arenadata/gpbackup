@@ -71,8 +71,27 @@ var _ = Describe("backup integration tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			backup.SetBackupSnapshot(testSnapshot)
 			Expect(err).ToNot(HaveOccurred())
+			// Open new transaction if it was not done before
+			if connectionPool.Tx[1] == nil {
+				connectionPool.MustBegin(1)
+			}
+			// Ensure transaction is closed
+			connectionPool.MustCommit(1)
+			// Open new transaction with shared snapshot
+			err = backup.SetSynchronizedSnapshot(connectionPool, 1, testSnapshot)
+			Expect(err).ToNot(HaveOccurred())
+			// Insert values into both tables
+			_, err = connectionPool.Exec(fmt.Sprintf(`INSERT INTO dataTest.testtable1 VALUES (1);`), 1)
+			Expect(err).To(BeNil(), "%s", fmt.Sprintf(`INSERT INTO dataTest.testtable1 VALUES (1);`), 1)
+			_, err = connectionPool.Exec(fmt.Sprintf(`INSERT INTO dataTest.testtable2 VALUES (1);`), 1)
+			Expect(err).To(BeNil(), "%s", fmt.Sprintf(`INSERT INTO dataTest.testtable2 VALUES (1);`), 1)
 
-			Expect(func() { backup.BackupDataForAllTables(testTables) }).ShouldNot(Panic())
+			Expect(func() {
+				rowsCopiedMaps := backup.BackupDataForAllTables(testTables)
+				// Ensure gpbackup does not see inserted after snapshot values
+				Expect(rowsCopiedMaps[1][0]).To(Equal(int64(0)))
+				Expect(rowsCopiedMaps[1][1]).To(Equal(int64(0)))
+			}).ShouldNot(Panic())
 
 			// Assert that at least one segment's worth of files for both tables were written out
 			_, err = os.Stat("/tmp/backup_data_test/backups/20170101/20170101010101/gpbackup_0_20170101010101_0")
