@@ -229,6 +229,12 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 				}
 			}()
 			defer workerPool.Done()
+			// Close opened transaction to open new transaction with shared snapshot below.
+			if backupSnapshot != "" && connectionPool.Tx[whichConn] != nil {
+				if err := connectionPool.Commit(whichConn); err != nil {
+					gplog.Warn("Worker %d: %s", whichConn, err)
+				}
+			}
 			/* If the --leaf-partition-data flag is not set, the parent and all leaf
 			 * partition data are treated as a single table and will be assigned to a single worker.
 			 * Large partition hierarchies result in a large number of locks being held until the
