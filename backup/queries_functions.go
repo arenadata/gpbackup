@@ -856,7 +856,7 @@ func GetExtensions(connectionPool *dbconn.DBConn) []Extension {
 			UNION DISTINCT
 			SELECT e.oid, level + 1, e.extname, e.extnamespace
 			FROM cte JOIN e ON cte.oid = e.objid
-		) SELECT cte.oid, quote_ident(extname) name, quote_ident(nspname) schema
+		) SELECT oid, quote_ident(extname) name, quote_ident(nspname) schema
 		FROM cte JOIN pg_catalog.pg_namespace n ON extnamespace = n.oid
 		GROUP BY 1, 2, 3 ORDER BY max(level) DESC`
 	}
