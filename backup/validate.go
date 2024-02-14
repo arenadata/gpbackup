@@ -131,7 +131,7 @@ func ValidateTablesExist(conn *dbconn.DBConn, tableList []string, excludeSet boo
 				AddExcludedRelationFqn(tableRel)
 				if MustGetFlagBool(options.LEAF_PARTITION_DATA) && partTableMap[tableRel.Oid].Level == "p" {
 					for _, part := range partTableMap {
-						if part.RootOid == tableRel.Oid && part.Level == "l" {
+						if part.RootOid == tableRel.Oid && part.Level != "p" {
 							partRel := options.Relation{
 								SchemaOid: tableRel.SchemaOid,
 								Oid:       part.Oid,
