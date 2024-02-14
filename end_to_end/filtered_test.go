@@ -540,6 +540,10 @@ PARTITION BY LIST (gender)
 				assertDataRestored(restoreConn, map[string]int{
 					"public.p2_sales_1_prt_1_2_prt_1_3_prt_usa": 0,
 				})
+			} else {
+				assertTablesNotRestored(restoreConn, []string{
+					"public.p2_sales_1_prt_1_2_prt_1_3_prt_usa",
+				})
 			}
 		})
 		It("runs gpbackup and gprestore without leaf-partition-data and with exclude-table root partition backup flags", func() {
