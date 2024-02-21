@@ -158,6 +158,7 @@ var _ = Describe("backup integration create statement tests", func() {
 			backup.PrintRegularTableCreateStatement(backupfile, tocfile, testTable)
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
+			testTable.PartitionLevelInfo.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			testTable.PartitionLevelInfo.RootOid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			testTable.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			resultTable := backup.ConstructDefinitionsForTables(connectionPool, []backup.Relation{testTable.Relation})[0]
@@ -251,6 +252,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			backup.PrintRegularTableCreateStatement(backupfile, tocfile, testTable)
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
+			testTable.PartitionLevelInfo.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			testTable.PartitionLevelInfo.RootOid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			testTable.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			resultTable := backup.ConstructDefinitionsForTables(connectionPool, []backup.Relation{testTable.Relation})[0]
@@ -271,6 +273,7 @@ SET SUBPARTITION TEMPLATE ` + `
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
+			testTable.PartitionLevelInfo.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			testTable.PartitionLevelInfo.RootOid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			testTable.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			resultTable := backup.ConstructDefinitionsForTables(connectionPool, []backup.Relation{testTable.Relation})[0]
