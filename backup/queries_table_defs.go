@@ -160,7 +160,7 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 		SELECT pc.oid AS oid,
 			'p' AS level,
 			'' AS rootname,
-			0 AS rootoid,
+			pc.oid AS rootoid,
 			quote_ident(pc.relname) AS name
 		FROM pg_partition p
 			JOIN pg_class pc ON p.parrelid = pc.oid
