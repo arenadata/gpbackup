@@ -265,6 +265,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			rowTwo := backup.ColumnDefinition{Oid: 0, Num: 2, Name: "b", NotNull: false, HasDefault: false, Type: "integer", Encoding: "", StatTarget: -1, StorageType: "", DefaultVal: "", Comment: ""}
 			testTable.ColumnDefs = []backup.ColumnDefinition{rowOne, rowTwo}
 			testTable.PartitionLevelInfo.Level = "p"
+			testTable.PartitionLevelInfo.Name = "testtable"
 
 			backup.PrintRegularTableCreateStatement(backupfile, tocfile, testTable)
 
