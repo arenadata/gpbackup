@@ -153,12 +153,14 @@ var _ = Describe("backup integration create statement tests", func() {
 
 			testTable.ColumnDefs = []backup.ColumnDefinition{rowOne, rowTwo}
 			testTable.PartitionLevelInfo.Level = "p"
+			testTable.PartitionLevelInfo.Name = "testtable"
 
 			backup.PrintRegularTableCreateStatement(backupfile, tocfile, testTable)
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
-			testTable.PartitionLevelInfo.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
-			testTable.PartitionLevelInfo.Name = "testtable"
+			if connectionPool.Version.AtLeast("7") {
+				testTable.PartitionLevelInfo.RootOid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
+			}
 			testTable.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			resultTable := backup.ConstructDefinitionsForTables(connectionPool, []backup.Relation{testTable.Relation})[0]
 			structmatcher.ExpectStructsToMatchExcluding(testTable.TableDefinition, resultTable.TableDefinition, "ColumnDefs.Oid", "ExtTableDef")
@@ -246,12 +248,14 @@ SET SUBPARTITION TEMPLATE ` + `
 			rowTwo := backup.ColumnDefinition{Oid: 0, Num: 2, Name: "gender", NotNull: false, HasDefault: false, Type: "text", Encoding: "", StatTarget: -1, StorageType: "", DefaultVal: "", Comment: ""}
 			testTable.ColumnDefs = []backup.ColumnDefinition{rowOne, rowTwo}
 			testTable.PartitionLevelInfo.Level = "p"
+			testTable.PartitionLevelInfo.Name = "testtable"
 
 			backup.PrintRegularTableCreateStatement(backupfile, tocfile, testTable)
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
-			testTable.PartitionLevelInfo.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
-			testTable.PartitionLevelInfo.Name = "testtable"
+			if connectionPool.Version.AtLeast("7") {
+				testTable.PartitionLevelInfo.RootOid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
+			}
 			testTable.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			resultTable := backup.ConstructDefinitionsForTables(connectionPool, []backup.Relation{testTable.Relation})[0]
 			structmatcher.ExpectStructsToMatchExcluding(testTable.TableDefinition, resultTable.TableDefinition, "ColumnDefs.Oid", "ExtTableDef")
@@ -271,7 +275,7 @@ SET SUBPARTITION TEMPLATE ` + `
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
-			testTable.PartitionLevelInfo.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
+			testTable.PartitionLevelInfo.RootOid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			testTable.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			resultTable := backup.ConstructDefinitionsForTables(connectionPool, []backup.Relation{testTable.Relation})[0]
 			structmatcher.ExpectStructsToMatchExcluding(testTable.TableDefinition, resultTable.TableDefinition, "ColumnDefs.Oid", "ExtTableDef")
