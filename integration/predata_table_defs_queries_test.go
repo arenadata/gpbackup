@@ -46,7 +46,7 @@ PARTITION BY RANGE (year)
 			partTableMap := backup.GetPartitionTableMap(connectionPool)
 
 			Expect(partTableMap).To(HaveLen(13))
-			structmatcher.ExpectStructsToMatch(partTableMap[parent], &backup.PartitionLevelInfo{Oid: parent, Level: "p", RootName: "", RootOid: parent, Name: "summer_sales"})
+			structmatcher.ExpectStructsToMatch(partTableMap[parent], &backup.PartitionLevelInfo{Oid: parent, Level: "p", RootName: "", RootOid: 0, Name: "summer_sales"})
 			structmatcher.ExpectStructsToMatch(partTableMap[intermediate1], &backup.PartitionLevelInfo{Oid: intermediate1, Level: "i", RootName: "summer_sales", RootOid: parent, Name: "summer_sales_1_prt_outlying_years"})
 			structmatcher.ExpectStructsToMatch(partTableMap[intermediate2], &backup.PartitionLevelInfo{Oid: intermediate2, Level: "i", RootName: "summer_sales", RootOid: parent, Name: "summer_sales_1_prt_2"})
 			structmatcher.ExpectStructsToMatch(partTableMap[intermediate3], &backup.PartitionLevelInfo{Oid: intermediate3, Level: "i", RootName: "summer_sales", RootOid: parent, Name: "summer_sales_1_prt_3"})
