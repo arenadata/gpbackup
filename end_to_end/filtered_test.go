@@ -435,4 +435,152 @@ PARTITION BY LIST (gender)
 			_ = os.Remove("/tmp/exclude-tables.txt")
 		})
 	})
+	Describe("Exclude subpartitions for given root partition in leaf-partition-data mode", func() {
+		It("runs gpbackup and gprestore with leaf-partition-data and exclude-table root partition backup flags", func() {
+			testhelper.AssertQueryRuns(backupConn,
+				`CREATE TABLE public.p1_sales (id int, a int, b int, region text)
+				WITH (appendoptimized=true)
+				DISTRIBUTED BY (id)
+				PARTITION BY RANGE (a)
+					SUBPARTITION BY RANGE (b)
+					SUBPARTITION TEMPLATE (
+						START (1) END (3) EVERY (1))
+						SUBPARTITION BY LIST (region)
+							SUBPARTITION TEMPLATE (
+							SUBPARTITION usa VALUES ('usa'),
+							SUBPARTITION europe VALUES ('europe'))
+				( START (1) END (3) EVERY (1))`)
+			defer testhelper.AssertQueryRuns(backupConn, `DROP TABLE public.p1_sales CASCADE`)
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--exclude-table", "public.p1_sales")
+			defer assertArtifactsCleaned(restoreConn, timestamp)
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
+			assertTablesNotRestored(restoreConn, []string{
+				"public.p1_sales",
+				"public.p1_sales_1_prt_1",
+				"public.p1_sales_1_prt_1_2_prt_1",
+				"public.p1_sales_1_prt_1_2_prt_1_3_prt_europe",
+				"public.p1_sales_1_prt_1_2_prt_1_3_prt_usa",
+				"public.p1_sales_1_prt_1_2_prt_2",
+				"public.p1_sales_1_prt_1_2_prt_2_3_prt_europe",
+				"public.p1_sales_1_prt_1_2_prt_2_3_prt_usa",
+				"public.p1_sales_1_prt_2",
+				"public.p1_sales_1_prt_2_2_prt_1",
+				"public.p1_sales_1_prt_2_2_prt_1_3_prt_europe",
+				"public.p1_sales_1_prt_2_2_prt_1_3_prt_usa",
+				"public.p1_sales_1_prt_2_2_prt_2",
+				"public.p1_sales_1_prt_2_2_prt_2_3_prt_europe",
+				"public.p1_sales_1_prt_2_2_prt_2_3_prt_usa",
+			})
+		})
+		It("runs gpbackup and gprestore with leaf-partition-data and exclude-table leaf partition backup flags", func() {
+			testhelper.AssertQueryRuns(backupConn,
+				`CREATE TABLE public.p2_sales (id int, a int, b int, region text)
+				WITH (appendoptimized=true)
+				DISTRIBUTED BY (id)
+				PARTITION BY RANGE (a)
+					SUBPARTITION BY RANGE (b)
+					SUBPARTITION TEMPLATE (
+						START (1) END (3) EVERY (1))
+						SUBPARTITION BY LIST (region)
+							SUBPARTITION TEMPLATE (
+							SUBPARTITION usa VALUES ('usa'),
+							SUBPARTITION europe VALUES ('europe'))
+				( START (1) END (3) EVERY (1))`)
+			testhelper.AssertQueryRuns(backupConn,
+				`INSERT INTO public.p2_sales VALUES
+					(1, 1, 1, 'usa'),
+					(1, 1, 1, 'europe'),
+					(1, 1, 2, 'usa'),
+					(1, 1, 2, 'europe'),
+					(1, 2, 1, 'usa'),
+					(1, 2, 1, 'europe'),
+					(1, 2, 2, 'usa'),
+					(1, 2, 2, 'europe')
+				`)
+			defer testhelper.AssertQueryRuns(backupConn, `DROP TABLE public.p2_sales CASCADE`)
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--leaf-partition-data", "--exclude-table", "public.p2_sales_1_prt_1_2_prt_1_3_prt_usa")
+			defer assertArtifactsCleaned(restoreConn, timestamp)
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
+			assertTablesRestored(restoreConn, []string{
+				"public.p2_sales",
+				"public.p2_sales_1_prt_1",
+				"public.p2_sales_1_prt_1_2_prt_1",
+				"public.p2_sales_1_prt_1_2_prt_1_3_prt_europe",
+				"public.p2_sales_1_prt_1_2_prt_2",
+				"public.p2_sales_1_prt_1_2_prt_2_3_prt_europe",
+				"public.p2_sales_1_prt_1_2_prt_2_3_prt_usa",
+				"public.p2_sales_1_prt_2",
+				"public.p2_sales_1_prt_2_2_prt_1",
+				"public.p2_sales_1_prt_2_2_prt_1_3_prt_europe",
+				"public.p2_sales_1_prt_2_2_prt_1_3_prt_usa",
+				"public.p2_sales_1_prt_2_2_prt_2",
+				"public.p2_sales_1_prt_2_2_prt_2_3_prt_europe",
+				"public.p2_sales_1_prt_2_2_prt_2_3_prt_usa",
+			})
+			assertDataRestored(restoreConn, map[string]int{
+				"public.p2_sales":                              7,
+				"public.p2_sales_1_prt_1":                      3,
+				"public.p2_sales_1_prt_1_2_prt_1":              1,
+				"public.p2_sales_1_prt_1_2_prt_1_3_prt_europe": 1,
+				"public.p2_sales_1_prt_1_2_prt_2":              2,
+				"public.p2_sales_1_prt_1_2_prt_2_3_prt_europe": 1,
+				"public.p2_sales_1_prt_1_2_prt_2_3_prt_usa":    1,
+				"public.p2_sales_1_prt_2":                      4,
+				"public.p2_sales_1_prt_2_2_prt_1":              2,
+				"public.p2_sales_1_prt_2_2_prt_1_3_prt_europe": 1,
+				"public.p2_sales_1_prt_2_2_prt_1_3_prt_usa":    1,
+				"public.p2_sales_1_prt_2_2_prt_2":              2,
+				"public.p2_sales_1_prt_2_2_prt_2_3_prt_europe": 1,
+				"public.p2_sales_1_prt_2_2_prt_2_3_prt_usa":    1,
+			})
+			if backupConn.Version.Before("7") {
+				assertTablesRestored(restoreConn, []string{
+					"public.p2_sales_1_prt_1_2_prt_1_3_prt_usa",
+				})
+				assertDataRestored(restoreConn, map[string]int{
+					"public.p2_sales_1_prt_1_2_prt_1_3_prt_usa": 0,
+				})
+			} else {
+				assertTablesNotRestored(restoreConn, []string{
+					"public.p2_sales_1_prt_1_2_prt_1_3_prt_usa",
+				})
+			}
+		})
+		It("runs gpbackup and gprestore without leaf-partition-data and with exclude-table root partition backup flags", func() {
+			testhelper.AssertQueryRuns(backupConn,
+				`CREATE TABLE public.p3_sales (id int, a int, b int, region text)
+				WITH (appendoptimized=true)
+				DISTRIBUTED BY (id)
+				PARTITION BY RANGE (a)
+					SUBPARTITION BY RANGE (b)
+					SUBPARTITION TEMPLATE (
+						START (1) END (3) EVERY (1))
+						SUBPARTITION BY LIST (region)
+							SUBPARTITION TEMPLATE (
+							SUBPARTITION usa VALUES ('usa'),
+							SUBPARTITION europe VALUES ('europe'))
+				( START (1) END (3) EVERY (1))`)
+			defer testhelper.AssertQueryRuns(backupConn, `DROP TABLE public.p3_sales CASCADE`)
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--exclude-table", "public.p3_sales")
+			defer assertArtifactsCleaned(restoreConn, timestamp)
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
+			assertTablesNotRestored(restoreConn, []string{
+				"public.p3_sales",
+				"public.p3_sales_1_prt_1",
+				"public.p3_sales_1_prt_1_2_prt_1",
+				"public.p3_sales_1_prt_1_2_prt_1_3_prt_europe",
+				"public.p3_sales_1_prt_1_2_prt_1_3_prt_usa",
+				"public.p3_sales_1_prt_1_2_prt_2",
+				"public.p3_sales_1_prt_1_2_prt_2_3_prt_europe",
+				"public.p3_sales_1_prt_1_2_prt_2_3_prt_usa",
+				"public.p3_sales_1_prt_2",
+				"public.p3_sales_1_prt_2_2_prt_1",
+				"public.p3_sales_1_prt_2_2_prt_1_3_prt_europe",
+				"public.p3_sales_1_prt_2_2_prt_1_3_prt_usa",
+				"public.p3_sales_1_prt_2_2_prt_2",
+				"public.p3_sales_1_prt_2_2_prt_2_3_prt_europe",
+				"public.p3_sales_1_prt_2_2_prt_2_3_prt_usa",
+			})
+		})
+	})
 })
