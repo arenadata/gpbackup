@@ -2254,7 +2254,7 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring(fmt.Sprintf("Cannot restore a backup taken on a cluster with 5 segments to a cluster with %d segments unless the --resize-cluster flag is used.", segmentCount)))
 		})
-		It("Will clear artifacts after a resize-restore with an error", func() {
+		It("Will clean up segments helper processes after error during restore", func() {
 			command := exec.Command("tar", "-xzf", "resources/4-segment-db-error.tar.gz", "-C", backupDir)
 			mustRunCommand(command)
 			gprestoreCmd := exec.Command(gprestorePath,
@@ -2266,6 +2266,7 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.test: COPY test, line 8193, column test: "32768": ERROR: value "32768" is out of range for type smallint`))
 			assertArtifactsCleaned(restoreConn, "20240226140135")
+			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE test;")
 		})
 	})
 	Describe("Restore indexes and constraints on exchanged partition tables", func() {
