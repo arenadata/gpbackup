@@ -744,7 +744,7 @@ func DoCleanup(restoreFailed bool) {
 	}()
 
 	gplog.Verbose("Beginning cleanup")
-	if backupConfig != nil && backupConfig.SingleDataFile {
+	if backupConfig != nil && (backupConfig.SingleDataFile || MustGetFlagBool(options.RESIZE_CLUSTER)) {
 		fpInfoList := GetBackupFPInfoListFromRestorePlan()
 		for _, fpInfo := range fpInfoList {
 			// Copy sessions must be terminated before cleaning up gpbackup_helper processes to avoid a potential deadlock
