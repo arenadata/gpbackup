@@ -1,5 +1,5 @@
 # Greenplum Backup
-##
+#
 `gpbackup` and `gprestore` are Go utilities for performing Greenplum Database backups.  They are still currently in active development.
 
 ## Pre-Requisites
