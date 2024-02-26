@@ -56,9 +56,9 @@ func DoSetup() {
 	opts, err := options.NewOptions(cmdFlags)
 	gplog.FatalOnError(err)
 
-	validateFilterLists(opts)
-
-	err = opts.ExpandIncludesForPartitions(connectionPool, cmdFlags)
+	ValidateAndProcessFilterLists(opts)
+	includeOids := GetOidsFromRelationList(IncludedRelationFqns)
+	err = ExpandIncludesForPartitions(connectionPool, opts, includeOids, cmdFlags)
 	gplog.FatalOnError(err)
 
 	clusterConfigConn := dbconn.NewDBConnFromEnvironment(MustGetFlagString(options.DBNAME))
@@ -66,10 +66,13 @@ func DoSetup() {
 
 	segConfig := cluster.MustGetSegmentConfiguration(clusterConfigConn)
 	globalCluster = cluster.NewCluster(segConfig)
-	segPrefix := filepath.GetSegPrefix(clusterConfigConn)
+	segPrefix := ""
+	if !MustGetFlagBool(options.SINGLE_BACKUP_DIR) {
+		segPrefix = filepath.GetSegPrefix(clusterConfigConn)
+	}
 	clusterConfigConn.Close()
 
-	globalFPInfo = filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), timestamp, segPrefix)
+	globalFPInfo = filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), timestamp, segPrefix, MustGetFlagBool(options.SINGLE_BACKUP_DIR))
 	if MustGetFlagBool(options.METADATA_ONLY) {
 		_, err = globalCluster.ExecuteLocalCommand(fmt.Sprintf("mkdir -p %s", globalFPInfo.GetDirForContent(-1)))
 		gplog.FatalOnError(err)
@@ -112,8 +115,9 @@ func DoBackup() {
 	var targetBackupFPInfo filepath.FilePathInfo
 	if MustGetFlagBool(options.INCREMENTAL) {
 		targetBackupTimestamp = GetTargetBackupTimestamp()
+
 		targetBackupFPInfo = filepath.NewFilePathInfo(globalCluster, globalFPInfo.UserSpecifiedBackupDir,
-			targetBackupTimestamp, globalFPInfo.UserSpecifiedSegPrefix)
+			targetBackupTimestamp, globalFPInfo.UserSpecifiedSegPrefix, globalFPInfo.SingleBackupDir)
 
 		if pluginConfigFlag != "" {
 			// These files need to be downloaded from the remote system into the local filesystem
@@ -238,18 +242,20 @@ func backupPredata(metadataFile *utils.FileWithByteCount, tables []Table, tableO
 
 	var protocols []ExternalProtocol
 	var functions []Function
+	var dependentFunctions []Function
 	var funcInfoMap map[uint32]FunctionInfo
 	objects := make([]Sortable, 0)
 	metadataMap := make(MetadataMap)
 
-	objects = append(objects, convertToSortableSlice(tables)...)
 	if !tableOnly {
-		functions, funcInfoMap = retrieveFunctions(&objects, metadataMap)
+		functions, dependentFunctions, funcInfoMap = retrieveFunctions(&objects, metadataMap)
 	}
+	objects = append(objects, convertToSortableSlice(tables)...)
 	relationMetadata := GetMetadataForObjectType(connectionPool, TYPE_RELATION)
 	addToMetadataMap(relationMetadata, metadataMap)
 
 	if !tableOnly {
+		objects = append(objects, convertToSortableSlice(dependentFunctions)...)
 		protocols = retrieveProtocols(&objects, metadataMap)
 		backupSchemas(metadataFile, createAlteredPartitionSchemaSet(tables))
 		backupExtensions(metadataFile)
@@ -272,11 +278,15 @@ func backupPredata(metadataFile *utils.FileWithByteCount, tables []Table, tableO
 
 	retrieveViews(&objects)
 	sequences := retrieveAndBackupSequences(metadataFile, relationMetadata)
-	domainConstraints := retrieveConstraints(&objects, metadataMap)
+	domainConstraints, nonDomainConstraints, conMetadata := retrieveConstraints(&objects, metadataMap)
 
-	backupDependentObjects(metadataFile, tables, protocols, metadataMap, domainConstraints, objects, sequences, funcInfoMap, tableOnly)
+	viewsDependingOnConstraints := backupDependentObjects(metadataFile, tables, protocols, metadataMap, domainConstraints, objects, sequences, funcInfoMap, tableOnly)
 
 	backupConversions(metadataFile)
+
+	// These two are actually in postdata, but we print them here to avoid passing information around too much
+	backupConstraints(metadataFile, nonDomainConstraints, conMetadata)
+	backupViewsDependingOnConstraints(metadataFile, viewsDependingOnConstraints)
 
 	logCompletionMessage("Pre-data metadata metadata backup")
 }
@@ -423,7 +433,7 @@ func DoTeardown() {
 			backupReport.BackupConfig.EndTime = history.CurrentTimestamp()
 			endtime, _ := time.ParseInLocation("20060102150405", backupReport.BackupConfig.EndTime, operating.System.Local)
 			backupReport.WriteBackupReportFile(reportFilename, globalFPInfo.Timestamp, endtime, objectCounts, errMsg)
-			report.EmailReport(globalCluster, globalFPInfo.Timestamp, reportFilename, "gpbackup", !backupFailed)
+			report.EmailReport(globalCluster, globalFPInfo.Timestamp, reportFilename, "gpbackup", !backupFailed, backupReport.BackupConfig.DatabaseName)
 			if pluginConfig != nil {
 				err = pluginConfig.BackupFile(configFilename)
 				if err != nil {
@@ -469,10 +479,8 @@ func DoCleanup(backupFailed bool) {
 				// It is possible for the COPY command to become orphaned if an agent process is stopped
 				utils.TerminateHangingCopySessions(connectionPool, globalFPInfo, fmt.Sprintf("gpbackup_%s", globalFPInfo.Timestamp))
 			}
-			if backupFailed {
-				// Cleanup only if terminated or fataled
-				utils.CleanUpSegmentHelperProcesses(globalCluster, globalFPInfo, "backup")
-			}
+			// We can have helper processes hanging around even without failures, so call this cleanup routine whether successful or not.
+			utils.CleanUpSegmentHelperProcesses(globalCluster, globalFPInfo, "backup")
 			utils.CleanUpHelperFilesOnAllHosts(globalCluster, globalFPInfo)
 		}
 

@@ -6,6 +6,7 @@ import (
 	"github.com/greenplum-db/gp-common-go-libs/testhelper"
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/testutils"
+	"github.com/greenplum-db/gpbackup/toc"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -94,7 +95,7 @@ var _ = Describe("backup/predata_externals tests", func() {
 			extTableDef.URIs = []string{"file://host:port/path/file"}
 			testTable.ExtTableDef = extTableDef
 			backup.PrintExternalTableCreateStatement(backupfile, tocfile, testTable)
-			testutils.ExpectEntry(tocfile.PredataEntries, 0, "public", "", "tablename", "TABLE")
+			testutils.ExpectEntry(tocfile.PredataEntries, 0, "public", "", "tablename", toc.OBJ_TABLE)
 			testutils.AssertBufferContents(tocfile.PredataEntries, buffer, `CREATE READABLE EXTERNAL TABLE public.tablename (
 ) LOCATION (
 	'file://host:port/path/file'
@@ -469,7 +470,7 @@ SEGMENT REJECT LIMIT 2 ROWS`)
 
 		It("prints untrusted protocol with read and write function", func() {
 			backup.PrintCreateExternalProtocolStatement(backupfile, tocfile, protocolUntrustedReadWrite, funcInfoMap, emptyMetadata)
-			testutils.ExpectEntry(tocfile.PredataEntries, 0, "", "", "s3", "PROTOCOL")
+			testutils.ExpectEntry(tocfile.PredataEntries, 0, "", "", "s3", toc.OBJ_PROTOCOL)
 			testutils.AssertBufferContents(tocfile.PredataEntries, buffer, `CREATE PROTOCOL s3 (readfunc = public.read_fn_s3, writefunc = public.write_fn_s3);`)
 		})
 		It("prints untrusted protocol with read and validator", func() {
@@ -491,9 +492,9 @@ SEGMENT REJECT LIMIT 2 ROWS`)
 			expectedStatements := []string{
 				"CREATE PROTOCOL s3 (readfunc = public.read_fn_s3, writefunc = public.write_fn_s3);",
 				"ALTER PROTOCOL s3 OWNER TO testrole;",
-				`REVOKE ALL ON PROTOCOL s3 FROM PUBLIC;`,
-				`REVOKE ALL ON PROTOCOL s3 FROM testrole;`,
-				`GRANT ALL ON PROTOCOL s3 TO testrole;`}
+				`REVOKE ALL ON PROTOCOL s3 FROM PUBLIC;
+REVOKE ALL ON PROTOCOL s3 FROM testrole;
+GRANT ALL ON PROTOCOL s3 TO testrole;`}
 			testutils.AssertBufferContents(tocfile.PredataEntries, buffer, expectedStatements...)
 		})
 		It("prints a protocol ACL even when the protocol's CREATE statement is skipped", func() {
@@ -511,9 +512,9 @@ SEGMENT REJECT LIMIT 2 ROWS`)
 			backup.PrintCreateExternalProtocolStatement(backupfile, tocfile, protocolUntrustedReadWrite, pgCatalogFuncInfoMap, protoMetadata)
 			expectedStatements := []string{
 				"ALTER PROTOCOL s3 OWNER TO testrole;",
-				`REVOKE ALL ON PROTOCOL s3 FROM PUBLIC;`,
-				`REVOKE ALL ON PROTOCOL s3 FROM testrole;`,
-				`GRANT ALL ON PROTOCOL s3 TO testrole;`}
+				`REVOKE ALL ON PROTOCOL s3 FROM PUBLIC;
+REVOKE ALL ON PROTOCOL s3 FROM testrole;
+GRANT ALL ON PROTOCOL s3 TO testrole;`}
 			testutils.AssertBufferContents(tocfile.PredataEntries, buffer, expectedStatements...)
 		})
 	})

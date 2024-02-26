@@ -27,9 +27,9 @@ func (t Table) SkipDataBackup() bool {
 }
 
 func (t Table) GetMetadataEntry() (string, toc.MetadataEntry) {
-	objectType := "TABLE"
+	objectType := toc.OBJ_TABLE
 	if (t.ForeignDef != ForeignTableDefinition{}) {
-		objectType = "FOREIGN TABLE"
+		objectType = toc.OBJ_FOREIGN_TABLE
 	}
 	referenceObject := ""
 	if t.AttachPartitionInfo != (AttachPartitionInfo{}) {
@@ -151,22 +151,29 @@ type PartitionLevelInfo struct {
 	Oid      uint32
 	Level    string
 	RootName string
+	RootOid  uint32
+	Name     string
 }
 
 func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLevelInfo {
 	before7Query := `
 		SELECT pc.oid AS oid,
 			'p' AS level,
-			'' AS rootname
+			'' AS rootname,
+			0 AS rootoid,
+			quote_ident(pc.relname) AS name
 		FROM pg_partition p
 			JOIN pg_class pc ON p.parrelid = pc.oid
 		UNION ALL
 		SELECT r.parchildrelid AS oid,
 			CASE WHEN p.parlevel = levels.pl THEN 'l' ELSE 'i' END AS level,
-			quote_ident(cparent.relname) AS rootname
+			quote_ident(cparent.relname) AS rootname,
+			cparent.oid AS rootoid,
+			quote_ident(c.relname) AS name
 		FROM pg_partition p
 			JOIN pg_partition_rule r ON p.oid = r.paroid
 			JOIN pg_class cparent ON cparent.oid = p.parrelid
+			JOIN pg_class c ON c.oid = r.parchildrelid
 			JOIN (SELECT parrelid AS relid, max(parlevel) AS pl
 				FROM pg_partition GROUP BY parrelid) AS levels ON p.parrelid = levels.relid
 		WHERE r.parchildrelid != 0`
@@ -179,7 +186,11 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 			CASE WHEN p.partrelid IS NOT NULL AND c.relispartition = false THEN 'p'
 				WHEN p.partrelid IS NOT NULL AND c.relispartition = true THEN 'i'
 				ELSE 'l'
-			END AS level
+			END AS level,
+			CASE WHEN p.partrelid IS NOT NULL AND c.relispartition = false THEN 0
+				ELSE rc.oid
+			END AS rootoid,
+			quote_ident(c.relname) AS name
 		FROM pg_class c
 			LEFT JOIN pg_partitioned_table p ON c.oid = p.partrelid
 			LEFT JOIN pg_class rc ON pg_partition_root(c.oid) = rc.oid
@@ -567,7 +578,26 @@ func GetTableStorage(connectionPool *dbconn.DBConn) (map[uint32]string, map[uint
 			tableSpaces[result.Oid] = result.Tablespace.String
 		}
 		if result.RelOptions.Valid {
-			relOptions[result.Oid] = result.RelOptions.String
+			reloptString := result.RelOptions.String
+
+			// Prior to GPDB7, it was possible to indicate fillfactor for an AO table, but it was a
+			// no-op. In GPDB7 this was banned server-side. To prevent migration restores from
+			// failing in this case, and because they're garbage values anyway, drop fillfactor for
+			// AO tables.
+			if connectionPool.Version.Before("7") &&
+				strings.Contains(reloptString, "appendonly") &&
+				strings.Contains(reloptString, "fillfactor") {
+
+				opts := strings.Split(reloptString, ", ")
+				newopts := make([]string, 0)
+				for _, opt := range opts {
+					if !strings.Contains(opt, "fillfactor") {
+						newopts = append(newopts, opt)
+					}
+				}
+				reloptString = strings.Join(newopts, ", ")
+			}
+			relOptions[result.Oid] = reloptString
 		}
 	}
 	return tableSpaces, relOptions

@@ -11,6 +11,7 @@ import (
 
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
+	"github.com/greenplum-db/gp-common-go-libs/operating"
 	"github.com/greenplum-db/gpbackup/filepath"
 	"github.com/greenplum-db/gpbackup/history"
 	"github.com/greenplum-db/gpbackup/options"
@@ -28,7 +29,6 @@ func DoInit(cmd *cobra.Command) {
 	CleanupGroup.Add(1)
 	gplog.InitializeLogging("gprestore", "")
 	SetCmdFlags(cmd.Flags())
-	_ = cmd.MarkFlagRequired(options.TIMESTAMP)
 	utils.InitializeSignalHandler(DoCleanup, "restore process", &wasTerminated)
 }
 
@@ -42,8 +42,9 @@ func DoValidation(cmd *cobra.Command) {
 	gplog.FatalOnError(err)
 	err = utils.ValidateFullPath(MustGetFlagString(options.PLUGIN_CONFIG))
 	gplog.FatalOnError(err)
-	if !filepath.IsValidTimestamp(MustGetFlagString(options.TIMESTAMP)) {
-		gplog.Fatal(errors.Errorf("Timestamp %s is invalid.  Timestamps must be in the format YYYYMMDDHHMMSS.", MustGetFlagString(options.TIMESTAMP)), "")
+	providedTimestamp := MustGetFlagString(options.TIMESTAMP)
+	if providedTimestamp != "" && !filepath.IsValidTimestamp(providedTimestamp) {
+		gplog.Fatal(errors.Errorf("Timestamp %s is invalid.  Timestamps must be in the format YYYYMMDDHHMMSS.", providedTimestamp), "")
 	}
 }
 
@@ -54,13 +55,23 @@ func DoSetup() {
 
 	utils.CheckGpexpandRunning(utils.RestorePreventedByGpexpandMessage)
 	restoreStartTime = history.CurrentTimestamp()
-	backupTimestamp := MustGetFlagString(options.TIMESTAMP)
-	gplog.Info("Restore Key = %s", backupTimestamp)
 
 	CreateConnectionPool("postgres")
+	segConfig := cluster.MustGetSegmentConfiguration(connectionPool)
+	globalCluster = cluster.NewCluster(segConfig)
 
-	var segPrefix string
 	var err error
+	backupTimestamp := MustGetFlagString(options.TIMESTAMP)
+	if backupTimestamp == "" {
+		backupDir := MustGetFlagString(options.BACKUP_DIR)
+		if backupDir == "" {
+			backupDir = globalCluster.GetDirForContent(-1)
+		}
+		backupTimestamp, err = filepath.GetTimestampFromBackupDirectory(backupDir)
+		gplog.FatalOnError(err)
+	}
+	gplog.Info("Restore Key = %s", backupTimestamp)
+
 	opts, err = options.NewOptions(cmdFlags)
 	gplog.FatalOnError(err)
 
@@ -70,15 +81,13 @@ func DoSetup() {
 	err = opts.QuoteExcludeRelations(connectionPool)
 	gplog.FatalOnError(err)
 
-	segConfig := cluster.MustGetSegmentConfiguration(connectionPool)
-	globalCluster = cluster.NewCluster(segConfig)
-	segPrefix, err = filepath.ParseSegPrefix(MustGetFlagString(options.BACKUP_DIR))
+	segPrefix, singleBackupDir, err := filepath.ParseSegPrefix(MustGetFlagString(options.BACKUP_DIR), backupTimestamp)
 	gplog.FatalOnError(err)
-	globalFPInfo = filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), backupTimestamp, segPrefix)
+	globalFPInfo = filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), backupTimestamp, segPrefix, singleBackupDir)
 	if reportDir := MustGetFlagString(options.REPORT_DIR); reportDir != "" {
-		globalFPInfo.SetReportDir(reportDir)
-		info, err := globalCluster.ExecuteLocalCommand(fmt.Sprintf("mkdir -p %s", globalFPInfo.GetDirForReport(-1)))
-		gplog.FatalOnError(err, info)
+		globalFPInfo.UserSpecifiedReportDir = reportDir
+		err = operating.System.MkdirAll(globalFPInfo.GetReportDirectoryPath(), 0775)
+		gplog.FatalOnError(err)
 	}
 
 	// Get restore metadata from plugin
@@ -127,7 +136,7 @@ func DoSetup() {
 			gplog.FatalOnError(err)
 			redirectRelationsToRestore := make([]string, 0)
 			for _, fqn := range fqns {
-				redirectRelationsToRestore = append(redirectRelationsToRestore, utils.MakeFQN(opts.RedirectSchema, fqn.TableName))
+				redirectRelationsToRestore = append(redirectRelationsToRestore, utils.MakeFQN(opts.RedirectSchema, fqn.Name))
 			}
 			relationsToRestore = redirectRelationsToRestore
 		}
@@ -179,7 +188,7 @@ func DoRestore() {
 }
 
 func createDatabase(metadataFilename string) {
-	objectTypes := []string{"SESSION GUCS", "DATABASE GUC", "DATABASE", "DATABASE METADATA"}
+	objectTypes := []string{toc.OBJ_SESSION_GUC, toc.OBJ_DATABASE_GUC, toc.OBJ_DATABASE, toc.OBJ_DATABASE_METADATA}
 	dbName := backupConfig.DatabaseName
 	gplog.Info("Creating database")
 	statements := GetRestoreMetadataStatements("global", metadataFilename, objectTypes, []string{})
@@ -198,9 +207,10 @@ func createDatabase(metadataFilename string) {
 }
 
 func restoreGlobal(metadataFilename string) {
-	objectTypes := []string{"SESSION GUCS", "DATABASE GUC", "DATABASE METADATA", "RESOURCE QUEUE", "RESOURCE GROUP", "ROLE", "ROLE GUCS", "ROLE GRANT", "TABLESPACE"}
+	objectTypes := []string{toc.OBJ_SESSION_GUC, toc.OBJ_DATABASE_GUC, toc.OBJ_DATABASE_METADATA,
+		toc.OBJ_RESOURCE_QUEUE, toc.OBJ_RESOURCE_GROUP, toc.OBJ_ROLE, toc.OBJ_ROLE_GUC, toc.OBJ_ROLE_GRANT, toc.OBJ_TABLESPACE}
 	if MustGetFlagBool(options.CREATE_DB) {
-		objectTypes = append(objectTypes, "DATABASE")
+		objectTypes = append(objectTypes, toc.OBJ_DATABASE)
 	}
 	gplog.Info("Restoring global metadata")
 	statements := GetRestoreMetadataStatements("global", metadataFilename, objectTypes, []string{})
@@ -281,21 +291,68 @@ func restorePredata(metadataFilename string) {
 	if wasTerminated {
 		return
 	}
+	var numErrors int32
 	gplog.Info("Restoring pre-data metadata")
 	// if not incremental restore - assume database is empty and just filter based on user input
 	filters := NewFilters(opts.IncludedSchemas, opts.ExcludedSchemas, opts.IncludedRelations, opts.ExcludedRelations)
 	var schemaStatements []toc.StatementWithType
 	if opts.RedirectSchema == "" {
-		schemaStatements = GetRestoreMetadataStatementsFiltered("predata", metadataFilename, []string{"SCHEMA"}, []string{}, filters)
+		schemaStatements = GetRestoreMetadataStatementsFiltered("predata", metadataFilename, []string{toc.OBJ_SCHEMA}, []string{}, filters)
 	}
-	statements := GetRestoreMetadataStatementsFiltered("predata", metadataFilename, []string{}, []string{"SCHEMA"}, filters)
+	statements := GetRestoreMetadataStatementsFiltered("predata", metadataFilename, []string{}, []string{toc.OBJ_SCHEMA}, filters)
 
 	editStatementsRedirectSchema(statements, opts.RedirectSchema)
 	progressBar := utils.NewProgressBar(len(schemaStatements)+len(statements), "Pre-data objects restored: ", utils.PB_VERBOSE)
 	progressBar.Start()
 
 	RestoreSchemas(schemaStatements, progressBar)
-	numErrors := ExecuteRestoreMetadataStatements(statements, "Pre-data objects", progressBar, utils.PB_VERBOSE, false)
+	executeInParallel := connectionPool.NumConns > 2 && !MustGetFlagBool(options.ON_ERROR_CONTINUE)
+	if executeInParallel {
+		// Batch statements by tier to allow more aggressive parallelization by cohort downstream.
+		first, tiered, last := BatchPredataStatements(statements)
+		gplog.Debug("Restoring predata metadata tier: 0")
+
+		// Wrap each of the statement batches in a commit to avoid the overhead of 2-phase commits.
+		// This dramatically reduces runtime of large metadata restores.
+		connectionPool.MustBegin(0)
+		numErrors = ExecuteRestoreMetadataStatements(first, "Pre-data objects", progressBar, utils.PB_VERBOSE, false)
+		connectionPool.MustCommit(0)
+
+		var t uint32 = 1
+		var size uint32 = uint32(len(tiered))
+		for t <= size {
+			gplog.Debug("Restoring predata metadata tier: %d", t)
+
+			// Begin transactions for each connec worker connection.  In parallel restores we reserve conn 0 for administration and monitoring.
+			txMutex.Lock()
+			for connNum := 1; connNum < connectionPool.NumConns; connNum++ {
+				connectionPool.MustExec(fmt.Sprintf("SET application_name TO 'gprestore_%d_%s'", connNum, MustGetFlagString(options.TIMESTAMP)), connNum)
+				connectionPool.MustBegin(connNum)
+			}
+			txMutex.Unlock()
+
+			numErrors += ExecuteRestoreMetadataStatements(tiered[t], "Pre-data objects", progressBar, utils.PB_VERBOSE, true)
+			t++
+			// Connections are individually committed/rolled back as they finish to avoid lock
+			// contention causing hangs. Ideally there will be no such contention, but this is done
+			// defensively, to guard against unexpected metadata distributions.
+		}
+		gplog.Debug("Restoring predata metadata tier: %d", len(tiered)+1)
+		connectionPool.MustBegin(0)
+		numErrors += ExecuteRestoreMetadataStatements(last, "Pre-data objects", progressBar, utils.PB_VERBOSE, false)
+		connectionPool.MustCommit(0)
+	} else {
+		if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
+			// If on-error-continue is indicated, errors will kill the whole transaction and ruin
+			// the behavior of the flag. So, we don't do transactions in that case, and just take
+			// the perf hit.
+			connectionPool.MustBegin(0)
+		}
+		numErrors = ExecuteRestoreMetadataStatements(statements, "Pre-data objects", progressBar, utils.PB_VERBOSE, false)
+		if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
+			connectionPool.Commit(0)
+		}
+	}
 
 	progressBar.Finish()
 	if wasTerminated {
@@ -318,7 +375,7 @@ func restoreSequenceValues(metadataFilename string) {
 
 	// Extract out the setval calls for each SEQUENCE object
 	var sequenceValueStatements []toc.StatementWithType
-	statements := GetRestoreMetadataStatementsFiltered("predata", metadataFilename, []string{"SEQUENCE"}, []string{}, filters)
+	statements := GetRestoreMetadataStatementsFiltered("predata", metadataFilename, []string{toc.OBJ_SEQUENCE}, []string{}, filters)
 	re := regexp.MustCompile(`SELECT pg_catalog.setval\(.*`)
 	for _, statement := range statements {
 		matches := re.FindStringSubmatch(statement.Statement)
@@ -334,7 +391,7 @@ func restoreSequenceValues(metadataFilename string) {
 	} else {
 		progressBar := utils.NewProgressBar(len(sequenceValueStatements), "Sequence values restored: ", utils.PB_VERBOSE)
 		progressBar.Start()
-		numErrors = ExecuteRestoreMetadataStatements(sequenceValueStatements, "Sequence values", progressBar, utils.PB_VERBOSE, true)
+		numErrors = ExecuteRestoreMetadataStatements(sequenceValueStatements, "Sequence values", progressBar, utils.PB_VERBOSE, connectionPool.NumConns > 1)
 		progressBar.Finish()
 	}
 
@@ -352,26 +409,45 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 		return
 	}
 
-	for i, statement := range statements {
-		oldSchema := fmt.Sprintf("%s.", statement.Schema)
+	schemaMatch := `(?:".+?"|[^.]+?)` // matches either an unquoted schema with no dots or a quoted schema containing dots
+	// This expression matches a GRANT or REVOKE statement on any object and captures the old schema name
+	permissionsRE := regexp.MustCompile(fmt.Sprintf(`(?m)(^(?:REVOKE|GRANT) .+ ON .+?) (%s)((\..+)? (?:FROM|TO) .+)`, schemaMatch))
+	// This expression matches an ATTACH PARTITION statement and captures both the parent and child schema names
+	attachRE := regexp.MustCompile(fmt.Sprintf(`(ALTER TABLE(?: ONLY)?) (%[1]s)(\..+ ATTACH PARTITION) (%[1]s)(\..+)`, schemaMatch))
+	for i := range statements {
+		oldSchema := fmt.Sprintf("%s.", statements[i].Schema)
 		newSchema := fmt.Sprintf("%s.", redirectSchema)
+		statement := statements[i].Statement
+		// Schemas themselves are a special case, since they lack the trailing dot.
+		statement = strings.Replace(statement, fmt.Sprintf("CREATE SCHEMA %s", statements[i].Schema), fmt.Sprintf("CREATE SCHEMA %s", redirectSchema), 1)
+
 		statements[i].Schema = redirectSchema
-		statements[i].Statement = strings.Replace(statement.Statement, oldSchema, newSchema, 1)
+		if statements[i].ObjectType == toc.OBJ_SCHEMA {
+			statements[i].Name = redirectSchema
+		}
+		replaced := false
 
-		// ALTER TABLE schema.root ATTACH PARTITION schema.leaf needs two schema replacements
-		if connectionPool.Version.AtLeast("7") && statement.ObjectType == "TABLE" && statement.ReferenceObject != "" {
-			alterTableAttachPart := strings.Split(statements[i].Statement, " ATTACH PARTITION ")
-
-			if len(alterTableAttachPart) == 2 {
-				statements[i].Statement = fmt.Sprintf(`%s ATTACH PARTITION %s`,
-					alterTableAttachPart[0],
-					strings.Replace(alterTableAttachPart[1], oldSchema, newSchema, 1))
-			}
+		// Permission statements come in multi-line blocks, so ensure we replace all instances of the existing schema
+		if strings.Contains(statement, "GRANT") || strings.Contains(statement, "REVOKE") {
+			statement = permissionsRE.ReplaceAllString(statement, fmt.Sprintf("$1 %s$3", redirectSchema))
+			replaced = true
 		}
 
+		// ALTER TABLE schema.root ATTACH PARTITION schema.leaf needs two schema replacements
+		if connectionPool.Version.AtLeast("7") && statements[i].ObjectType == toc.OBJ_TABLE && statements[i].ReferenceObject != "" && strings.Contains(statement, "ATTACH") {
+			statement = attachRE.ReplaceAllString(statement, fmt.Sprintf("$1 %[1]s$3 %[1]s$5", redirectSchema))
+			replaced = true
+		}
+
+		// Only do a general replace if we haven't replaced anything yet, to avoid e.g. hitting a schema in a VIEW definition
+		if !replaced {
+			statement = strings.Replace(statement, oldSchema, newSchema, 1)
+		}
+		statements[i].Statement = statement
+
 		// only postdata will have a reference object
-		if statement.ReferenceObject != "" {
-			statements[i].ReferenceObject = strings.Replace(statement.ReferenceObject, oldSchema, newSchema, 1)
+		if statements[i].ReferenceObject != "" {
+			statements[i].ReferenceObject = strings.Replace(statements[i].ReferenceObject, oldSchema, newSchema, 1)
 		}
 	}
 }
@@ -492,6 +568,7 @@ func runAnalyze(filteredDataEntries map[string][]toc.CoordinatorDataEntry) {
 				Schema:    tableSchema,
 				Name:      entry.Name,
 				Statement: analyzeCommand,
+				Tier:      []uint32{0, 0},
 			}
 			analyzeStatements = append(analyzeStatements, newAnalyzeStatement)
 		}
@@ -504,7 +581,7 @@ func runAnalyze(filteredDataEntries map[string][]toc.CoordinatorDataEntry) {
 	// last so add them to the end of the analyzeStatements list.
 	if connectionPool.Version.Is("4") {
 		// Create root partition set
-		partitionRootSet := map[toc.StatementWithType]struct{}{}
+		partitionRootSet := map[string]toc.StatementWithType{}
 		for _, dataEntries := range filteredDataEntries {
 			for _, entry := range dataEntries {
 				if entry.PartitionRoot != "" {
@@ -518,16 +595,19 @@ func runAnalyze(filteredDataEntries map[string][]toc.CoordinatorDataEntry) {
 						Schema:    tableSchema,
 						Name:      entry.PartitionRoot,
 						Statement: analyzeCommand,
+						Tier:      []uint32{0, 0},
 					}
 
-					if _, ok := partitionRootSet[rootStatement]; !ok {
-						partitionRootSet[rootStatement] = struct{}{}
+					// use analyze command as map key, since struct isn't a valid key but statement
+					// encodes everything in it anyway
+					if _, ok := partitionRootSet[analyzeCommand]; !ok {
+						partitionRootSet[analyzeCommand] = rootStatement
 					}
 				}
 			}
 		}
 
-		for rootAnalyzeStatement, _ := range partitionRootSet {
+		for _, rootAnalyzeStatement := range partitionRootSet {
 			analyzeStatements = append(analyzeStatements, rootAnalyzeStatement)
 		}
 	}
@@ -544,7 +624,6 @@ func runAnalyze(filteredDataEntries map[string][]toc.CoordinatorDataEntry) {
 	} else {
 		gplog.Info("ANALYZE on restored tables complete")
 	}
-
 }
 
 func DoTeardown() {
@@ -595,7 +674,7 @@ func DoTeardown() {
 		reportFilename := globalFPInfo.GetRestoreReportFilePath(restoreStartTime)
 		origSize, destSize, _ := GetResizeClusterInfo()
 		report.WriteRestoreReportFile(reportFilename, globalFPInfo.Timestamp, restoreStartTime, connectionPool, version, origSize, destSize, errMsg)
-		report.EmailReport(globalCluster, globalFPInfo.Timestamp, reportFilename, "gprestore", !restoreFailed)
+		report.EmailReport(globalCluster, globalFPInfo.Timestamp, reportFilename, "gprestore", !restoreFailed, backupConfig.DatabaseName)
 		if pluginConfig != nil {
 			pluginConfig.CleanupPluginForRestore(globalCluster, globalFPInfo)
 			pluginConfig.DeletePluginConfigWhenEncrypting(globalCluster)
@@ -674,9 +753,9 @@ func DoCleanup(restoreFailed bool) {
 			if wasTerminated { // These should all end on their own in a successful restore
 				utils.TerminateHangingCopySessions(connectionPool, fpInfo, fmt.Sprintf("gprestore_%s_%s", fpInfo.Timestamp, restoreStartTime))
 			}
-			if restoreFailed {
-				utils.CleanUpSegmentHelperProcesses(globalCluster, fpInfo, "restore")
-			}
+
+			// We can have helper processes hanging around even without failures, so call this cleanup routine whether successful or not.
+			utils.CleanUpSegmentHelperProcesses(globalCluster, fpInfo, "restore")
 			utils.CleanUpHelperFilesOnAllHosts(globalCluster, fpInfo)
 		}
 	}

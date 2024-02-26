@@ -37,6 +37,7 @@ const (
 	NO_HISTORY            = "no-history"
 	PLUGIN_CONFIG         = "plugin-config"
 	QUIET                 = "quiet"
+	SINGLE_BACKUP_DIR     = "single-backup-dir"
 	SINGLE_DATA_FILE      = "single-data-file"
 	COPY_QUEUE_SIZE       = "copy-queue-size"
 	VERBOSE               = "verbose"
@@ -56,6 +57,7 @@ const (
 )
 
 func SetBackupFlagDefaults(flagSet *pflag.FlagSet) {
+	flagSet.Bool(SINGLE_BACKUP_DIR, false, "Back up all data to a single directory instead of split by segment")
 	flagSet.String(BACKUP_DIR, "", "The absolute path of the directory to which all backup files will be written")
 	flagSet.String(COMPRESSION_TYPE, "gzip", "Type of compression to use during data backup. Valid values are 'gzip', 'zstd'")
 	flagSet.Int(COMPRESSION_LEVEL, 1, "Level of compression to use during data backup. Range of valid values depends on compression type")
@@ -121,7 +123,7 @@ func SetRestoreFlagDefaults(flagSet *pflag.FlagSet) {
 	flagSet.Bool(LEAF_PARTITION_DATA, false, "For partition tables, create one data file per leaf partition instead of one data file for the whole table")
 	flagSet.Bool(RUN_ANALYZE, false, "Run ANALYZE on restored tables")
 	flagSet.Bool(RESIZE_CLUSTER, false, "Restore a backup taken on a cluster with more or fewer segments than the cluster to which it will be restored")
-	flagSet.String(REPORT_DIR, "", "The absolute path of the directory to which all report files will be written")
+	flagSet.String(REPORT_DIR, "", "The absolute path of the directory to which restore report and error tables will be written")
 	_ = flagSet.MarkHidden(LEAF_PARTITION_DATA)
 }
 

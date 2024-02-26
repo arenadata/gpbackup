@@ -506,7 +506,6 @@ PARTITION BY LIST (gender)
 				"public.p2_sales_1_prt_1",
 				"public.p2_sales_1_prt_1_2_prt_1",
 				"public.p2_sales_1_prt_1_2_prt_1_3_prt_europe",
-				"public.p2_sales_1_prt_1_2_prt_1_3_prt_usa",
 				"public.p2_sales_1_prt_1_2_prt_2",
 				"public.p2_sales_1_prt_1_2_prt_2_3_prt_europe",
 				"public.p2_sales_1_prt_1_2_prt_2_3_prt_usa",
@@ -523,7 +522,6 @@ PARTITION BY LIST (gender)
 				"public.p2_sales_1_prt_1":                      3,
 				"public.p2_sales_1_prt_1_2_prt_1":              1,
 				"public.p2_sales_1_prt_1_2_prt_1_3_prt_europe": 1,
-				"public.p2_sales_1_prt_1_2_prt_1_3_prt_usa":    0,
 				"public.p2_sales_1_prt_1_2_prt_2":              2,
 				"public.p2_sales_1_prt_1_2_prt_2_3_prt_europe": 1,
 				"public.p2_sales_1_prt_1_2_prt_2_3_prt_usa":    1,
@@ -535,6 +533,18 @@ PARTITION BY LIST (gender)
 				"public.p2_sales_1_prt_2_2_prt_2_3_prt_europe": 1,
 				"public.p2_sales_1_prt_2_2_prt_2_3_prt_usa":    1,
 			})
+			if backupConn.Version.Before("7") {
+				assertTablesRestored(restoreConn, []string{
+					"public.p2_sales_1_prt_1_2_prt_1_3_prt_usa",
+				})
+				assertDataRestored(restoreConn, map[string]int{
+					"public.p2_sales_1_prt_1_2_prt_1_3_prt_usa": 0,
+				})
+			} else {
+				assertTablesNotRestored(restoreConn, []string{
+					"public.p2_sales_1_prt_1_2_prt_1_3_prt_usa",
+				})
+			}
 		})
 		It("runs gpbackup and gprestore without leaf-partition-data and with exclude-table root partition backup flags", func() {
 			testhelper.AssertQueryRuns(backupConn,

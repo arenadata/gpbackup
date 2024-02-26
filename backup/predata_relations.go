@@ -8,14 +8,17 @@ package backup
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 
+	"github.com/greenplum-db/gp-common-go-libs/dbconn"
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gpbackup/options"
 	"github.com/greenplum-db/gpbackup/toc"
 	"github.com/greenplum-db/gpbackup/utils"
+	"github.com/spf13/pflag"
 )
 
 /*
@@ -27,11 +30,16 @@ import (
  * When the flag is not set, we want to back up both metadata and data for all
  * tables, so both returned arrays contain all tables.
  */
-func SplitTablesByPartitionType(tables []Table, includeList []string) ([]Table, []Table) {
+func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) ([]Table, []Table) {
 	metadataTables := make([]Table, 0)
 	dataTables := make([]Table, 0)
 	if MustGetFlagBool(options.LEAF_PARTITION_DATA) || len(includeList) > 0 {
-		includeSet := utils.NewSet(includeList)
+		// generate a set of oids for more efficient matching in large dumps
+		includeSet := make(map[uint32]bool, len(includeList))
+		for _, item := range includeList {
+			includeSet[item.Oid] = true
+		}
+
 		for _, table := range tables {
 			if table.IsExternal && table.PartitionLevelInfo.Level == "l" {
 				if connectionPool.Version.Before("7") {
@@ -59,7 +67,7 @@ func SplitTablesByPartitionType(tables []Table, includeList []string) ([]Table, 
 				// leaf partitions from dumping data. The COPY will be called on the
 				// top-most root partition.
 				continue
-			} else if includeSet.MatchesFilter(table.FQN()) {
+			} else if _, match := includeSet[table.Oid]; match {
 				dataTables = append(dataTables, table)
 			}
 		}
@@ -123,7 +131,7 @@ func AppendExtPartSuffix(name string) string {
  * the search_path; this will aid in later filtering to include or exclude certain tables during the
  * backup process, and allows customers to copy just the CREATE TABLE block in order to use it directly.
  */
-func PrintCreateTableStatement(metadataFile *utils.FileWithByteCount, toc *toc.TOC, table Table, tableMetadata ObjectMetadata) {
+func PrintCreateTableStatement(metadataFile *utils.FileWithByteCount, objToc *toc.TOC, table Table, tableMetadata ObjectMetadata) {
 	start := metadataFile.ByteCount
 	// We use an empty TOC below to keep count of the bytes for testing purposes.
 	if table.IsExternal && table.PartitionLevelInfo.Level != "p" {
@@ -132,11 +140,12 @@ func PrintCreateTableStatement(metadataFile *utils.FileWithByteCount, toc *toc.T
 		PrintRegularTableCreateStatement(metadataFile, nil, table)
 	}
 	section, entry := table.GetMetadataEntry()
-	toc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount)
-	PrintPostCreateTableStatements(metadataFile, toc, table, tableMetadata)
+	tier := globalTierMap[table.GetUniqueID()]
+	objToc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount, tier)
+	PrintPostCreateTableStatements(metadataFile, objToc, table, tableMetadata, tier)
 }
 
-func PrintRegularTableCreateStatement(metadataFile *utils.FileWithByteCount, toc *toc.TOC, table Table) {
+func PrintRegularTableCreateStatement(metadataFile *utils.FileWithByteCount, objToc *toc.TOC, table Table) {
 	start := metadataFile.ByteCount
 
 	typeStr := ""
@@ -186,9 +195,10 @@ func PrintRegularTableCreateStatement(metadataFile *utils.FileWithByteCount, toc
 		metadataFile.MustPrintf("%s;\n", strings.TrimSpace(table.PartTemplateDef))
 	}
 	printAlterColumnStatements(metadataFile, table, table.ColumnDefs)
-	if toc != nil {
+	if objToc != nil {
 		section, entry := table.GetMetadataEntry()
-		toc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount)
+		tier := globalTierMap[table.GetUniqueID()]
+		objToc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount, tier)
 	}
 }
 
@@ -248,8 +258,8 @@ func printAlterColumnStatements(metadataFile *utils.FileWithByteCount, table Tab
  * This function prints additional statements that come after the CREATE TABLE
  * statement for both regular and external tables.
  */
-func PrintPostCreateTableStatements(metadataFile *utils.FileWithByteCount, toc *toc.TOC, table Table, tableMetadata ObjectMetadata) {
-	PrintObjectMetadata(metadataFile, toc, tableMetadata, table, "")
+func PrintPostCreateTableStatements(metadataFile *utils.FileWithByteCount, objToc *toc.TOC, table Table, tableMetadata ObjectMetadata, tier []uint32) {
+	PrintObjectMetadata(metadataFile, objToc, tableMetadata, table, "", tier)
 	statements := make([]string, 0)
 	for _, att := range table.ColumnDefs {
 		if att.Comment != "" {
@@ -258,8 +268,8 @@ func PrintPostCreateTableStatements(metadataFile *utils.FileWithByteCount, toc *
 		}
 		if att.Privileges.Valid {
 			columnMetadata := ObjectMetadata{Privileges: getColumnACL(att.Privileges, att.Kind), Owner: tableMetadata.Owner}
-			columnPrivileges := columnMetadata.GetPrivilegesStatements(table.FQN(), "COLUMN", att.Name)
-			statements = append(statements, columnPrivileges...)
+			columnPrivileges := columnMetadata.GetPrivilegesStatements(table.FQN(), toc.OBJ_COLUMN, att.Name)
+			statements = append(statements, strings.TrimSpace(columnPrivileges))
 		}
 		if att.SecurityLabel != "" {
 			escapedLabel := utils.EscapeSingleQuotes(att.SecurityLabel)
@@ -298,7 +308,7 @@ func PrintPostCreateTableStatements(metadataFile *utils.FileWithByteCount, toc *
 		}
 	}
 
-	PrintStatements(metadataFile, toc, table, statements)
+	PrintStatements(metadataFile, objToc, table, statements, tier)
 }
 
 func generateSequenceDefinitionStatement(sequence Sequence) string {
@@ -346,7 +356,7 @@ func generateSequenceDefinitionStatement(sequence Sequence) string {
 	return statement
 }
 
-func PrintIdentityColumns(metadataFile *utils.FileWithByteCount, toc *toc.TOC, sequences []Sequence) {
+func PrintIdentityColumns(metadataFile *utils.FileWithByteCount, objToc *toc.TOC, sequences []Sequence) {
 	for _, seq := range sequences {
 		if seq.IsIdentity {
 			start := metadataFile.ByteCount
@@ -366,7 +376,8 @@ func PrintIdentityColumns(metadataFile *utils.FileWithByteCount, toc *toc.TOC, s
 			seqDefStatement := generateSequenceDefinitionStatement(seq)
 			metadataFile.MustPrintf("%s);\n", seqDefStatement)
 			section, entry := seq.GetMetadataEntry()
-			toc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount)
+			tier := globalTierMap[seq.GetUniqueID()]
+			objToc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount, tier)
 		}
 	}
 }
@@ -391,8 +402,9 @@ func PrintCreateSequenceStatements(metadataFile *utils.FileWithByteCount,
 			utils.EscapeSingleQuotes(sequence.FQN()), definition.LastVal, definition.IsCalled)
 
 		section, entry := sequence.GetMetadataEntry()
-		toc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount)
-		PrintObjectMetadata(metadataFile, toc, sequenceMetadata[sequence.Relation.GetUniqueID()], sequence, "")
+		tier := globalTierMap[sequence.GetUniqueID()]
+		toc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount, tier)
+		PrintObjectMetadata(metadataFile, toc, sequenceMetadata[sequence.Relation.GetUniqueID()], sequence, "", tier)
 	}
 }
 
@@ -411,16 +423,16 @@ func PrintAlterSequenceStatements(metadataFile *utils.FileWithByteCount,
 			entry := toc.MetadataEntry{
 				Schema:          sequence.Relation.Schema,
 				Name:            sequence.Relation.Name,
-				ObjectType:      "SEQUENCE OWNER",
+				ObjectType:      toc.OBJ_SEQUENCE_OWNER,
 				ReferenceObject: sequence.OwningTable,
 			}
-			tocfile.AddMetadataEntry("predata", entry, start, metadataFile.ByteCount)
+			tocfile.AddMetadataEntry("predata", entry, start, metadataFile.ByteCount, []uint32{0, 0})
 		}
 	}
 }
 
 // A view's column names are automatically factored into it's definition.
-func PrintCreateViewStatement(metadataFile *utils.FileWithByteCount, toc *toc.TOC, view View, viewMetadata ObjectMetadata) {
+func PrintCreateViewStatement(metadataFile *utils.FileWithByteCount, objToc *toc.TOC, view View, viewMetadata ObjectMetadata) {
 	start := metadataFile.ByteCount
 	var tablespaceClause string
 	if view.Tablespace != "" {
@@ -435,6 +447,97 @@ func PrintCreateViewStatement(metadataFile *utils.FileWithByteCount, toc *toc.TO
 			view.FQN(), view.Options, tablespaceClause, view.Definition.String[:len(view.Definition.String)-1], view.DistPolicy)
 	}
 	section, entry := view.GetMetadataEntry()
-	toc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount)
-	PrintObjectMetadata(metadataFile, toc, viewMetadata, view, "")
+	tier := globalTierMap[view.GetUniqueID()]
+	objToc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount, tier)
+	PrintObjectMetadata(metadataFile, objToc, viewMetadata, view, "", tier)
+}
+
+// The CREATE statement here should be kept in sync with the one in
+// PrintCreateViewStatement
+func PrintCreatePostdataViewStatements(metadataFile *utils.FileWithByteCount, objToc *toc.TOC, views []View) {
+	for _, view := range views {
+		start := metadataFile.ByteCount
+		metadataFile.MustPrintf("\n\nCREATE OR REPLACE VIEW %s%s AS %s\n", view.FQN(), view.Options, view.Definition.String)
+		section, entry := view.GetMetadataEntry()
+		section = "postdata"
+		tier := globalTierMap[view.GetUniqueID()]
+		objToc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount, tier)
+	}
+}
+
+// A dummy view is used to resolve the circular dependency of the following
+// scenario. Views are restored in predata. Views can depend on constraints.
+// Constraints are restored in postdata for performance reasons.
+// This is directly based off pg_dump's createDummyViewAsClause
+func PrintCreateDummyViewStatement(metadataFile *utils.FileWithByteCount, objToc *toc.TOC, view View, viewMetadata ObjectMetadata) {
+	start := metadataFile.ByteCount
+
+	dummyViewClause := "SELECT"
+	for i, column := range view.ColumnDefs {
+		if i > 0 {
+			dummyViewClause += ","
+		}
+		dummyViewClause += fmt.Sprintf("\n\tNULL::%s", column.Type)
+
+		if column.Collation != "" {
+			dummyViewClause += fmt.Sprintf(" COLLATE %s", column.Collation)
+		}
+
+		dummyViewClause += fmt.Sprintf(" AS %s", column.Name)
+	}
+	dummyViewClause += ";"
+
+	metadataFile.MustPrintf("\n\nCREATE VIEW %s AS \n%s\n", view.FQN(), dummyViewClause)
+
+	section, entry := view.GetMetadataEntry()
+	tier := globalTierMap[view.GetUniqueID()]
+	objToc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount, tier)
+	PrintObjectMetadata(metadataFile, objToc, viewMetadata, view, "", tier)
+}
+
+func ExpandIncludesForPartitions(conn *dbconn.DBConn, opts *options.Options, includeOids []string, flags *pflag.FlagSet) error {
+	if len(opts.GetIncludedTables()) == 0 {
+		return nil
+	}
+
+	allRelStructs, err := opts.GetUserTableRelationsWithIncludeFiltering(conn, includeOids, options.MustGetFlagBool(flags, options.NO_INHERITS))
+	if err != nil {
+		return err
+	}
+
+	includeSet := map[string]bool{}
+	for _, oid := range includeOids {
+		includeSet[oid] = true
+	}
+
+	allRelSet := map[string]options.Relation{}
+	for _, rel := range allRelStructs {
+		oidStr := strconv.FormatUint(uint64(rel.Oid), 10)
+		allRelSet[oidStr] = rel
+	}
+
+	// set arithmetic: find difference
+	diff := make([]options.Relation, 0)
+	for oid, rel := range allRelSet {
+		_, oidExists := includeSet[oid]
+		if !oidExists {
+			diff = append(diff, rel)
+		}
+	}
+
+	if len(diff) > 0 {
+		gplog.Info("The filtered table set has been expanded to include additional dependent tables; see the log file for a full list of tables that have been added")
+	}
+	for _, rel := range diff {
+		fqn := fmt.Sprintf("%s.%s", utils.UnEscapeDoubleQuotes(rel.Schema), utils.UnEscapeDoubleQuotes(rel.Name))
+		err = flags.Set(options.INCLUDE_RELATION, fqn)
+		if err != nil {
+			return err
+		}
+		opts.AddIncludedRelation(fqn)
+		AddIncludedRelationFqn(rel)
+		gplog.Verbose("Added %s to the backup set", fqn)
+	}
+
+	return nil
 }

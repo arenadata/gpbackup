@@ -127,7 +127,7 @@ func ExpandReplicatedTable(origSize int, tableName string, whichConn int) error 
 	// To work around this, update the distribution policy entry for those tables to the original cluster size
 	// and then explicitly expand them to cause the data to be replicated to all new segments.
 	gplog.Debug("Distributing replicated data for %s", tableName)
-	alterDistPolQuery := fmt.Sprintf("UPDATE gp_distribution_policy SET numsegments=%d WHERE localoid = '%s'::regclass::oid", origSize, tableName)
+	alterDistPolQuery := fmt.Sprintf("UPDATE gp_distribution_policy SET numsegments=%d WHERE localoid = '%s'::regclass::oid", origSize, utils.EscapeSingleQuotes(tableName))
 	_, err := connectionPool.Exec(alterDistPolQuery, whichConn)
 	if err != nil {
 		return err

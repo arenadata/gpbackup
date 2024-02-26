@@ -8,6 +8,7 @@ import (
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gpbackup/options"
+	"github.com/greenplum-db/gpbackup/toc"
 	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -171,7 +172,7 @@ func getFilterRelationsInBackupSet(relationList []string) []string {
 		relationMap[relation] = true
 	}
 	for _, entry := range globalTOC.PredataEntries {
-		if entry.ObjectType != "TABLE" && entry.ObjectType != "SEQUENCE" && entry.ObjectType != "VIEW" && entry.ObjectType != "MATERIALIZED VIEW" {
+		if entry.ObjectType != toc.OBJ_TABLE && entry.ObjectType != toc.OBJ_SEQUENCE && entry.ObjectType != toc.OBJ_VIEW && entry.ObjectType != toc.OBJ_MATERIALIZED_VIEW {
 			continue
 		}
 		fqn := utils.MakeFQN(entry.Schema, entry.Name)
@@ -284,6 +285,9 @@ func ValidateFlagCombinations(flags *pflag.FlagSet) {
 	}
 	if flags.Changed(options.INCREMENTAL) && !flags.Changed(options.DATA_ONLY) {
 		gplog.Fatal(errors.Errorf("Cannot use --incremental without --data-only"), "")
+	}
+	if !flags.Changed(options.TIMESTAMP) && !flags.Changed(options.BACKUP_DIR) {
+		gplog.Fatal(errors.Errorf("Must provide --backup-dir if --timestamp is not provided"), "")
 	}
 	options.CheckExclusiveFlags(flags, options.RUN_ANALYZE, options.WITH_STATS)
 }

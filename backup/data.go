@@ -94,6 +94,7 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 		return 0, err
 	}
 	numRows, _ := result.RowsAffected()
+
 	return numRows, nil
 }
 

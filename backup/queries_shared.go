@@ -39,7 +39,7 @@ func (s Schema) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          s.Name,
 			Name:            s.Name,
-			ObjectType:      "SCHEMA",
+			ObjectType:      toc.OBJ_SCHEMA,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -85,17 +85,11 @@ type Constraint struct {
 }
 
 func (c Constraint) GetMetadataEntry() (string, toc.MetadataEntry) {
-	var tocSection string
-	if c.Def.Valid && !strings.Contains(strings.ToUpper(c.Def.String), "NOT VALID") {
-		tocSection = "predata"
-	} else {
-		tocSection = "postdata"
-	}
-	return tocSection,
+	return "postdata",
 		toc.MetadataEntry{
 			Schema:          c.Schema,
 			Name:            c.Name,
-			ObjectType:      "CONSTRAINT",
+			ObjectType:      toc.OBJ_CONSTRAINT,
 			ReferenceObject: c.OwningObject,
 			StartByte:       0,
 			EndByte:         0,
@@ -262,21 +256,19 @@ func GetConstraints(connectionPool *dbconn.DBConn, includeTables ...Relation) []
 }
 
 func RenameExchangedPartitionConstraints(connectionPool *dbconn.DBConn, constraints *[]Constraint) {
-	query := GetRenameExchangedPartitionQuery(connectionPool)
+	query := GetRenameExchangedPartitionQuery()
 	names := make([]ExchangedPartitionName, 0)
 	err := connectionPool.Select(&names, query)
 	gplog.FatalOnError(err)
 
-	nameMap := make(map[string]string)
-	for _, name := range names {
-		nameMap[name.OrigName] = name.NewName
-	}
-
-	for idx := range *constraints {
-		newName, hasNewName := nameMap[(*constraints)[idx].Name]
-		if hasNewName {
-			(*constraints)[idx].Def.String = strings.Replace((*constraints)[idx].Def.String, (*constraints)[idx].Name, newName, 1)
-			(*constraints)[idx].Name = newName
+	nameMap := ProcessIndexNames(names)
+	if len(nameMap) > 0 {
+		for idx := range *constraints {
+			newName, hasNewName := nameMap[(*constraints)[idx].Name]
+			if hasNewName {
+				(*constraints)[idx].Def.String = strings.Replace((*constraints)[idx].Def.String, (*constraints)[idx].Name, newName, 1)
+				(*constraints)[idx].Name = newName
+			}
 		}
 	}
 }
@@ -352,7 +344,7 @@ func (a AccessMethod) GetMetadataEntry() (string, toc.MetadataEntry) {
 	return "predata",
 		toc.MetadataEntry{
 			Name:            a.Name,
-			ObjectType:      "ACCESS METHOD",
+			ObjectType:      toc.OBJ_ACCESS_METHOD,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,

@@ -25,22 +25,22 @@ var _ = Describe("restore/validate tests", func() {
 		filterList = []string{}
 	})
 	Describe("ValidateSchemasInBackupSet", func() {
-		sequence := toc.StatementWithType{ObjectType: "SEQUENCE", Statement: "CREATE SEQUENCE schema.somesequence"}
+		sequence := toc.StatementWithType{ObjectType: toc.OBJ_SEQUENCE, Statement: "CREATE SEQUENCE schema.somesequence"}
 		sequenceLen := uint64(len(sequence.Statement))
-		table1 := toc.StatementWithType{ObjectType: "TABLE", Statement: "CREATE TABLE schema1.table1"}
+		table1 := toc.StatementWithType{ObjectType: toc.OBJ_TABLE, Statement: "CREATE TABLE schema1.table1"}
 		table1Len := uint64(len(table1.Statement))
-		table2 := toc.StatementWithType{ObjectType: "TABLE", Statement: "CREATE TABLE schema2.table2"}
+		table2 := toc.StatementWithType{ObjectType: toc.OBJ_TABLE, Statement: "CREATE TABLE schema2.table2"}
 		table2Len := uint64(len(table2.Statement))
 		BeforeEach(func() {
 			tocfile, backupfile = testutils.InitializeTestTOC(buffer, "predata")
 			backupfile.ByteCount = table1Len
-			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema1", Name: "table1", ObjectType: "TABLE"}, 0, backupfile.ByteCount)
+			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema1", Name: "table1", ObjectType: toc.OBJ_TABLE}, 0, backupfile.ByteCount, []uint32{0, 0})
 			tocfile.AddCoordinatorDataEntry("schema1", "table1", 1, "(i)", 0, "", "")
 			backupfile.ByteCount += table2Len
-			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema2", Name: "table2", ObjectType: "TABLE"}, table1Len, backupfile.ByteCount)
+			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema2", Name: "table2", ObjectType: toc.OBJ_TABLE}, table1Len, backupfile.ByteCount, []uint32{0, 0})
 			tocfile.AddCoordinatorDataEntry("schema2", "table2", 2, "(j)", 0, "", "")
 			backupfile.ByteCount += sequenceLen
-			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema", Name: "somesequence", ObjectType: "SEQUENCE"}, table1Len+table2Len, backupfile.ByteCount)
+			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema", Name: "somesequence", ObjectType: toc.OBJ_SEQUENCE}, table1Len+table2Len, backupfile.ByteCount, []uint32{0, 0})
 			restore.SetTOC(tocfile)
 		})
 		It("passes when schema exists in normal backup", func() {
@@ -197,15 +197,15 @@ var _ = Describe("restore/validate tests", func() {
 		var backupfile *utils.FileWithByteCount
 		BeforeEach(func() {
 			tocfile, backupfile = testutils.InitializeTestTOC(buffer, "predata")
-			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema1", Name: "table1", ObjectType: "TABLE"}, 0, backupfile.ByteCount)
+			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema1", Name: "table1", ObjectType: toc.OBJ_TABLE}, 0, backupfile.ByteCount, []uint32{0, 0})
 			tocfile.AddCoordinatorDataEntry("schema1", "table1", 1, "(i)", 0, "", "")
 
-			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema2", Name: "table2", ObjectType: "TABLE"}, 0, backupfile.ByteCount)
+			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema2", Name: "table2", ObjectType: toc.OBJ_TABLE}, 0, backupfile.ByteCount, []uint32{0, 0})
 			tocfile.AddCoordinatorDataEntry("schema2", "table2", 2, "(j)", 0, "", "")
 
-			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema1", Name: "somesequence", ObjectType: "SEQUENCE"}, 0, backupfile.ByteCount)
-			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema1", Name: "someview", ObjectType: "VIEW"}, 0, backupfile.ByteCount)
-			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema1", Name: "somefunction", ObjectType: "FUNCTION"}, 0, backupfile.ByteCount)
+			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema1", Name: "somesequence", ObjectType: toc.OBJ_SEQUENCE}, 0, backupfile.ByteCount, []uint32{0, 0})
+			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema1", Name: "someview", ObjectType: toc.OBJ_VIEW}, 0, backupfile.ByteCount, []uint32{0, 0})
+			tocfile.AddMetadataEntry("predata", toc.MetadataEntry{Schema: "schema1", Name: "somefunction", ObjectType: toc.OBJ_FUNCTION}, 0, backupfile.ByteCount, []uint32{0, 0})
 
 			restore.SetTOC(tocfile)
 		})
@@ -321,80 +321,80 @@ var _ = Describe("restore/validate tests", func() {
 			 * Below are all the different filter combinations
 			 */
 			// --exclude-schema combinations with other filters
-			Entry("--exclude-schema combos", "--exclude-schema schema1 --include-table schema.table2", false),
-			Entry("--exclude-schema combos", "--exclude-schema schema1 --include-table-file /tmp/file2", false),
-			Entry("--exclude-schema combos", "--exclude-schema schema1 --include-schema schema2", false),
-			Entry("--exclude-schema combos", "--exclude-schema schema1 --include-schema-file /tmp/file2", true), // TODO: Verify this.
-			Entry("--exclude-schema combos", "--exclude-schema schema1 --exclude-table schema.table2", false),
-			Entry("--exclude-schema combos", "--exclude-schema schema1 --exclude-table-file /tmp/file2", false),
-			Entry("--exclude-schema combos", "--exclude-schema schema1 --exclude-schema schema2", true),
-			Entry("--exclude-schema combos", "--exclude-schema schema1 --exclude-schema-file /tmp/file2", true), // TODO: Verify this.
+			Entry("--exclude-schema combos", "--timestamp=0 --exclude-schema schema1 --include-table schema.table2", false),
+			Entry("--exclude-schema combos", "--timestamp=0 --exclude-schema schema1 --include-table-file /tmp/file2", false),
+			Entry("--exclude-schema combos", "--timestamp=0 --exclude-schema schema1 --include-schema schema2", false),
+			Entry("--exclude-schema combos", "--timestamp=0 --exclude-schema schema1 --include-schema-file /tmp/file2", true), // TODO: Verify this.
+			Entry("--exclude-schema combos", "--timestamp=0 --exclude-schema schema1 --exclude-table schema.table2", false),
+			Entry("--exclude-schema combos", "--timestamp=0 --exclude-schema schema1 --exclude-table-file /tmp/file2", false),
+			Entry("--exclude-schema combos", "--timestamp=0 --exclude-schema schema1 --exclude-schema schema2", true),
+			Entry("--exclude-schema combos", "--timestamp=0 --exclude-schema schema1 --exclude-schema-file /tmp/file2", true), // TODO: Verify this.
 
 			// --exclude-schema-file combinations with other filters
-			Entry("--exclude-schema-file combos", "--exclude-schema-file /tmp/file --include-table schema.table2", true),    // TODO: Verify this.
-			Entry("--exclude-schema-file combos", "--exclude-schema-file /tmp/file --include-table-file /tmp/file2", true),  // TODO: Verify this.
-			Entry("--exclude-schema-file combos", "--exclude-schema-file /tmp/file --include-schema schema2", true),         // TODO: Verify this.
-			Entry("--exclude-schema-file combos", "--exclude-schema-file /tmp/file --include-schema-file /tmp/file2", true), // TODO: Verify this.
-			Entry("--exclude-schema-file combos", "--exclude-schema-file /tmp/file --exclude-table schema.table2", true),    // TODO: Verify this.
-			Entry("--exclude-schema-file combos", "--exclude-schema-file /tmp/file --exclude-table-file /tmp/file2", true),  // TODO: Verify this.
+			Entry("--exclude-schema-file combos", "--timestamp=0 --exclude-schema-file /tmp/file --include-table schema.table2", true),    // TODO: Verify this.
+			Entry("--exclude-schema-file combos", "--timestamp=0 --exclude-schema-file /tmp/file --include-table-file /tmp/file2", true),  // TODO: Verify this.
+			Entry("--exclude-schema-file combos", "--timestamp=0 --exclude-schema-file /tmp/file --include-schema schema2", true),         // TODO: Verify this.
+			Entry("--exclude-schema-file combos", "--timestamp=0 --exclude-schema-file /tmp/file --include-schema-file /tmp/file2", true), // TODO: Verify this.
+			Entry("--exclude-schema-file combos", "--timestamp=0 --exclude-schema-file /tmp/file --exclude-table schema.table2", true),    // TODO: Verify this.
+			Entry("--exclude-schema-file combos", "--timestamp=0 --exclude-schema-file /tmp/file --exclude-table-file /tmp/file2", true),  // TODO: Verify this.
 
 			// --exclude-table combinations with other filters
-			Entry("--exclude-table combos", "--exclude-table schema.table --include-table schema.table2", false),
-			Entry("--exclude-table combos", "--exclude-table schema.table --include-table-file /tmp/file2", false),
-			Entry("--exclude-table combos", "--exclude-table schema.table --include-schema schema2", true),
-			Entry("--exclude-table combos", "--exclude-table schema.table --include-schema-file /tmp/file2", true),
-			Entry("--exclude-table combos", "--exclude-table schema.table --exclude-table schema.table2", true),
-			Entry("--exclude-table combos", "--exclude-table schema.table --exclude-table-file /tmp/file2", false),
+			Entry("--exclude-table combos", "--timestamp=0 --exclude-table schema.table --include-table schema.table2", false),
+			Entry("--exclude-table combos", "--timestamp=0 --exclude-table schema.table --include-table-file /tmp/file2", false),
+			Entry("--exclude-table combos", "--timestamp=0 --exclude-table schema.table --include-schema schema2", true),
+			Entry("--exclude-table combos", "--timestamp=0 --exclude-table schema.table --include-schema-file /tmp/file2", true),
+			Entry("--exclude-table combos", "--timestamp=0 --exclude-table schema.table --exclude-table schema.table2", true),
+			Entry("--exclude-table combos", "--timestamp=0 --exclude-table schema.table --exclude-table-file /tmp/file2", false),
 
 			// --exclude-table-file combinations with other filters
-			Entry("--exclude-table-file combos", "--exclude-table-file /tmp/file --include-table schema.table2", false),
-			Entry("--exclude-table-file combos", "--exclude-table-file /tmp/file --include-table-file /tmp/file2", false),
-			Entry("--exclude-table-file combos", "--exclude-table-file /tmp/file --include-schema schema2", true),
-			Entry("--exclude-table-file combos", "--exclude-table-file /tmp/file --include-schema-file /tmp/file2", true),
+			Entry("--exclude-table-file combos", "--timestamp=0 --exclude-table-file /tmp/file --include-table schema.table2", false),
+			Entry("--exclude-table-file combos", "--timestamp=0 --exclude-table-file /tmp/file --include-table-file /tmp/file2", false),
+			Entry("--exclude-table-file combos", "--timestamp=0 --exclude-table-file /tmp/file --include-schema schema2", true),
+			Entry("--exclude-table-file combos", "--timestamp=0 --exclude-table-file /tmp/file --include-schema-file /tmp/file2", true),
 
 			// --include-schema combinations with other filters
-			Entry("--include-schema combos", "--include-schema schema1 --include-table schema.table2", false),
-			Entry("--include-schema combos", "--include-schema schema1 --include-table-file /tmp/file2", false),
-			Entry("--include-schema combos", "--include-schema schema1 --include-schema schema2", true),
-			Entry("--include-schema combos", "--include-schema schema1 --include-schema-file /tmp/file2", true), // TODO: Verify this.
+			Entry("--include-schema combos", "--timestamp=0 --include-schema schema1 --include-table schema.table2", false),
+			Entry("--include-schema combos", "--timestamp=0 --include-schema schema1 --include-table-file /tmp/file2", false),
+			Entry("--include-schema combos", "--timestamp=0 --include-schema schema1 --include-schema schema2", true),
+			Entry("--include-schema combos", "--timestamp=0 --include-schema schema1 --include-schema-file /tmp/file2", true), // TODO: Verify this.
 
 			// --include-schema-file combinations with other filters
-			Entry("--include-schema-file combos", "--include-schema-file /tmp/file --include-table schema.table2", true),   // TODO: Verify this.
-			Entry("--include-schema-file combos", "--include-schema-file /tmp/file --include-table-file /tmp/file2", true), // TODO: Verify this.
+			Entry("--include-schema-file combos", "--timestamp=0 --include-schema-file /tmp/file --include-table schema.table2", true),   // TODO: Verify this.
+			Entry("--include-schema-file combos", "--timestamp=0 --include-schema-file /tmp/file --include-table-file /tmp/file2", true), // TODO: Verify this.
 
 			// --include-table combinations with other filters
-			Entry("--include-table combos", "--include-table schema.table --include-table schema.table2", true),
-			Entry("--include-table combos", "--include-table schema.table --include-table-file /tmp/file2", false),
+			Entry("--include-table combos", "--timestamp=0 --include-table schema.table --include-table schema.table2", true),
+			Entry("--include-table combos", "--timestamp=0 --include-table schema.table --include-table-file /tmp/file2", false),
 
 			/*
 			 * Below are various different incremental combinations
 			 */
-			Entry("incremental combos", "--incremental", false),
-			Entry("incremental combos", "--incremental --data-only", true),
+			Entry("incremental combos", "--timestamp=0 --incremental", false),
+			Entry("incremental combos", "--timestamp=0 --incremental --data-only", true),
 
 			/*
 			 * Below are various different truncate combinations
 			 */
-			Entry("truncate combos", "--truncate-table", false),
-			Entry("truncate combos", "--truncate-table --include-table schema.table2", true),
-			Entry("truncate combos", "--truncate-table --include-table-file /tmp/file2", true),
-			Entry("truncate combos", "--truncate-table --include-table schema.table2 --redirect-db foodb", true),
-			Entry("truncate combos", "--truncate-table --include-table schema.table2 --redirect-schema schema2", false),
+			Entry("truncate combos", "--timestamp=0 --truncate-table", false),
+			Entry("truncate combos", "--timestamp=0 --truncate-table --include-table schema.table2", true),
+			Entry("truncate combos", "--timestamp=0 --truncate-table --include-table-file /tmp/file2", true),
+			Entry("truncate combos", "--timestamp=0 --truncate-table --include-table schema.table2 --redirect-db foodb", true),
+			Entry("truncate combos", "--timestamp=0 --truncate-table --include-table schema.table2 --redirect-schema schema2", false),
 
 			/*
 			 * Below are various different redirect-schema combinations
 			 */
-			Entry("--redirect-schema combos", "--redirect-schema schema1", false),
-			Entry("--redirect-schema combos", "--redirect-schema schema1 --include-table schema.table2", true),
-			Entry("--redirect-schema combos", "--redirect-schema schema1 --include-table-file /tmp/file2", true),
-			Entry("--redirect-schema combos", "--redirect-schema schema1 --include-schema schema2", true),
-			Entry("--redirect-schema combos", "--redirect-schema schema1 --include-schema-file /tmp/file2", true),
-			Entry("--redirect-schema combos", "--redirect-schema schema1 --exclude-table schema.table2", false),
-			Entry("--redirect-schema combos", "--redirect-schema schema1 --exclude-table-file /tmp/file2", false),
-			Entry("--redirect-schema combos", "--redirect-schema schema1 --exclude-schema schema2", false),
-			Entry("--redirect-schema combos", "--redirect-schema schema1 --exclude-schema-file /tmp/file2", false),
-			Entry("--redirect-schema combos", "--redirect-schema schema1 --include-table schema.table2 --metadata-only", true),
-			Entry("--redirect-schema combos", "--redirect-schema schema1 --include-table schema.table2 --data-only", true),
+			Entry("--redirect-schema combos", "--timestamp=0 --redirect-schema schema1", false),
+			Entry("--redirect-schema combos", "--timestamp=0 --redirect-schema schema1 --include-table schema.table2", true),
+			Entry("--redirect-schema combos", "--timestamp=0 --redirect-schema schema1 --include-table-file /tmp/file2", true),
+			Entry("--redirect-schema combos", "--timestamp=0 --redirect-schema schema1 --include-schema schema2", true),
+			Entry("--redirect-schema combos", "--timestamp=0 --redirect-schema schema1 --include-schema-file /tmp/file2", true),
+			Entry("--redirect-schema combos", "--timestamp=0 --redirect-schema schema1 --exclude-table schema.table2", false),
+			Entry("--redirect-schema combos", "--timestamp=0 --redirect-schema schema1 --exclude-table-file /tmp/file2", false),
+			Entry("--redirect-schema combos", "--timestamp=0 --redirect-schema schema1 --exclude-schema schema2", false),
+			Entry("--redirect-schema combos", "--timestamp=0 --redirect-schema schema1 --exclude-schema-file /tmp/file2", false),
+			Entry("--redirect-schema combos", "--timestamp=0 --redirect-schema schema1 --include-table schema.table2 --metadata-only", true),
+			Entry("--redirect-schema combos", "--timestamp=0 --redirect-schema schema1 --include-table schema.table2 --data-only", true),
 		)
 	})
 	Describe("ValidateBackupFlagCombinations", func() {

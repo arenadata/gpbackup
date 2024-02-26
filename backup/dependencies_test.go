@@ -31,7 +31,7 @@ var _ = Describe("backup/dependencies tests", func() {
 		It("returns the original slice if there are no dependencies among objects", func() {
 			relations := []backup.Sortable{relation1, relation2, relation3}
 
-			relations = backup.TopologicalSort(relations, depMap)
+			relations, _ = backup.TopologicalSort(relations, depMap)
 
 			Expect(relations[0].FQN()).To(Equal("public.relation1"))
 			Expect(relations[1].FQN()).To(Equal("public.relation2"))
@@ -41,7 +41,7 @@ var _ = Describe("backup/dependencies tests", func() {
 			depMap[backup.UniqueID{ClassID: backup.PG_CLASS_OID, Oid: 1}] = map[backup.UniqueID]bool{{ClassID: backup.PG_CLASS_OID, Oid: 3}: true}
 			relations := []backup.Sortable{relation1, relation2, relation3}
 
-			relations = backup.TopologicalSort(relations, depMap)
+			relations, _ = backup.TopologicalSort(relations, depMap)
 
 			Expect(relations[0].FQN()).To(Equal("public.relation2"))
 			Expect(relations[1].FQN()).To(Equal("public.relation3"))
@@ -52,7 +52,7 @@ var _ = Describe("backup/dependencies tests", func() {
 			depMap[backup.UniqueID{ClassID: backup.PG_CLASS_OID, Oid: 3}] = map[backup.UniqueID]bool{{ClassID: backup.PG_CLASS_OID, Oid: 2}: true}
 			relations := []backup.Sortable{relation1, relation2, relation3}
 
-			relations = backup.TopologicalSort(relations, depMap)
+			relations, _ = backup.TopologicalSort(relations, depMap)
 
 			Expect(relations[0].FQN()).To(Equal("public.relation2"))
 			Expect(relations[1].FQN()).To(Equal("public.relation1"))
@@ -62,7 +62,7 @@ var _ = Describe("backup/dependencies tests", func() {
 			depMap[backup.UniqueID{ClassID: backup.PG_CLASS_OID, Oid: 2}] = map[backup.UniqueID]bool{{ClassID: backup.PG_CLASS_OID, Oid: 1}: true, {ClassID: backup.PG_CLASS_OID, Oid: 1}: true}
 			relations := []backup.Sortable{relation1, relation2, relation3}
 
-			relations = backup.TopologicalSort(relations, depMap)
+			relations, _ = backup.TopologicalSort(relations, depMap)
 
 			Expect(relations[0].FQN()).To(Equal("public.relation1"))
 			Expect(relations[1].FQN()).To(Equal("public.relation3"))
@@ -86,7 +86,7 @@ var _ = Describe("backup/dependencies tests", func() {
 				testhelper.ExpectRegexp(logfile, "\tpublic.relation2 {ClassID:1259 Oid:2}")
 			}()
 			defer testhelper.ShouldPanicWithMessage("Dependency resolution failed; see log file gbytes.Buffer for details. This is a bug, please report.")
-			sortable = backup.TopologicalSort(sortable, depMap)
+			sortable, _ = backup.TopologicalSort(sortable, depMap)
 		})
 		It("aborts if dependencies are not met", func() {
 			depMap[backup.UniqueID{ClassID: backup.PG_CLASS_OID, Oid: 1}] = map[backup.UniqueID]bool{{ClassID: backup.PG_CLASS_OID, Oid: 2}: true}
@@ -94,7 +94,7 @@ var _ = Describe("backup/dependencies tests", func() {
 			sortable := []backup.Sortable{relation1, relation2}
 
 			defer testhelper.ShouldPanicWithMessage("Dependency resolution failed; see log file gbytes.Buffer for details. This is a bug, please report.")
-			sortable = backup.TopologicalSort(sortable, depMap)
+			sortable, _ = backup.TopologicalSort(sortable, depMap)
 		})
 	})
 	Describe("PrintDependentObjectStatements", func() {
@@ -239,6 +239,43 @@ CREATE TRUSTED PROTOCOL ext_protocol (readfunc = public.read_from_s3, writefunc 
 
 COMMENT ON PROTOCOL ext_protocol IS 'protocol';
 `, default_parallel))
+		})
+	})
+	Describe("MarkViewsDependingOnConstraints", func() {
+		It("marks views that depend on constraints", func() {
+			view1 := backup.View{Schema: "public", Name: "view1", Oid: 1}
+			view2 := backup.View{Schema: "public", Name: "view2", Oid: 2}
+			view3 := backup.View{Schema: "public", Name: "view3", Oid: 3}
+			sortableObjs := []backup.Sortable{view1, view2, view3}
+
+			depMap[backup.UniqueID{ClassID: backup.PG_CLASS_OID, Oid: 1}] = map[backup.UniqueID]bool{{ClassID: backup.PG_CONSTRAINT_OID, Oid: 4}: true}
+
+			resultViews := backup.MarkViewsDependingOnConstraints(sortableObjs, depMap)
+			Expect(resultViews).To(HaveLen(1))
+			Expect(resultViews[0].FQN()).To(Equal("public.view1"))
+		})
+		It("marks no views if none depend on constraints", func() {
+			view1 := backup.View{Schema: "public", Name: "view1", Oid: 1}
+			view2 := backup.View{Schema: "public", Name: "view2", Oid: 2}
+			view3 := backup.View{Schema: "public", Name: "view3", Oid: 3}
+			sortableObjs := []backup.Sortable{view1, view2, view3}
+
+			resultViews := backup.MarkViewsDependingOnConstraints(sortableObjs, depMap)
+			Expect(resultViews).To(HaveLen(0))
+
+		})
+		It("does not marks any object that is not a view", func() {
+			view1 := backup.View{Schema: "public", Name: "view1", Oid: 1}
+			view2 := backup.View{Schema: "public", Name: "view2", Oid: 2}
+			view3 := backup.View{Schema: "public", Name: "view3", Oid: 3}
+			relation1 := backup.Relation{Schema: "public", Name: "relation1", Oid: 4}
+			sortableObjs := []backup.Sortable{view1, view2, view3, relation1}
+
+			depMap[backup.UniqueID{ClassID: backup.PG_CLASS_OID, Oid: 1}] = map[backup.UniqueID]bool{{ClassID: backup.PG_CONSTRAINT_OID, Oid: 4}: true}
+
+			resultViews := backup.MarkViewsDependingOnConstraints(sortableObjs, depMap)
+			Expect(resultViews).To(HaveLen(1))
+			Expect(resultViews[0].FQN()).To(Equal("public.view1"))
 		})
 	})
 })

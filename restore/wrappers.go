@@ -129,9 +129,9 @@ SET default_with_oids = off;
 	// during COPY FROM SEGMENT. ANALYZE should be run separately.
 	setupQuery += "SET gp_autostats_mode = 'none';\n"
 
-    // GPDB7 removed support for QuickLZ.  To support creating tables
-    // from backups done with QuickLZ, a GUC was added to allow silent
-    // fallback to zstd 
+	// GPDB7 removed support for QuickLZ.  To support creating tables
+	// from backups done with QuickLZ, a GUC was added to allow silent
+	// fallback to zstd
 	if connectionPool.Version.AtLeast("7") {
 		setupQuery += "SET gp_quicklz_fallback = on;\n"
 	}
@@ -297,7 +297,7 @@ func GetRestoreMetadataStatementsFiltered(section string, filename string, inclu
 			inRelations = append(inRelations, toc.GetIncludedPartitionRoots(tocfile.DataEntries, inRelations)...)
 		}
 		// Update include schemas for schema restore if include table is set
-		if utils.Exists(includeObjectTypes, "SCHEMA") {
+		if utils.Exists(includeObjectTypes, toc.OBJ_SCHEMA) {
 			for _, inRelation := range inRelations {
 				schema := inRelation[:strings.Index(inRelation, ".")]
 				if !utils.Exists(inSchemas, schema) {
@@ -320,17 +320,16 @@ func ExecuteRestoreMetadataStatements(statements []toc.StatementWithType, object
 	} else {
 		numErrors = ExecuteStatements(statements, progressBar, executeInParallel)
 	}
-
 	return numErrors
 }
 
 func GetBackupFPInfoListFromRestorePlan() []filepath.FilePathInfo {
 	fpInfoList := make([]filepath.FilePathInfo, 0)
 	for _, entry := range backupConfig.RestorePlan {
-		segPrefix, err := filepath.ParseSegPrefix(MustGetFlagString(options.BACKUP_DIR))
+		segPrefix, singleBackupDir, err := filepath.ParseSegPrefix(MustGetFlagString(options.BACKUP_DIR), entry.Timestamp)
 		gplog.FatalOnError(err)
 
-		fpInfo := filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), entry.Timestamp, segPrefix)
+		fpInfo := filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), entry.Timestamp, segPrefix, singleBackupDir)
 		fpInfoList = append(fpInfoList, fpInfo)
 	}
 
@@ -338,9 +337,9 @@ func GetBackupFPInfoListFromRestorePlan() []filepath.FilePathInfo {
 }
 
 func GetBackupFPInfoForTimestamp(timestamp string) filepath.FilePathInfo {
-	segPrefix, err := filepath.ParseSegPrefix(MustGetFlagString(options.BACKUP_DIR))
+	segPrefix, singleBackupDir, err := filepath.ParseSegPrefix(MustGetFlagString(options.BACKUP_DIR), timestamp)
 	gplog.FatalOnError(err)
-	fpInfo := filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), timestamp, segPrefix)
+	fpInfo := filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), timestamp, segPrefix, singleBackupDir)
 	return fpInfo
 }
 
@@ -351,7 +350,7 @@ func GetBackupFPInfoForTimestamp(timestamp string) filepath.FilePathInfo {
  */
 func setGUCsForConnection(gucStatements []toc.StatementWithType, whichConn int) []toc.StatementWithType {
 	if gucStatements == nil {
-		objectTypes := []string{"SESSION GUCS"}
+		objectTypes := []string{toc.OBJ_SESSION_GUC}
 		gucStatements = GetRestoreMetadataStatements("global", globalFPInfo.GetMetadataFilePath(), objectTypes, []string{})
 	}
 	ExecuteStatementsAndCreateProgressBar(gucStatements, "", utils.PB_NONE, false, whichConn)

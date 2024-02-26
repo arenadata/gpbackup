@@ -36,6 +36,7 @@ type Function struct {
 	NumRows           float32 `db:"prorows"`
 	DataAccess        string  `db:"prodataaccess"`
 	Language          string
+	IsDependOnTables  bool   `db:"prodep"`
 	Kind              string `db:"prokind"`     // GPDB 7+
 	PlannerSupport    string `db:"prosupport"`  // GPDB 7+
 	IsWindow          bool   `db:"proiswindow"` // before 7
@@ -50,7 +51,7 @@ func (f Function) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          f.Schema,
 			Name:            nameWithArgs,
-			ObjectType:      "FUNCTION",
+			ObjectType:      toc.OBJ_FUNCTION,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -102,6 +103,12 @@ func GetFunctionsAllVersions(connectionPool *dbconn.DBConn) []Function {
 }
 
 func GetFunctions(connectionPool *dbconn.DBConn) []Function {
+	isDependOnTablesClause := `EXISTS (
+		SELECT c.oid
+		FROM pg_class c
+		JOIN pg_type t ON t.oid IN (SELECT unnest(p.proargtypes||p.prorettype))
+		WHERE c.relkind = 'r' AND c.reltype IN (t.oid, t.typelem)
+	) AS prodep`
 	excludeImplicitFunctionsClause := ""
 	if connectionPool.Version.AtLeast("6") {
 		// This excludes implicitly created functions. Currently this is only range type functions
@@ -140,14 +147,15 @@ func GetFunctions(connectionPool *dbconn.DBConn) []Function {
 			procost,
 			prorows,
 			prodataaccess,
-			l.lanname AS language
+			l.lanname AS language,
+			%s
 		FROM pg_proc p
 			JOIN pg_catalog.pg_language l ON p.prolang = l.oid
 			LEFT JOIN pg_namespace n ON p.pronamespace = n.oid
 		WHERE %s
 			AND proisagg = 'f'
 			AND %s%s
-		ORDER BY nspname, proname, identargs`, locationAtts,
+		ORDER BY nspname, proname, identargs`, locationAtts, isDependOnTablesClause,
 		SchemaFilterClause("n"),
 		ExtensionFilterClause("p"),
 		excludeImplicitFunctionsClause)
@@ -180,14 +188,15 @@ func GetFunctions(connectionPool *dbconn.DBConn) []Function {
                          on trf_unnest = typ.oid
 					left join pg_namespace nm
 						on typ.typnamespace = nm.oid
-                ), ', '), '') AS transformtypes
-		FROM pg_proc p
+                ), ', '), '') AS transformtypes,
+			%s
+				FROM pg_proc p
 			JOIN pg_catalog.pg_language l ON p.prolang = l.oid
 			LEFT JOIN pg_namespace n ON p.pronamespace = n.oid
 		WHERE %s
 			AND prokind <> 'a'
 			AND %s%s
-		ORDER BY nspname, proname, identargs`, locationAtts,
+		ORDER BY nspname, proname, identargs`, locationAtts, isDependOnTablesClause,
 		SchemaFilterClause("n"),
 		ExtensionFilterClause("p"),
 		excludeImplicitFunctionsClause)
@@ -448,7 +457,7 @@ func (a Aggregate) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          a.Schema,
 			Name:            aggWithArgs,
-			ObjectType:      "AGGREGATE",
+			ObjectType:      toc.OBJ_AGGREGATE,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -658,7 +667,7 @@ func (info FunctionInfo) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          info.Schema,
 			Name:            nameWithArgs,
-			ObjectType:      "FUNCTION",
+			ObjectType:      toc.OBJ_FUNCTION,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -734,7 +743,7 @@ func (c Cast) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          filterSchema,
 			Name:            castStr,
-			ObjectType:      "CAST",
+			ObjectType:      toc.OBJ_CAST,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -813,7 +822,7 @@ func (e Extension) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          "",
 			Name:            e.Name,
-			ObjectType:      "EXTENSION",
+			ObjectType:      toc.OBJ_EXTENSION,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -881,7 +890,7 @@ func (pl ProceduralLanguage) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          "",
 			Name:            pl.Name,
-			ObjectType:      "LANGUAGE",
+			ObjectType:      toc.OBJ_LANGUAGE,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -951,7 +960,7 @@ func (trf Transform) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          "",
 			Name:            "",
-			ObjectType:      "TRANSFORM",
+			ObjectType:      toc.OBJ_TRANSFORM,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -1000,7 +1009,7 @@ func (c Conversion) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          c.Schema,
 			Name:            c.Name,
-			ObjectType:      "CONVERSION",
+			ObjectType:      toc.OBJ_CONVERSION,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -1051,7 +1060,7 @@ func (fdw ForeignDataWrapper) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          "",
 			Name:            fdw.Name,
-			ObjectType:      "FOREIGN DATA WRAPPER",
+			ObjectType:      toc.OBJ_FOREIGN_DATA_WRAPPER,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -1098,7 +1107,7 @@ func (fs ForeignServer) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          "",
 			Name:            fs.Name,
-			ObjectType:      "FOREIGN SERVER",
+			ObjectType:      toc.OBJ_FOREIGN_SERVER,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -1145,7 +1154,7 @@ func (um UserMapping) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          "",
 			Name:            um.FQN(),
-			ObjectType:      "USER MAPPING",
+			ObjectType:      toc.OBJ_USER_MAPPING,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -1194,7 +1203,7 @@ func (se StatisticExt) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          se.Namespace,
 			Name:            se.Name,
-			ObjectType:      "STATISTICS",
+			ObjectType:      toc.OBJ_STATISTICS,
 			ReferenceObject: utils.MakeFQN(se.TableSchema, se.TableName),
 			StartByte:       0,
 			EndByte:         0,

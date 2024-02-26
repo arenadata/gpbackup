@@ -9,6 +9,7 @@ import (
 	"github.com/greenplum-db/gp-common-go-libs/testhelper"
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/testutils"
+	"github.com/greenplum-db/gpbackup/toc"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -101,7 +102,7 @@ var _ = Describe("backup integration create statement tests", func() {
 			rowTwo := backup.ColumnDefinition{Oid: 0, Num: 2, Name: "j", NotNull: false, HasDefault: false, Type: "character varying(20)", Encoding: "compresstype=zlib,blocksize=32768,compresslevel=1", StatTarget: -1, StorageType: "", DefaultVal: "", Comment: ""}
 			testTable.StorageOpts = "appendonly=true, orientation=column, fillfactor=42, compresstype=zlib, blocksize=32768, compresslevel=1"
 			if connectionPool.Version.AtLeast("7") {
-				// Apparently, fillfactor is not backwards compatible with GPDB 7
+				// In GPDB7+, fillfactor cannot be set on an appendonly table
 				testTable.StorageOpts = "appendonly=true, orientation=column, compresstype=zlib, blocksize=32768, compresslevel=1"
 			}
 			testTable.ColumnDefs = []backup.ColumnDefinition{rowOne, rowTwo}
@@ -111,6 +112,11 @@ var _ = Describe("backup integration create statement tests", func() {
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 			testTable.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			resultTable := backup.ConstructDefinitionsForTables(connectionPool, []backup.Relation{testTable.Relation})[0]
+
+			// We remove fillfactor from the storage options of appendonly tables, as it has always
+			// been a no-op and is now incompatible with GPDB7+.
+			testTable.StorageOpts = "appendonly=true, orientation=column, compresstype=zlib, blocksize=32768, compresslevel=1"
+
 			if connectionPool.Version.AtLeast("7") {
 				// For GPDB 7+, the storage options no longer store the appendonly and orientation field
 				testTable.TableDefinition.StorageOpts = "compresstype=zlib, blocksize=32768, compresslevel=1, checksum=true"
@@ -147,6 +153,7 @@ var _ = Describe("backup integration create statement tests", func() {
 
 			testTable.ColumnDefs = []backup.ColumnDefinition{rowOne, rowTwo}
 			testTable.PartitionLevelInfo.Level = "p"
+			testTable.PartitionLevelInfo.Name = "testtable"
 
 			backup.PrintRegularTableCreateStatement(backupfile, tocfile, testTable)
 
@@ -239,6 +246,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			rowTwo := backup.ColumnDefinition{Oid: 0, Num: 2, Name: "gender", NotNull: false, HasDefault: false, Type: "text", Encoding: "", StatTarget: -1, StorageType: "", DefaultVal: "", Comment: ""}
 			testTable.ColumnDefs = []backup.ColumnDefinition{rowOne, rowTwo}
 			testTable.PartitionLevelInfo.Level = "p"
+			testTable.PartitionLevelInfo.Name = "testtable"
 
 			backup.PrintRegularTableCreateStatement(backupfile, tocfile, testTable)
 
@@ -257,6 +265,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			rowTwo := backup.ColumnDefinition{Oid: 0, Num: 2, Name: "b", NotNull: false, HasDefault: false, Type: "integer", Encoding: "", StatTarget: -1, StorageType: "", DefaultVal: "", Comment: ""}
 			testTable.ColumnDefs = []backup.ColumnDefinition{rowOne, rowTwo}
 			testTable.PartitionLevelInfo.Level = "p"
+			testTable.PartitionLevelInfo.Name = "testtable"
 
 			backup.PrintRegularTableCreateStatement(backupfile, tocfile, testTable)
 
@@ -347,8 +356,8 @@ SET SUBPARTITION TEMPLATE ` + `
 			testTable.ForeignDef = backup.ForeignTableDefinition{Oid: 0, Options: "", Server: "sc"}
 			backup.PrintRegularTableCreateStatement(backupfile, tocfile, testTable)
 
-			metadata := testutils.DefaultMetadata("TABLE", true, true, true, true)
-			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, metadata)
+			metadata := testutils.DefaultMetadata(toc.OBJ_TABLE, true, true, true, true)
+			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, metadata, []uint32{0, 0})
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 			defer testhelper.AssertQueryRuns(connectionPool, "DROP FOREIGN TABLE public.testtable")
@@ -368,7 +377,7 @@ SET SUBPARTITION TEMPLATE ` + `
 		)
 		BeforeEach(func() {
 			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.testtable(i int)")
-			tableMetadata = backup.ObjectMetadata{Privileges: []backup.ACL{}, ObjectType: "RELATION"}
+			tableMetadata = backup.ObjectMetadata{Privileges: []backup.ACL{}, ObjectType: toc.OBJ_RELATION}
 			testTable = backup.Table{
 				Relation:        backup.Relation{Schema: "public", Name: "testtable"},
 				TableDefinition: backup.TableDefinition{DistPolicy: "DISTRIBUTED BY (i)", ColumnDefs: []backup.ColumnDefinition{tableRow}, ExtTableDef: extTableEmpty, Inherits: []string{}},
@@ -382,7 +391,7 @@ SET SUBPARTITION TEMPLATE ` + `
 		})
 		It("prints only owner for a table with no comment or column comments", func() {
 			tableMetadata.Owner = "testrole"
-			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata)
+			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata, []uint32{0, 0})
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 			testTableUniqueID := testutils.UniqueIDFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
@@ -396,9 +405,9 @@ SET SUBPARTITION TEMPLATE ` + `
 			structmatcher.ExpectStructsToMatchExcluding(&testTable.TableDefinition, &resultTable.TableDefinition, "ColumnDefs.Oid", "ColumnDefs.ACL", "ExtTableDef")
 		})
 		It("prints table comment, table privileges, table owner, table security label, and column comments for a table", func() {
-			tableMetadata = testutils.DefaultMetadata("TABLE", true, true, true, includeSecurityLabels)
+			tableMetadata = testutils.DefaultMetadata(toc.OBJ_TABLE, true, true, true, includeSecurityLabels)
 			testTable.ColumnDefs[0].Comment = "This is a column comment."
-			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata)
+			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata, []uint32{0, 0})
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
@@ -416,7 +425,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			privilegesColumnOne := backup.ColumnDefinition{Oid: 0, Num: 1, Name: "i", Type: "integer", StatTarget: -1, Privileges: sql.NullString{String: "testrole=r/testrole", Valid: true}}
 			tableMetadata.Owner = "testrole"
 			testTable.ColumnDefs = []backup.ColumnDefinition{privilegesColumnOne}
-			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata)
+			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata, []uint32{0, 0})
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
@@ -429,7 +438,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			testutils.SkipIfBefore6(connectionPool)
 			securityLabelColumnOne := backup.ColumnDefinition{Oid: 0, Num: 1, Name: "i", Type: "integer", StatTarget: -1, SecurityLabelProvider: "dummy", SecurityLabel: "unclassified"}
 			testTable.ColumnDefs = []backup.ColumnDefinition{securityLabelColumnOne}
-			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata)
+			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata, []uint32{0, 0})
 
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
@@ -442,7 +451,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			testutils.SkipIfBefore6(connectionPool)
 
 			testTable.ReplicaIdentity = "f"
-			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata)
+			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata, []uint32{0, 0})
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 			testTable.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			resultTable := backup.ConstructDefinitionsForTables(connectionPool, []backup.Relation{testTable.Relation})[0]
@@ -454,7 +463,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			defer testhelper.AssertQueryRuns(connectionPool, "DROP TABLE public.testroottable;")
 			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.testchildtable(i int) DISTRIBUTED BY (i);")
 			defer testhelper.AssertQueryRuns(connectionPool, "DROP TABLE public.testchildtable;")
-			tableMetadata = backup.ObjectMetadata{Privileges: []backup.ACL{}, ObjectType: "RELATION"}
+			tableMetadata = backup.ObjectMetadata{Privileges: []backup.ACL{}, ObjectType: toc.OBJ_RELATION}
 			testChildTable := backup.Table{
 				Relation: backup.Relation{Schema: "public", Name: "testChildTable"},
 				TableDefinition: backup.TableDefinition{
@@ -470,7 +479,7 @@ SET SUBPARTITION TEMPLATE ` + `
 				},
 			}
 
-			backup.PrintPostCreateTableStatements(backupfile, tocfile, testChildTable, tableMetadata)
+			backup.PrintPostCreateTableStatements(backupfile, tocfile, testChildTable, tableMetadata, []uint32{0, 0})
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
 			attachPartitionInfoMap := backup.GetAttachPartitionInfo(connectionPool)
@@ -482,7 +491,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			testutils.SkipIfBefore7(connectionPool)
 
 			testTable.ForceRowSecurity = true
-			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata)
+			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata, []uint32{0, 0})
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 			testTable.Oid = testutils.OidFromObjectName(connectionPool, "public", "testtable", backup.TYPE_RELATION)
 			resultTable := backup.ConstructDefinitionsForTables(connectionPool, []backup.Relation{testTable.Relation})[0]
@@ -502,7 +511,7 @@ SET SUBPARTITION TEMPLATE ` + `
 		})
 		It("creates a view with privileges, owner, security label, and comment", func() {
 			view := backup.View{Oid: 1, Schema: "public", Name: "simpleview", Definition: viewDef}
-			viewMetadata := testutils.DefaultMetadata("VIEW", true, true, true, includeSecurityLabels)
+			viewMetadata := testutils.DefaultMetadata(toc.OBJ_VIEW, true, true, true, includeSecurityLabels)
 
 			backup.PrintCreateViewStatement(backupfile, tocfile, view, viewMetadata)
 
@@ -515,7 +524,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			view.Oid = testutils.OidFromObjectName(connectionPool, "public", "simpleview", backup.TYPE_RELATION)
 			Expect(resultViews).To(HaveLen(1))
 			resultMetadata := resultMetadataMap[view.GetUniqueID()]
-			structmatcher.ExpectStructsToMatch(&view, &resultViews[0])
+			structmatcher.ExpectStructsToMatchExcluding(&view, &resultViews[0], "ColumnDefs")
 			structmatcher.ExpectStructsToMatch(&viewMetadata, &resultMetadata)
 		})
 		It("creates a view with options", func() {
@@ -531,7 +540,7 @@ SET SUBPARTITION TEMPLATE ` + `
 
 			view.Oid = testutils.OidFromObjectName(connectionPool, "public", "simpleview", backup.TYPE_RELATION)
 			Expect(resultViews).To(HaveLen(1))
-			structmatcher.ExpectStructsToMatch(&view, &resultViews[0])
+			structmatcher.ExpectStructsToMatchExcluding(&view, &resultViews[0], "ColumnDefs")
 		})
 	})
 	Describe("PrintMaterializedCreateViewStatements", func() {
@@ -542,7 +551,7 @@ SET SUBPARTITION TEMPLATE ` + `
 		})
 		It("creates a view with privileges, owner, security label, and comment", func() {
 			view := backup.View{Oid: 1, Schema: "public", Name: "simplemview", Definition: sql.NullString{String: " SELECT 1 AS a;", Valid: true}, IsMaterialized: true, DistPolicy: "DISTRIBUTED BY (a)"}
-			viewMetadata := testutils.DefaultMetadata("MATERIALIZED VIEW", true, true, true, includeSecurityLabels)
+			viewMetadata := testutils.DefaultMetadata(toc.OBJ_MATERIALIZED_VIEW, true, true, true, includeSecurityLabels)
 
 			backup.PrintCreateViewStatement(backupfile, tocfile, view, viewMetadata)
 
@@ -555,7 +564,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			view.Oid = testutils.OidFromObjectName(connectionPool, "public", "simplemview", backup.TYPE_RELATION)
 			Expect(resultViews).To(HaveLen(1))
 			resultMetadata := resultMetadataMap[view.GetUniqueID()]
-			structmatcher.ExpectStructsToMatch(&view, &resultViews[0])
+			structmatcher.ExpectStructsToMatchExcluding(&view, &resultViews[0], "ColumnDefs")
 			structmatcher.ExpectStructsToMatch(&viewMetadata, &resultMetadata)
 		})
 		It("creates a materialized view with options", func() {
@@ -570,7 +579,7 @@ SET SUBPARTITION TEMPLATE ` + `
 
 			view.Oid = testutils.OidFromObjectName(connectionPool, "public", "simplemview", backup.TYPE_RELATION)
 			Expect(resultViews).To(HaveLen(1))
-			structmatcher.ExpectStructsToMatch(&view, &resultViews[0])
+			structmatcher.ExpectStructsToMatchExcluding(&view, &resultViews[0], "ColumnDefs")
 		})
 	})
 	Describe("PrintCreateSequenceStatements", func() {
@@ -630,7 +639,7 @@ SET SUBPARTITION TEMPLATE ` + `
 				startValue = 1
 			}
 			sequence.Definition = backup.SequenceDefinition{LastVal: 1, Type: dataType, Increment: 1, MaxVal: math.MaxInt64, MinVal: 1, CacheVal: 1, StartVal: startValue}
-			sequenceMetadata := testutils.DefaultMetadata("SEQUENCE", true, true, true, includeSecurityLabels)
+			sequenceMetadata := testutils.DefaultMetadata(toc.OBJ_SEQUENCE, true, true, true, includeSecurityLabels)
 			sequenceMetadataMap[backup.UniqueID{ClassID: backup.PG_CLASS_OID, Oid: 1}] = sequenceMetadata
 			backup.PrintCreateSequenceStatements(backupfile, tocfile, []backup.Sequence{sequence}, sequenceMetadataMap)
 

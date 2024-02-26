@@ -8,6 +8,7 @@ package backup
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
@@ -24,70 +25,27 @@ func relationAndSchemaFilterClause() string {
 	}
 	filterRelationClause = SchemaFilterClause("n")
 	if len(MustGetFlagStringArray(options.EXCLUDE_RELATION)) > 0 {
-		quotedExcludeRelations, err := options.QuoteTableNames(connectionPool, MustGetFlagStringArray(options.EXCLUDE_RELATION))
-		gplog.FatalOnError(err)
-
-		excludeOids := getExcludedRelationOidsList(connectionPool, quotedExcludeRelations)
+		excludeOids := GetOidsFromRelationList(ExcludedRelationFqns)
 		if len(excludeOids) > 0 {
-			filterRelationClause += fmt.Sprintf("\nAND c.oid NOT IN (%s)", strings.Join(excludeOids, ", "))
+			filterRelationClause += fmt.Sprintf("\nAND c.oid NOT IN (%s)", strings.Join(excludeOids, ","))
 		}
 	}
 	if len(MustGetFlagStringArray(options.INCLUDE_RELATION)) > 0 {
-		quotedIncludeRelations, err := options.QuoteTableNames(connectionPool, MustGetFlagStringArray(options.INCLUDE_RELATION))
-		gplog.FatalOnError(err)
-
-		includeOids := getOidsFromRelationList(connectionPool, quotedIncludeRelations)
-		filterRelationClause += fmt.Sprintf("\nAND c.oid IN (%s)", strings.Join(includeOids, ", "))
+		includeOids := GetOidsFromRelationList(IncludedRelationFqns)
+		filterRelationClause += fmt.Sprintf("\nAND c.oid IN (%s)", strings.Join(includeOids, ","))
 	}
 	return filterRelationClause
 }
 
-func getExcludedRelationOidsList(connectionPool *dbconn.DBConn, quotedIncludeRelations []string) []string {
-	relList := utils.SliceToQuotedString(quotedIncludeRelations)
-
-	query := ""
-	if connectionPool.Version.Before("6") {
-		query = fmt.Sprintf(`
-		WITH root_oids AS (
-			SELECT c.oid AS string
-			FROM pg_class c
-				JOIN pg_namespace n ON c.relnamespace = n.oid
-				WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
-		)
-		SELECT string FROM root_oids
-		UNION
-		SELECT r.parchildrelid AS string
-		FROM pg_partition p JOIN pg_partition_rule r ON p.oid = r.paroid
-			JOIN root_oids oids ON p.parrelid = oids.string WHERE r.parchildrelid IS NOT NULL
-		`, relList)
-	} else {
-		query = fmt.Sprintf(`
-		WITH recursive cte AS (
-			SELECT c.oid AS string
-			FROM pg_class c
-				JOIN pg_namespace n ON c.relnamespace = n.oid
-			WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
-			UNION ALL
-			SELECT inhrelid AS strings
-			FROM cte
-				LEFT JOIN pg_inherits ON inhparent = string
-			WHERE inhrelid IS NOT NULL
-		) SELECT * FROM cte`, relList)
+func GetOidsFromRelationList(relationFqns []options.Relation) []string {
+	oidString := make([]string, len(relationFqns))
+	for idx, rel := range relationFqns {
+		oidString[idx] = strconv.FormatUint(uint64(rel.Oid), 10)
 	}
-	return dbconn.MustSelectStringSlice(connectionPool, query)
+	return oidString
 }
 
-func getOidsFromRelationList(connectionPool *dbconn.DBConn, quotedIncludeRelations []string) []string {
-	relList := utils.SliceToQuotedString(quotedIncludeRelations)
-	query := fmt.Sprintf(`
-	SELECT c.oid AS string
-	FROM pg_class c
-		JOIN pg_namespace n ON c.relnamespace = n.oid
-	WHERE quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)`, relList)
-	return dbconn.MustSelectStringSlice(connectionPool, query)
-}
-
-func GetIncludedUserTableRelations(connectionPool *dbconn.DBConn, includedRelationsQuoted []string) []Relation {
+func GetIncludedUserTableRelations(connectionPool *dbconn.DBConn, includedRelationsQuoted []options.Relation) []options.Relation {
 	if len(MustGetFlagStringArray(options.INCLUDE_RELATION)) > 0 {
 		return getUserTableRelationsWithIncludeFiltering(connectionPool, includedRelationsQuoted)
 	}
@@ -110,10 +68,31 @@ func (r Relation) GetUniqueID() UniqueID {
 }
 
 /*
+ * Due to the structure of our codebase, we have two identical versions of the Relation struct.
+ * Convert explicitly to keep the compiler happy.
+ *
+ * TODO -- find a way to remove this and just have one version of this struct.
+ */
+func ConvertRelationsOptionsToBackup(inRelations []options.Relation) []Relation {
+	outRelations := make([]Relation, len(inRelations))
+
+	for idx, inRel := range inRelations {
+		outRel := Relation{
+			SchemaOid: inRel.SchemaOid,
+			Oid:       inRel.Oid,
+			Schema:    inRel.Schema,
+			Name:      inRel.Name,
+		}
+		outRelations[idx] = outRel
+	}
+	return outRelations
+}
+
+/*
  * This function also handles exclude table filtering since the way we do
  * it is currently much simpler than the include case.
  */
-func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
+func getUserTableRelations(connectionPool *dbconn.DBConn) []options.Relation {
 	childPartitionFilter := ""
 	if !MustGetFlagBool(options.LEAF_PARTITION_DATA) && connectionPool.Version.Before("7") {
 		// Filter out non-external child partitions in GPDB6 and earlier.
@@ -167,14 +146,14 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []Relation {
 	ORDER BY pages DESC, oid`, prt,
 		relationAndSchemaFilterClause(), childPartitionFilter, relkindFilter, ExtensionFilterClause("c"))
 
-	results := make([]Relation, 0)
+	results := make([]options.Relation, 0)
 	err := connectionPool.Select(&results, query)
 	gplog.FatalOnError(err)
 
 	return results
 }
 
-func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, includedRelationsQuoted []string) []Relation {
+func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, includeRelationFqns []options.Relation) []options.Relation {
 	prt := `LEFT JOIN (
 		SELECT
 			p.parrelid,
@@ -198,7 +177,7 @@ func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, in
 		) AS prt ON prt.oid = c.oid`
 	}
 
-	includeOids := getOidsFromRelationList(connectionPool, includedRelationsQuoted)
+	includeOids := GetOidsFromRelationList(includeRelationFqns)
 	oidStr := strings.Join(includeOids, ", ")
 	query := fmt.Sprintf(`
 	SELECT schemaoid, oid, schema, name FROM (
@@ -215,7 +194,7 @@ func getUserTableRelationsWithIncludeFiltering(connectionPool *dbconn.DBConn, in
 	) res
 	ORDER BY pages DESC, oid`, prt, oidStr, relkindFilter)
 
-	results := make([]Relation, 0)
+	results := make([]options.Relation, 0)
 	err := connectionPool.Select(&results, query)
 	gplog.FatalOnError(err)
 	return results
@@ -258,7 +237,7 @@ func (s Sequence) GetMetadataEntry() (string, toc.MetadataEntry) {
 		toc.MetadataEntry{
 			Schema:          s.Schema,
 			Name:            s.Name,
-			ObjectType:      "SEQUENCE",
+			ObjectType:      toc.OBJ_SEQUENCE,
 			ReferenceObject: "",
 			StartByte:       0,
 			EndByte:         0,
@@ -342,8 +321,7 @@ func GetAllSequences(connectionPool *dbconn.DBConn) []Sequence {
 	// where owning table is excluded from backup
 	excludeOids := make([]string, 0)
 	if len(MustGetFlagStringArray(options.EXCLUDE_RELATION)) > 0 {
-		excludeOids = getOidsFromRelationList(connectionPool,
-			MustGetFlagStringArray(options.EXCLUDE_RELATION))
+		excludeOids = GetOidsFromRelationList(ExcludedRelationFqns)
 	}
 	for i := range results {
 		found := utils.Exists(excludeOids, results[i].OwningTableOid)
@@ -416,6 +394,8 @@ type View struct {
 	Tablespace     string
 	IsMaterialized bool
 	DistPolicy     string
+	NeedsDummy     bool
+	ColumnDefs     []ColumnDefinition
 }
 
 func (v View) GetMetadataEntry() (string, toc.MetadataEntry) {
@@ -440,13 +420,14 @@ func (v View) FQN() string {
 
 func (v View) ObjectType() string {
 	if v.IsMaterialized {
-		return "MATERIALIZED VIEW"
+		return toc.OBJ_MATERIALIZED_VIEW
 	}
-	return "VIEW"
+	return toc.OBJ_VIEW
 }
 
 // This function retrieves both regular views and materialized views.
 func GetAllViews(connectionPool *dbconn.DBConn) []View {
+	columnDefs := GetColumnDefinitions(connectionPool)
 
 	// When querying the view definition using pg_get_viewdef(), the pg function
 	// obtains dependency locks that are not released until the transaction is
@@ -525,8 +506,8 @@ func GetAllViews(connectionPool *dbconn.DBConn) []View {
 		if result.IsMaterialized {
 			result.DistPolicy = distPolicies[result.Oid]
 		}
+		result.ColumnDefs = columnDefs[result.Oid]
 		verifiedResults = append(verifiedResults, result)
-
 	}
 
 	return verifiedResults

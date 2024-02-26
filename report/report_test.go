@@ -498,7 +498,7 @@ Timestamp Key: 20170101010101`)
 		BeforeEach(func() {
 			r, w, _ = os.Pipe()
 			testCluster = testutils.SetDefaultSegmentConfiguration()
-			testFPInfo = filepath.NewFilePathInfo(testCluster, "", "20170101010101", "gpseg")
+			testFPInfo = filepath.NewFilePathInfo(testCluster, "", "20170101010101", "gpseg", false)
 			operating.System.OpenFileRead = func(name string, flag int, perm os.FileMode) (operating.ReadCloserAt, error) { return r, nil }
 			operating.System.ReadFile = func(filename string) ([]byte, error) { return ioutil.ReadAll(r) }
 			operating.System.Hostname = func() (string, error) { return "localhost", nil }
@@ -557,9 +557,9 @@ Timestamp Key: 20170101010101`)
 				_, _ = w.Write(reportFileContents)
 				_ = w.Close()
 
-				message := report.ConstructEmailMessage(testFPInfo.Timestamp, contactsList, "report_file", "gpbackup", true)
+				message := report.ConstructEmailMessage(testFPInfo.Timestamp, contactsList, "report_file", "gpbackup", true, "testdb")
 				expectedMessage := `To: contact1@example.com contact2@example.org
-Subject: gpbackup 20170101010101 on localhost completed: Success
+Subject: gpbackup 20170101010101 of database testdb on localhost completed: Success
 Content-Type: text/html
 Content-Disposition: inline
 <html>
@@ -579,9 +579,9 @@ Timestamp Key: 20170101010101
 				_, _ = w.Write(reportFileContents)
 				_ = w.Close()
 
-				message := report.ConstructEmailMessage(testFPInfo.Timestamp, contactsList, "report_file", "gpbackup", false)
+				message := report.ConstructEmailMessage(testFPInfo.Timestamp, contactsList, "report_file", "gpbackup", false, "testdb")
 				expectedMessage := `To: contact1@example.com contact2@example.org
-Subject: gpbackup 20170101010101 on localhost completed: Failure
+Subject: gpbackup 20170101010101 of database testdb on localhost completed: Failure
 Content-Type: text/html
 Content-Disposition: inline
 <html>
@@ -601,7 +601,7 @@ Timestamp Key: 20170101010101
 				expectedHomeCmd   = "test -f home/gp_email_contacts.yaml"
 				expectedGpHomeCmd = "test -f gphome/bin/gp_email_contacts.yaml"
 				expectedMessage   = `echo "To: contact1@example.com
-Subject: gpbackup 20170101010101 on localhost completed: Success
+Subject: gpbackup 20170101010101 of database testdb on localhost completed: Success
 Content-Type: text/html
 Content-Disposition: inline
 <html>
@@ -618,7 +618,7 @@ Content-Disposition: inline
 
 				testExecutor.LocalError = errors.Errorf("exit status 2")
 
-				report.EmailReport(testCluster, testFPInfo.Timestamp, "report_file", "gpbackup", true)
+				report.EmailReport(testCluster, testFPInfo.Timestamp, "report_file", "gpbackup", true, "testdb")
 				Expect(testExecutor.NumExecutions).To(Equal(2))
 				Expect(testExecutor.LocalCommands).To(Equal([]string{expectedHomeCmd, expectedGpHomeCmd}))
 				Expect(stdout).To(Say("Found neither gphome/bin/gp_email_contacts.yaml nor home/gp_email_contacts.yaml"))
@@ -630,7 +630,7 @@ Content-Disposition: inline
 				testExecutor.ErrorOnExecNum = 2 // Shouldn't hit this case, as it shouldn't be executed a second time
 				testExecutor.LocalError = errors.Errorf("exit status 2")
 
-				report.EmailReport(testCluster, testFPInfo.Timestamp, "report_file", "gpbackup", true)
+				report.EmailReport(testCluster, testFPInfo.Timestamp, "report_file", "gpbackup", true, "testdb")
 				Expect(testExecutor.NumExecutions).To(Equal(2))
 				Expect(testExecutor.LocalCommands).To(Equal([]string{expectedHomeCmd, expectedMessage}))
 				Expect(logfile).To(Say("Sending email report to the following addresses: contact1@example.com"))
@@ -642,7 +642,7 @@ Content-Disposition: inline
 				testExecutor.ErrorOnExecNum = 1
 				testExecutor.LocalError = errors.Errorf("exit status 2")
 
-				report.EmailReport(testCluster, testFPInfo.Timestamp, "report_file", "gpbackup", true)
+				report.EmailReport(testCluster, testFPInfo.Timestamp, "report_file", "gpbackup", true, "testdb")
 				Expect(testExecutor.NumExecutions).To(Equal(3))
 				Expect(testExecutor.LocalCommands).To(Equal([]string{expectedHomeCmd, expectedGpHomeCmd, expectedMessage}))
 				Expect(logfile).To(Say("Sending email report to the following addresses: contact1@example.com"))
@@ -651,7 +651,7 @@ Content-Disposition: inline
 				_, _ = w.Write(contactsFileContents)
 				_ = w.Close()
 
-				report.EmailReport(testCluster, testFPInfo.Timestamp, "report_file", "gpbackup", true)
+				report.EmailReport(testCluster, testFPInfo.Timestamp, "report_file", "gpbackup", true, "testdb")
 				Expect(testExecutor.NumExecutions).To(Equal(2))
 				Expect(testExecutor.LocalCommands).To(Equal([]string{expectedHomeCmd, expectedMessage}))
 				Expect(logfile).To(Say("Sending email report to the following addresses: contact1@example.com"))
