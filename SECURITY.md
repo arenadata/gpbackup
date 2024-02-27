@@ -1,5 +1,5 @@
 # Security Release Process
-
+ 
 Greenplum Database has adopted this security disclosure and response policy to
 ensure we responsibly handle critical issues.
 
