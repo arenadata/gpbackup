@@ -60,7 +60,7 @@ var _ = Describe("backup/history tests", func() {
 	Describe("CurrentTimestamp", func() {
 		It("returns the current timestamp", func() {
 			operating.System.Now = func() time.Time { return time.Date(2017, time.January, 1, 1, 1, 1, 1, time.Local) }
-			expected := "20170101010101"
+			expected := "20170101010102"
 			actual := history.CurrentTimestamp()
 			Expect(actual).To(Equal(expected))
 		})
