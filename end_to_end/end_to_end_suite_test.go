@@ -2258,14 +2258,14 @@ LANGUAGE plpgsql NO SQL;`)
 			command := exec.Command("tar", "-xzf", "resources/4-segment-db-error.tar.gz", "-C", backupDir)
 			mustRunCommand(command)
 			gprestoreCmd := exec.Command(gprestorePath,
-				"--timestamp", "20240226140135",
+				"--timestamp", "20240301124333",
 				"--redirect-db", "restoredb",
 				"--backup-dir", path.Join(backupDir, "4-segment-db-error"),
 				"--resize-cluster")
 			output, err := gprestoreCmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())
-			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.test: COPY test, line 8193, column test: "32768": ERROR: value "32768" is out of range for type smallint`))
-			assertArtifactsCleaned(restoreConn, "20240226140135")
+			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.test: COPY test, line 1, column test: "32768": ERROR: value "32768" is out of range for type smallint`))
+			assertArtifactsCleaned(restoreConn, "20240301124333")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE test;")
 		})
 	})
