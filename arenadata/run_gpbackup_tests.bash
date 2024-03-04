@@ -2,10 +2,19 @@
 
 set -eox pipefail
 
+# 7x has additional tests with de_DE locale. Install the missing.
+# 6x has no such package and following commands are excessive, but it's not an error.
+yum install -y glibc-locale-source || true
+localedef -i de_DE -f UTF-8 de_DE
+
 source gpdb_src/concourse/scripts/common.bash
 install_and_configure_gpdb
 make -C gpdb_src/src/test/regress/
-make -C gpdb_src/contrib/dummy_seclabel/ install
+# dummy_seclabel has different installation path for 6x and 7x. Try both.
+if ! make -C gpdb_src/contrib/dummy_seclabel/ install
+then
+	make -C gpdb_src/src/test/modules/dummy_seclabel/ install
+fi
 gpdb_src/concourse/scripts/setup_gpadmin_user.bash
 make_cluster
 
