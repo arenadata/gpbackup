@@ -2417,6 +2417,20 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(string(output)).To(ContainSubstring("Encountered 1 error(s) during table data restore"))
 			Expect(string(output)).To(ContainSubstring("Data restore completed with failures"))
 		})
+		It("Will clean up segments helper processes after error during restore", func() {
+			command := exec.Command("tar", "-xzf", "resources/4-segment-db-error.tar.gz", "-C", backupDir)
+			mustRunCommand(command)
+			gprestoreCmd := exec.Command(gprestorePath,
+				"--timestamp", "20240301124333",
+				"--redirect-db", "restoredb",
+				"--backup-dir", path.Join(backupDir, "4-segment-db-error"),
+				"--resize-cluster")
+			output, err := gprestoreCmd.CombinedOutput()
+			Expect(err).To(HaveOccurred())
+			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.test: COPY test, line 1, column test: "32768": ERROR: value "32768" is out of range for type smallint`))
+			assertArtifactsCleaned("20240301124333")
+			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE test;")
+		})
 	})
 	Describe("Restore indexes and constraints on exchanged partition tables", func() {
 		BeforeEach(func() {
