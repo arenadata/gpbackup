@@ -6,14 +6,17 @@ package utils
  */
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
 	path "path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
@@ -278,4 +281,24 @@ func GetFileHash(filename string) ([32]byte, error) {
 		return [32]byte{}, err
 	}
 	return filehash, nil
+}
+
+func NewWriter(w io.Writer, name string) (error, *bufio.Writer) {
+	stat := syscall.Statfs_t{}
+	err := syscall.Statfs(name, &stat)
+	if err != nil {
+		gplog.Warn("Unable to stat file %s", name)
+		return err, nil
+	}
+	return nil, bufio.NewWriterSize(w, int(stat.Bsize))
+}
+
+func NewReader(r io.Reader, name string) (error, *bufio.Reader) {
+	stat := syscall.Statfs_t{}
+	err := syscall.Statfs(name, &stat)
+	if err != nil {
+		gplog.Warn("Unable to stat file %s", name)
+		return err, nil
+	}
+	return nil, bufio.NewReaderSize(r, int(stat.Bsize))
 }

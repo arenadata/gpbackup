@@ -1,11 +1,11 @@
 package helper
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/greenplum-db/gpbackup/toc"
@@ -120,16 +120,19 @@ func getBackupPipeReader(currentPipe string) (io.Reader, io.ReadCloser, error) {
 	// This is a workaround for https://github.com/golang/go/issues/24164.
 	// Once this bug is fixed, the call to Fd() can be removed
 	readHandle.Fd()
-	reader := bufio.NewReaderSize(readHandle, 65536)
-	return reader, readHandle, nil
+	err, reader := utils.NewReader(readHandle, readHandle.Name())
+	return reader, readHandle, err
 }
 
 func getBackupPipeWriter() (pipe BackupPipeWriterCloser, writeCmd *exec.Cmd, err error) {
 	var writeHandle io.WriteCloser
+	var name string
 	if *pluginConfigFile != "" {
 		writeCmd, writeHandle, err = startBackupPluginCommand()
+		name = filepath.Dir(*dataFile)
 	} else {
 		writeHandle, err = os.Create(*dataFile)
+		name = *dataFile
 	}
 	if err != nil {
 		// error logging handled by calling functions
@@ -137,16 +140,16 @@ func getBackupPipeWriter() (pipe BackupPipeWriterCloser, writeCmd *exec.Cmd, err
 	}
 
 	if *compressionLevel == 0 {
-		pipe = NewCommonBackupPipeWriterCloser(writeHandle)
+		pipe, err = NewCommonBackupPipeWriterCloser(writeHandle, name)
 		return
 	}
 
 	if *compressionType == "gzip" {
-		pipe, err = NewGZipBackupPipeWriterCloser(writeHandle, *compressionLevel)
+		pipe, err = NewGZipBackupPipeWriterCloser(writeHandle, *compressionLevel, name)
 		return
 	}
 	if *compressionType == "zstd" {
-		pipe, err = NewZSTDBackupPipeWriterCloser(writeHandle, *compressionLevel)
+		pipe, err = NewZSTDBackupPipeWriterCloser(writeHandle, *compressionLevel, name)
 		return
 	}
 

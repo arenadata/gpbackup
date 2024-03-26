@@ -448,16 +448,28 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 			// error logging handled by calling functions
 			return nil, err
 		}
-		restoreReader.bufReader = bufio.NewReaderSize(gzipReader, 65536)
+		err, restoreReader.bufReader = utils.NewReader(gzipReader, fileToRead)
+		if err != nil {
+			// error logging handled by calling functions
+			return nil, err
+		}
 	} else if strings.HasSuffix(fileToRead, ".zst") {
 		zstdReader, err := zstd.NewReader(readHandle)
 		if err != nil {
 			// error logging handled by calling functions
 			return nil, err
 		}
-		restoreReader.bufReader = bufio.NewReaderSize(zstdReader, 65536)
+		err, restoreReader.bufReader = utils.NewReader(zstdReader, fileToRead)
+		if err != nil {
+			// error logging handled by calling functions
+			return nil, err
+		}
 	} else {
-		restoreReader.bufReader = bufio.NewReaderSize(readHandle, 65536)
+		err, restoreReader.bufReader = utils.NewReader(readHandle, fileToRead)
+		if err != nil {
+			// error logging handled by calling functions
+			return nil, err
+		}
 	}
 
 	// Check that no error has occurred in plugin command
@@ -482,9 +494,9 @@ func getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
 	// adopting the new kernel, we must only use the bare essential methods Write() and
 	// Close() for the pipe to avoid an extra buffer read that can happen in error
 	// scenarios with --on-error-continue.
-	pipeWriter := bufio.NewWriterSize(struct{ io.WriteCloser }{fileHandle}, 65536)
+	err, pipeWriter := utils.NewWriter(struct{ io.WriteCloser }{fileHandle}, fileHandle.Name())
 
-	return pipeWriter, fileHandle, nil
+	return pipeWriter, fileHandle, err
 }
 
 func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (io.Reader, bool, error) {
@@ -500,7 +512,11 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 		defer func() {
 			offsetsFile.Close()
 		}()
-		w := bufio.NewWriterSize(offsetsFile, 65536)
+		err, w := utils.NewWriter(offsetsFile, offsetsFile.Name())
+		if err != nil {
+			// error logging handled by calling functions
+			return nil, false, err
+		}
 		w.WriteString(fmt.Sprintf("%v", len(oidList)))
 
 		for _, oid := range oidList {

@@ -1,7 +1,6 @@
 package restore
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"regexp"
@@ -712,7 +711,11 @@ func writeErrorTables(isMetadata bool) {
 		gplog.Warn("Unable to open error table file %s, skipping error report creation", errorFilename)
 		return
 	}
-	errorWriter := bufio.NewWriterSize(errorFile, 65536)
+	err, errorWriter := utils.NewWriter(errorFile, errorFile.Name())
+	if err != nil {
+		// error logging handled by calling functions
+		return
+	}
 	start := true
 	for table := range *errorTables {
 		if start == false {

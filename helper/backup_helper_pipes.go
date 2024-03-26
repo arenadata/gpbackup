@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"io"
 
+	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -30,9 +31,9 @@ func (cPipe CommonBackupPipeWriterCloser) Close() error {
 	return nil
 }
 
-func NewCommonBackupPipeWriterCloser(writeHandle io.WriteCloser) (cPipe CommonBackupPipeWriterCloser) {
+func NewCommonBackupPipeWriterCloser(writeHandle io.WriteCloser, name string) (cPipe CommonBackupPipeWriterCloser, err error) {
 	cPipe.writeHandle = writeHandle
-	cPipe.bufIoWriter = bufio.NewWriterSize(cPipe.writeHandle, 65536)
+	err, cPipe.bufIoWriter = utils.NewWriter(writeHandle, name)
 	cPipe.finalWriter = cPipe.bufIoWriter
 	return
 }
@@ -52,8 +53,12 @@ func (gzPipe GZipBackupPipeWriterCloser) Close() error {
 	return gzPipe.cPipe.Close()
 }
 
-func NewGZipBackupPipeWriterCloser(writeHandle io.WriteCloser, compressLevel int) (gzPipe GZipBackupPipeWriterCloser, err error) {
-	gzPipe.cPipe = NewCommonBackupPipeWriterCloser(writeHandle)
+func NewGZipBackupPipeWriterCloser(writeHandle io.WriteCloser, compressLevel int, name string) (gzPipe GZipBackupPipeWriterCloser, err error) {
+	gzPipe.cPipe, err = NewCommonBackupPipeWriterCloser(writeHandle, name)
+	if err != nil {
+		// error logging handled by calling functions
+		return
+	}
 	gzPipe.gzipWriter, err = gzip.NewWriterLevel(gzPipe.cPipe.bufIoWriter, compressLevel)
 	if err != nil {
 		gzPipe.cPipe.Close()
@@ -76,8 +81,12 @@ func (zstdPipe ZSTDBackupPipeWriterCloser) Close() error {
 	return zstdPipe.cPipe.Close()
 }
 
-func NewZSTDBackupPipeWriterCloser(writeHandle io.WriteCloser, compressLevel int) (zstdPipe ZSTDBackupPipeWriterCloser, err error) {
-	zstdPipe.cPipe = NewCommonBackupPipeWriterCloser(writeHandle)
+func NewZSTDBackupPipeWriterCloser(writeHandle io.WriteCloser, compressLevel int, name string) (zstdPipe ZSTDBackupPipeWriterCloser, err error) {
+	zstdPipe.cPipe, err = NewCommonBackupPipeWriterCloser(writeHandle, name)
+	if err != nil {
+		// error logging handled by calling functions
+		return
+	}
 	zstdPipe.zstdEncoder, err = zstd.NewWriter(zstdPipe.cPipe.bufIoWriter, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(compressLevel)))
 	if err != nil {
 		zstdPipe.cPipe.Close()
