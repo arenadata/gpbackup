@@ -283,22 +283,20 @@ func GetFileHash(filename string) ([32]byte, error) {
 	return filehash, nil
 }
 
-func NewWriter(w io.Writer, name string) (error, *bufio.Writer) {
+func NewWriter(w io.Writer, name string) (*bufio.Writer, error) {
 	stat := syscall.Statfs_t{}
 	err := syscall.Statfs(name, &stat)
 	if err != nil {
-		gplog.Warn("Unable to stat file %s", name)
-		return err, nil
+		gplog.Error("Unable to stat file %s: %v", name, err)
 	}
-	return nil, bufio.NewWriterSize(w, int(stat.Bsize))
+	return bufio.NewWriterSize(w, int(stat.Bsize)), err
 }
 
-func NewReader(r io.Reader, name string) (error, *bufio.Reader) {
+func NewReader(r io.Reader, name string) (*bufio.Reader, error) {
 	stat := syscall.Statfs_t{}
 	err := syscall.Statfs(name, &stat)
 	if err != nil {
-		gplog.Warn("Unable to stat file %s", name)
-		return err, nil
+		gplog.Error("Unable to stat file %s: %v", name, err)
 	}
-	return nil, bufio.NewReaderSize(r, int(stat.Bsize))
+	return bufio.NewReaderSize(r, int(stat.Bsize)), err
 }

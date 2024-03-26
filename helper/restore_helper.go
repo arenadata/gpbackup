@@ -452,7 +452,7 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 			// error logging handled by calling functions
 			return nil, err
 		}
-		err, restoreReader.bufReader = utils.NewReader(gzipReader, name)
+		restoreReader.bufReader, err = utils.NewReader(gzipReader, name)
 		if err != nil {
 			// error logging handled by calling functions
 			return nil, err
@@ -463,13 +463,13 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 			// error logging handled by calling functions
 			return nil, err
 		}
-		err, restoreReader.bufReader = utils.NewReader(zstdReader, name)
+		restoreReader.bufReader, err = utils.NewReader(zstdReader, name)
 		if err != nil {
 			// error logging handled by calling functions
 			return nil, err
 		}
 	} else {
-		err, restoreReader.bufReader = utils.NewReader(readHandle, name)
+		restoreReader.bufReader, err = utils.NewReader(readHandle, name)
 		if err != nil {
 			// error logging handled by calling functions
 			return nil, err
@@ -498,7 +498,7 @@ func getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
 	// adopting the new kernel, we must only use the bare essential methods Write() and
 	// Close() for the pipe to avoid an extra buffer read that can happen in error
 	// scenarios with --on-error-continue.
-	err, pipeWriter := utils.NewWriter(struct{ io.WriteCloser }{fileHandle}, fileHandle.Name())
+	pipeWriter, err := utils.NewWriter(struct{ io.WriteCloser }{fileHandle}, fileHandle.Name())
 
 	return pipeWriter, fileHandle, err
 }
@@ -516,7 +516,7 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 		defer func() {
 			offsetsFile.Close()
 		}()
-		err, w := utils.NewWriter(offsetsFile, offsetsFile.Name())
+		w, err := utils.NewWriter(offsetsFile, offsetsFile.Name())
 		if err != nil {
 			// error logging handled by calling functions
 			return nil, false, err

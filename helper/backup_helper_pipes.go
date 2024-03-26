@@ -33,7 +33,7 @@ func (cPipe CommonBackupPipeWriterCloser) Close() error {
 
 func NewCommonBackupPipeWriterCloser(writeHandle io.WriteCloser, name string) (cPipe CommonBackupPipeWriterCloser, err error) {
 	cPipe.writeHandle = writeHandle
-	err, cPipe.bufIoWriter = utils.NewWriter(writeHandle, name)
+	cPipe.bufIoWriter, err = utils.NewWriter(writeHandle, name)
 	cPipe.finalWriter = cPipe.bufIoWriter
 	return
 }
