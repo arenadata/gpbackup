@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -412,6 +413,7 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 	var seekHandle io.ReadSeeker
 	var isSubset bool
 	var err error = nil
+	var name string
 	restoreReader := new(RestoreReader)
 
 	if *pluginConfigFile != "" {
@@ -423,6 +425,7 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 			// Regular reader which doesn't support seek
 			restoreReader.readerType = NONSEEKABLE
 		}
+		name = filepath.Dir(fileToRead)
 	} else {
 		if *isFiltered && !strings.HasSuffix(fileToRead, ".gz") && !strings.HasSuffix(fileToRead, ".zst") {
 			// Seekable reader if backup is not compressed and filters are set
@@ -433,6 +436,7 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 			readHandle, err = os.Open(fileToRead)
 			restoreReader.readerType = NONSEEKABLE
 		}
+		name = fileToRead
 	}
 	if err != nil {
 		// error logging handled by calling functions
@@ -448,7 +452,7 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 			// error logging handled by calling functions
 			return nil, err
 		}
-		err, restoreReader.bufReader = utils.NewReader(gzipReader, fileToRead)
+		err, restoreReader.bufReader = utils.NewReader(gzipReader, name)
 		if err != nil {
 			// error logging handled by calling functions
 			return nil, err
@@ -459,13 +463,13 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 			// error logging handled by calling functions
 			return nil, err
 		}
-		err, restoreReader.bufReader = utils.NewReader(zstdReader, fileToRead)
+		err, restoreReader.bufReader = utils.NewReader(zstdReader, name)
 		if err != nil {
 			// error logging handled by calling functions
 			return nil, err
 		}
 	} else {
-		err, restoreReader.bufReader = utils.NewReader(readHandle, fileToRead)
+		err, restoreReader.bufReader = utils.NewReader(readHandle, name)
 		if err != nil {
 			// error logging handled by calling functions
 			return nil, err
