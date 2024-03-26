@@ -448,16 +448,16 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 			// error logging handled by calling functions
 			return nil, err
 		}
-		restoreReader.bufReader = bufio.NewReader(gzipReader)
+		restoreReader.bufReader = bufio.NewReaderSize(gzipReader, 65536)
 	} else if strings.HasSuffix(fileToRead, ".zst") {
 		zstdReader, err := zstd.NewReader(readHandle)
 		if err != nil {
 			// error logging handled by calling functions
 			return nil, err
 		}
-		restoreReader.bufReader = bufio.NewReader(zstdReader)
+		restoreReader.bufReader = bufio.NewReaderSize(zstdReader, 65536)
 	} else {
-		restoreReader.bufReader = bufio.NewReader(readHandle)
+		restoreReader.bufReader = bufio.NewReaderSize(readHandle, 65536)
 	}
 
 	// Check that no error has occurred in plugin command
@@ -482,7 +482,7 @@ func getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
 	// adopting the new kernel, we must only use the bare essential methods Write() and
 	// Close() for the pipe to avoid an extra buffer read that can happen in error
 	// scenarios with --on-error-continue.
-	pipeWriter := bufio.NewWriter(struct{ io.WriteCloser }{fileHandle})
+	pipeWriter := bufio.NewWriterSize(struct{ io.WriteCloser }{fileHandle}, 65536)
 
 	return pipeWriter, fileHandle, nil
 }
@@ -500,7 +500,7 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 		defer func() {
 			offsetsFile.Close()
 		}()
-		w := bufio.NewWriter(offsetsFile)
+		w := bufio.NewWriterSize(offsetsFile, 65536)
 		w.WriteString(fmt.Sprintf("%v", len(oidList)))
 
 		for _, oid := range oidList {
