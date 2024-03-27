@@ -712,7 +712,7 @@ func writeErrorTables(isMetadata bool) {
 		gplog.Warn("Unable to open error table file %s, skipping error report creation", errorFilename)
 		return
 	}
-	errorWriter := bufio.NewWriterSize(errorFile, 65536)
+	errorWriter := bufio.NewWriter(errorFile)
 	start := true
 	for table := range *errorTables {
 		if start == false {
