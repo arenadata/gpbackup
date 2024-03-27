@@ -138,6 +138,13 @@ var _ = Describe("agent remote", func() {
 			cc := testExecutor.ClusterCommands[0]
 			Expect(cc[1].CommandString).To(ContainSubstring(" --copy-queue-size 4"))
 		})
+		It("Correctly propagates --default-buffer-size value to gpbackup_helper", func() {
+			wasTerminated := false
+			utils.StartGpbackupHelpers(testCluster, fpInfo, "operation", "/tmp/pluginConfigFile.yml", " compressStr", false, false, &wasTerminated, 4, true, false, 0, 0, 64)
+
+			cc := testExecutor.ClusterCommands[0]
+			Expect(cc[1].CommandString).To(ContainSubstring(" --default-buffer-size 64"))
+		})
 	})
 	Describe("CheckAgentErrorsOnSegments", func() {
 		It("constructs the correct ssh call to check for the existance of an error file on each segment", func() {
