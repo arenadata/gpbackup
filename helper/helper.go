@@ -19,6 +19,10 @@ import (
 	"github.com/greenplum-db/gpbackup/utils"
 )
 
+const (
+	defaultBufferSize = 262144
+)
+
 /*
  * Non-flag variables
  */
