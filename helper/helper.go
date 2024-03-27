@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultBufferSize = 262144
+	defaultBufferSize = 256 * 1024
 )
 
 /*
