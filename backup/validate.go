@@ -195,8 +195,8 @@ func validateFlagValues() {
 		gplog.Fatal(errors.Errorf("--copy-queue-size %d is invalid. Must be at least 2",
 			MustGetFlagInt(options.COPY_QUEUE_SIZE)), "")
 	}
-	if FlagChanged(options.DEFAULT_BUFFER_SIZE) && MustGetFlagInt(options.DEFAULT_BUFFER_SIZE) < 1 {
-		gplog.Fatal(errors.Errorf("--default-buffer-size %d is invalid. Must be at least 1",
+	if FlagChanged(options.DEFAULT_BUFFER_SIZE) && MustGetFlagInt(options.DEFAULT_BUFFER_SIZE) < 4 {
+		gplog.Fatal(errors.Errorf("--default-buffer-size %d is invalid. Must be at least 4",
 			MustGetFlagInt(options.DEFAULT_BUFFER_SIZE)), "")
 	}
 }
