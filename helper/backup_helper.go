@@ -120,7 +120,7 @@ func getBackupPipeReader(currentPipe string) (io.Reader, io.ReadCloser, error) {
 	// This is a workaround for https://github.com/golang/go/issues/24164.
 	// Once this bug is fixed, the call to Fd() can be removed
 	readHandle.Fd()
-	reader := bufio.NewReader(readHandle)
+	reader := bufio.NewReaderSize(readHandle, *defaultBufferSize)
 	return reader, readHandle, nil
 }
 

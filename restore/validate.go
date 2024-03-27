@@ -241,6 +241,9 @@ func ValidateBackupFlagCombinations() {
 	if !backupConfig.SingleDataFile && FlagChanged(options.COPY_QUEUE_SIZE) {
 		gplog.Fatal(errors.Errorf("The --copy-queue-size flag can only be used if the backup was taken with --single-data-file"), "")
 	}
+	if !backupConfig.SingleDataFile && FlagChanged(options.DEFAULT_BUFFER_SIZE) {
+		gplog.Fatal(errors.Errorf("The --default-buffer-size flag can only be used if the backup was taken with --single-data-file"), "")
+	}
 	validateBackupFlagPluginCombinations()
 }
 

@@ -175,6 +175,9 @@ func validateFlagCombinations(flags *pflag.FlagSet) {
 	if FlagChanged(options.SINGLE_BACKUP_DIR) && !FlagChanged(options.BACKUP_DIR) {
 		gplog.Fatal(errors.Errorf("--single-backup-dir must be specified with --backup-dir"), "")
 	}
+	if FlagChanged(options.DEFAULT_BUFFER_SIZE) && !MustGetFlagBool(options.SINGLE_DATA_FILE) {
+		gplog.Fatal(errors.Errorf("--default-buffer-size must be specified with --single-data-file"), "")
+	}
 }
 
 func validateFlagValues() {
@@ -191,6 +194,10 @@ func validateFlagValues() {
 	if FlagChanged(options.COPY_QUEUE_SIZE) && MustGetFlagInt(options.COPY_QUEUE_SIZE) < 2 {
 		gplog.Fatal(errors.Errorf("--copy-queue-size %d is invalid. Must be at least 2",
 			MustGetFlagInt(options.COPY_QUEUE_SIZE)), "")
+	}
+	if FlagChanged(options.DEFAULT_BUFFER_SIZE) && MustGetFlagInt(options.DEFAULT_BUFFER_SIZE) < 1 {
+		gplog.Fatal(errors.Errorf("--default-buffer-size %d is invalid. Must be at least 1",
+			MustGetFlagInt(options.DEFAULT_BUFFER_SIZE)), "")
 	}
 }
 

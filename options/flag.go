@@ -54,6 +54,7 @@ const (
 	RESIZE_CLUSTER        = "resize-cluster"
 	NO_INHERITS           = "no-inherits"
 	REPORT_DIR            = "report-dir"
+	DEFAULT_BUFFER_SIZE   = "default-buffer-size"
 )
 
 func SetBackupFlagDefaults(flagSet *pflag.FlagSet) {
@@ -89,6 +90,7 @@ func SetBackupFlagDefaults(flagSet *pflag.FlagSet) {
 	flagSet.Bool(WITH_STATS, false, "Back up query plan statistics")
 	flagSet.Bool(WITHOUT_GLOBALS, false, "Skip backup of global metadata")
 	flagSet.Bool(NO_INHERITS, false, "For a filtered backup, don't back up all tables that inherit included tables")
+	flagSet.Int(DEFAULT_BUFFER_SIZE, 4, "Default buffer size in KB for read and write")
 }
 
 func SetRestoreFlagDefaults(flagSet *pflag.FlagSet) {
@@ -125,6 +127,7 @@ func SetRestoreFlagDefaults(flagSet *pflag.FlagSet) {
 	flagSet.Bool(RESIZE_CLUSTER, false, "Restore a backup taken on a cluster with more or fewer segments than the cluster to which it will be restored")
 	flagSet.String(REPORT_DIR, "", "The absolute path of the directory to which restore report and error tables will be written")
 	_ = flagSet.MarkHidden(LEAF_PARTITION_DATA)
+	flagSet.Int(DEFAULT_BUFFER_SIZE, 4, "Default buffer size in KB for read and write")
 }
 
 /*

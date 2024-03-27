@@ -37,25 +37,26 @@ var (
  * Command-line flags
  */
 var (
-	backupAgent      *bool
-	compressionLevel *int
-	compressionType  *string
-	content          *int
-	dataFile         *string
-	oidFile          *string
-	onErrorContinue  *bool
-	pipeFile         *string
-	pluginConfigFile *string
-	printVersion     *bool
-	restoreAgent     *bool
-	tocFile          *string
-	isFiltered       *bool
-	copyQueue        *int
-	singleDataFile   *bool
-	isResizeRestore  *bool
-	origSize         *int
-	destSize         *int
-	replicationFile  *string
+	backupAgent       *bool
+	compressionLevel  *int
+	compressionType   *string
+	content           *int
+	dataFile          *string
+	oidFile           *string
+	onErrorContinue   *bool
+	pipeFile          *string
+	pluginConfigFile  *string
+	printVersion      *bool
+	restoreAgent      *bool
+	tocFile           *string
+	isFiltered        *bool
+	copyQueue         *int
+	singleDataFile    *bool
+	isResizeRestore   *bool
+	origSize          *int
+	destSize          *int
+	replicationFile   *string
+	defaultBufferSize *int
 )
 
 func DoHelper() {
@@ -108,6 +109,8 @@ func InitializeGlobals() {
 	origSize = flag.Int("orig-seg-count", 0, "Used with resize restore.  Gives the segment count of the backup.")
 	destSize = flag.Int("dest-seg-count", 0, "Used with resize restore.  Gives the segment count of the current cluster.")
 	replicationFile = flag.String("replication-file", "", "Used with resize restore.  Gives the list of replicated tables.")
+	defaultBufferSize = flag.Int("default-buffer-size", 4, "Default buffer size in KB for read and write")
+	*defaultBufferSize = *defaultBufferSize * 1024
 
 	if *onErrorContinue && !*restoreAgent {
 		fmt.Printf("--on-error-continue flag can only be used with --restore-agent flag")
