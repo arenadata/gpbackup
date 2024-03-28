@@ -664,7 +664,7 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 		}
 		// If we are filtering on tables, we only want to record dependencies on other tables in the list
 		if len(tableOidList) > 0 {
-			tableFilterStr = fmt.Sprintf("\nAND i.inhrelid IN (%s)", strings.Join(tableOidList, ","))
+			tableFilterStr = fmt.Sprintf("WHERE i.inhrelid IN (%s)", strings.Join(tableOidList, ","))
 		}
 	}
 
@@ -674,9 +674,8 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 	FROM pg_inherits i
 		JOIN pg_class p ON i.inhparent = p.oid
 		JOIN pg_namespace n ON p.relnamespace = n.oid
-	WHERE %s%s
-	ORDER BY i.inhrelid, i.inhseqno`,
-		ExtensionFilterClause("p"), tableFilterStr)
+	%s
+	ORDER BY i.inhrelid, i.inhseqno`, tableFilterStr)
 
 	results := make([]Dependency, 0)
 	resultMap := make(map[uint32][]string)
