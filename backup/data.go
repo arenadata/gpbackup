@@ -92,7 +92,9 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 		columnNames = ConstructTableAttributesList(table.ColumnDefs)
 		tableName = fmt.Sprintf("(SELECT %s FROM %s %s)", columnNames[1:len(columnNames)-1], tableName, table.ExtensionTableConfig.Condition)
 		columnNames = ""
-		ignoreExternalPartitions = ""
+		if connectionPool.Version.Before("7") {
+			ignoreExternalPartitions = ""
+		}
 	}
 
 	query := fmt.Sprintf("COPY %s%s TO %s WITH CSV DELIMITER '%s' ON SEGMENT %s;", tableName, columnNames, copyCommand, tableDelim, ignoreExternalPartitions)
