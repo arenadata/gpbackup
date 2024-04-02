@@ -86,8 +86,16 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 		// process column names to exclude generated columns from data copy out
 		columnNames = ConstructTableAttributesList(table.ColumnDefs)
 	}
+	tableName := table.FQN()
+	ignoreExternalPartitions := "IGNORE EXTERNAL PARTITIONS"
+	if table.ExtensionTableConfig != (ExtensionTableConfig{}) && table.ExtensionTableConfig.Condition != "" {
+		columnNames = ConstructTableAttributesList(table.ColumnDefs)
+		tableName = fmt.Sprintf("(SELECT %s FROM %s %s)", columnNames[1:len(columnNames)-1], tableName, table.ExtensionTableConfig.Condition)
+		columnNames = ""
+		ignoreExternalPartitions = ""
+	}
 
-	query := fmt.Sprintf("COPY %s%s TO %s WITH CSV DELIMITER '%s' ON SEGMENT IGNORE EXTERNAL PARTITIONS;", table.FQN(), columnNames, copyCommand, tableDelim)
+	query := fmt.Sprintf("COPY %s%s TO %s WITH CSV DELIMITER '%s' ON SEGMENT %s;", tableName, columnNames, copyCommand, tableDelim, ignoreExternalPartitions)
 	gplog.Verbose("Worker %d: %s", connNum, query)
 	result, err := connectionPool.Exec(query, connNum)
 	if err != nil {

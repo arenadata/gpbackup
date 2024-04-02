@@ -81,6 +81,7 @@ type TableDefinition struct {
 	PartitionKeyDef         string
 	AttachPartitionInfo     AttachPartitionInfo
 	ForceRowSecurity        bool
+	ExtensionTableConfig    ExtensionTableConfig
 }
 
 /*
@@ -108,6 +109,7 @@ func ConstructDefinitionsForTables(connectionPool *dbconn.DBConn, tableRelations
 	partitionKeyDefs := GetPartitionKeyDefs(connectionPool)
 	attachPartitionInfo := GetAttachPartitionInfo(connectionPool)
 	forceRowSecurity := GetForceRowSecurity(connectionPool)
+	extensionTableConfs := GetExtensionTableConfigs(connectionPool)
 
 	gplog.Verbose("Constructing table definition map")
 	for _, tableRel := range tableRelations {
@@ -132,6 +134,7 @@ func ConstructDefinitionsForTables(connectionPool *dbconn.DBConn, tableRelations
 			PartitionKeyDef:         partitionKeyDefs[oid],
 			AttachPartitionInfo:     attachPartitionInfo[oid],
 			ForceRowSecurity:        forceRowSecurity[oid],
+			ExtensionTableConfig:    extensionTableConfs[oid],
 		}
 		if tableDef.Inherits == nil {
 			tableDef.Inherits = []string{}
@@ -780,6 +783,26 @@ func selectAsOidToStringMap(connectionPool *dbconn.DBConn, query string) map[uin
 	resultMap := make(map[uint32]string)
 	for _, result := range results {
 		resultMap[result.Oid] = result.Value
+	}
+	return resultMap
+}
+
+type ExtensionTableConfig struct {
+	Oid       uint32
+	Condition string
+}
+
+func GetExtensionTableConfigs(connectionPool *dbconn.DBConn) map[uint32]ExtensionTableConfig {
+	gplog.Verbose("Retrieving extension table information")
+
+	query := "SELECT unnest(extconfig) oid, unnest(extcondition) condition FROM pg_catalog.pg_extension"
+
+	results := make([]ExtensionTableConfig, 0)
+	err := connectionPool.Select(&results, query)
+	gplog.FatalOnError(err)
+	resultMap := make(map[uint32]ExtensionTableConfig)
+	for _, result := range results {
+		resultMap[result.Oid] = result
 	}
 	return resultMap
 }

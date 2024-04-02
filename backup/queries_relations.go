@@ -220,6 +220,26 @@ func GetForeignTableRelations(connectionPool *dbconn.DBConn) []Relation {
 	return results
 }
 
+func GetExtensionTableRelations(connectionPool *dbconn.DBConn) []Relation {
+	query := fmt.Sprintf(`
+	SELECT n.oid AS schemaoid,
+		c.oid AS oid,
+		quote_ident(n.nspname) AS schema,
+		quote_ident(c.relname) AS name
+	FROM pg_class c
+		JOIN pg_namespace n ON c.relnamespace = n.oid
+	WHERE %s
+		AND relkind IN ('r', 'p')
+		AND %s
+	ORDER BY c.oid`,
+		relationAndSchemaFilterClause(), ExtensionConfigClause("c"))
+
+	results := make([]Relation, 0)
+	err := connectionPool.Select(&results, query)
+	gplog.FatalOnError(err)
+	return results
+}
+
 type Sequence struct {
 	Relation
 	OwningTableOid          string
