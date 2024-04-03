@@ -81,7 +81,7 @@ type TableDefinition struct {
 	PartitionKeyDef         string
 	AttachPartitionInfo     AttachPartitionInfo
 	ForceRowSecurity        bool
-	ExtensionTableConfig    ExtensionTableConfig
+	ExtensionTableConfig    *string
 }
 
 /*
@@ -792,7 +792,7 @@ type ExtensionTableConfig struct {
 	Condition string
 }
 
-func GetExtensionTableConfigs(connectionPool *dbconn.DBConn) map[uint32]ExtensionTableConfig {
+func GetExtensionTableConfigs(connectionPool *dbconn.DBConn) map[uint32]*string {
 	gplog.Verbose("Retrieving extension table information")
 
 	query := "SELECT unnest(extconfig) oid, unnest(extcondition) condition FROM pg_catalog.pg_extension"
@@ -800,9 +800,10 @@ func GetExtensionTableConfigs(connectionPool *dbconn.DBConn) map[uint32]Extensio
 	results := make([]ExtensionTableConfig, 0)
 	err := connectionPool.Select(&results, query)
 	gplog.FatalOnError(err)
-	resultMap := make(map[uint32]ExtensionTableConfig)
+	resultMap := make(map[uint32]*string)
 	for _, result := range results {
-		resultMap[result.Oid] = result
+		condition := strings.Clone(result.Condition)
+		resultMap[result.Oid] = &condition
 	}
 	return resultMap
 }
