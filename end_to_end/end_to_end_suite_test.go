@@ -1165,6 +1165,10 @@ var _ = Describe("backup and restore end to end tests", func() {
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb")
 
+			assertDataRestored(restoreConn, map[string]int{
+				"public.test1": 100,
+				"public.test2": 50,
+			})
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
 	})
