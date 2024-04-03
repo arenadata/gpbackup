@@ -41,13 +41,14 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 		}
 
 		for _, table := range tables {
+			isExtensionTable := table.ExtensionTableConfig != (ExtensionTableConfig{})
 			if table.IsExternal && table.PartitionLevelInfo.Level == "l" {
 				if connectionPool.Version.Before("7") {
 					// GPDB7+ has different conventions for external partitions
 					// and does not need the suffix added
 					table.Name = AppendExtPartSuffix(table.Name)
 				}
-				if table.ExtensionTableConfig == (ExtensionTableConfig{}) {
+				if !isExtensionTable {
 					metadataTables = append(metadataTables, table)
 				}
 			}
@@ -55,11 +56,11 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 			if connectionPool.Version.AtLeast("7") {
 				// In GPDB 7+, we need to dump out the leaf partition DDL along with their
 				// ALTER TABLE ATTACH PARTITION commands to construct the partition table
-				if table.ExtensionTableConfig == (ExtensionTableConfig{}) {
+				if !isExtensionTable {
 					metadataTables = append(metadataTables, table)
 				}
 			} else if partType != "l" && partType != "i" {
-				if table.ExtensionTableConfig == (ExtensionTableConfig{}) {
+				if !isExtensionTable {
 					metadataTables = append(metadataTables, table)
 				}
 			}
@@ -100,7 +101,8 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 				table.Name = AppendExtPartSuffix(table.Name)
 			}
 
-			if table.ExtensionTableConfig == (ExtensionTableConfig{}) {
+			isExtensionTable := table.ExtensionTableConfig != (ExtensionTableConfig{})
+			if !isExtensionTable {
 				metadataTables = append(metadataTables, table)
 			}
 			// In GPDB 7+, we need to filter out leaf and intermediate subroot partitions
