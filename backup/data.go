@@ -89,7 +89,9 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 	tableName := table.FQN()
 	ignoreExternalPartitions := "IGNORE EXTERNAL PARTITIONS"
 	if table.ExtensionTableConfig != (ExtensionTableConfig{}) && table.ExtensionTableConfig.Condition != "" {
-		columnNames = ConstructTableAttributesList(table.ColumnDefs)
+		if columnNames == "" {
+			columnNames = ConstructTableAttributesList(table.ColumnDefs)
+		}
 		tableName = fmt.Sprintf("(SELECT %s FROM %s %s)", columnNames[1:len(columnNames)-1], tableName, table.ExtensionTableConfig.Condition)
 		columnNames = ""
 		if connectionPool.Version.Before("7") {
