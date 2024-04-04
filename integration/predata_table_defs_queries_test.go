@@ -929,6 +929,27 @@ SET SUBPARTITION TEMPLATE
 
 			Expect(inheritanceMap).To(Not(HaveKey(partition.Oid)))
 		})
+		It("constructs dependencies correctly if table is in extension", func() {
+			testhelper.AssertQueryRuns(connectionPool, `create table public.t1_base (a int, b int);`)
+			testhelper.AssertQueryRuns(connectionPool, `create table public.t2 (a int, b int) inherits (public.t1_base);`)
+			testhelper.AssertQueryRuns(connectionPool, `set allow_system_table_mods=true;`)
+			testhelper.AssertQueryRuns(connectionPool,
+				`insert into pg_depend values(1259, 'public.t1_base'::regclass::oid, 0, 'pg_extension'::regclass::oid, 123, 0, 'e');`)
+			testhelper.AssertQueryRuns(connectionPool,
+				`insert into pg_depend values(1259, 'public.t2'::regclass::oid, 0, 'pg_extension'::regclass::oid, 123, 0, 'e');`)
+
+			defer testhelper.AssertQueryRuns(connectionPool, "drop table public.t1_base;")
+			defer testhelper.AssertQueryRuns(connectionPool, "drop table public.t2;")
+			defer testhelper.AssertQueryRuns(connectionPool, "delete from pg_depend where objid = 'public.t1_base'::regclass::oid and refobjid = 123;")
+			defer testhelper.AssertQueryRuns(connectionPool, "delete from pg_depend where objid = 'public.t2'::regclass::oid and refobjid = 123;")
+
+			t2 := testutils.OidFromObjectName(connectionPool, "public", "t2", backup.TYPE_RELATION)
+
+			inheritanceMap := backup.GetTableInheritance(connectionPool, []backup.Relation{})
+
+			Expect(inheritanceMap).To(HaveLen(1))
+			Expect(inheritanceMap[t2]).To(ConsistOf("public.t1_base"))
+		})
 	})
 	Describe("GetTableReplicaIdentity", func() {
 		It("Returns a map of oid to replica identity with default", func() {
