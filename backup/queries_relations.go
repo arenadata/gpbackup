@@ -126,8 +126,6 @@ func getUserTableRelations(connectionPool *dbconn.DBConn) []options.Relation {
 			WHERE c.relispartition = true OR c.relkind = 'p'
 			GROUP BY 1
 		) AS prt ON prt.oid = c.oid`
-		// Filter out partitions whose root is in extension.
-		childPartitionFilter = `AND (c.relispartition IS false or pg_partition_root(c.oid) NOT IN (SELECT objid FROM pg_depend WHERE deptype = 'e'))`
 	}
 
 	query := fmt.Sprintf(`
