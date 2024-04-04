@@ -2659,11 +2659,7 @@ LANGUAGE plpgsql NO SQL;`)
 			mustRunCommand(command)
 			_ = os.Chdir("..")
 
-			testhelper.AssertQueryRuns(backupConn, `CREATE EXTENSION test_ext6;`)
-		})
-
-		AfterEach(func() {
-			testhelper.AssertQueryRuns(backupConn, `DROP EXTENSION test_ext6 CASCADE;`)
+			testhelper.AssertQueryRuns(backupConn, `CREATE EXTENSION IF NOT EXISTS test_ext6;`)
 		})
 
 		It("ignore partition these root is in extension", func() {
@@ -2672,6 +2668,8 @@ LANGUAGE plpgsql NO SQL;`)
 			} else {
 				testhelper.AssertQueryRuns(backupConn, `ALTER TABLE t_part ADD PARTITION test_part START (10) INCLUSIVE END (20) EXCLUSIVE`)
 			}
+
+			defer testhelper.AssertQueryRuns(backupConn, `DROP EXTENSION test_ext6;`)
 
 			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--metadata-only")
 			metadataFileContents := getMetdataFileContents(backupDir, timestamp, "metadata.sql")
@@ -2685,6 +2683,8 @@ LANGUAGE plpgsql NO SQL;`)
 			testhelper.AssertQueryRuns(backupConn, `
 				CREATE TABLE public.t_child (c int) inherits (t_base);
 			`)
+
+			defer testhelper.AssertQueryRuns(backupConn, `DROP EXTENSION test_ext6 CASCADE;`)
 
 			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--metadata-only")
 
@@ -2711,6 +2711,8 @@ LANGUAGE plpgsql NO SQL;`)
 			}
 
 			testhelper.AssertQueryRuns(backupConn, `CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20);`)
+
+			defer testhelper.AssertQueryRuns(backupConn, `DROP EXTENSION test_ext6;`)
 
 			timestamp := gpbackup(gpbackupPath, restoreHelperPath, "--backup-dir", backupDir, "--include-table", "public.test_part", "--leaf-partition-data")
 
