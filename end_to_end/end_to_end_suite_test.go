@@ -2652,4 +2652,95 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(string(output)).To(ContainSubstring("Multiple timestamp directories found"))
 		})
 	})
+	Describe("Filter out partitions these root is in extension", func() {
+		It("ignore partition these root is in extension", func() {
+			_ = os.Chdir("resources")
+			command := exec.Command("make", "USE_PGXS=1", "install")
+			mustRunCommand(command)
+			_ = os.Chdir("..")
+
+			testhelper.AssertQueryRuns(backupConn, `
+				CREATE EXTENSION test_ext6;
+			`)
+
+			if backupConn.Version.AtLeast("7") {
+				testhelper.AssertQueryRuns(backupConn, `CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20);`)
+			} else {
+				testhelper.AssertQueryRuns(backupConn, `ALTER TABLE t_part ADD PARTITION test_part START (10) INCLUSIVE END (20) EXCLUSIVE`)
+			}
+
+			defer testhelper.AssertQueryRuns(backupConn, `DROP EXTENSION test_ext6;`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--metadata-only")
+			metadataFileContents := getMetdataFileContents(backupDir, timestamp, "metadata.sql")
+
+			Expect(metadataFileContents).ToNot(ContainSubstring("test_part"))
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+
+		It("save inheritance if the parent is in the extension", func() {
+			_ = os.Chdir("resources")
+			command := exec.Command("make", "USE_PGXS=1", "install")
+			mustRunCommand(command)
+			_ = os.Chdir("..")
+
+			testhelper.AssertQueryRuns(backupConn, `
+				CREATE EXTENSION test_ext6;
+
+				CREATE TABLE public.t_child (c int) inherits (t_base);
+			`)
+
+			defer testhelper.AssertQueryRuns(backupConn, `DROP EXTENSION test_ext6 CASCADE;`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--metadata-only")
+
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
+
+			testQuery := `SELECT EXISTS (SELECT true FROM pg_inherits WHERE inhrelid = 't_child'::regclass::oid);`
+			rows, err := restoreConn.Query(testQuery)
+
+			defer rows.Close()
+
+			Expect(err).To(BeNil(), "%s", testQuery)
+			Expect(rows.Next()).To(BeTrue())
+
+			exists := false
+			Expect(rows.Scan(&exists)).To(BeNil())
+			Expect(exists).To(BeTrue())
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+
+		It("backup partition with root in the extension if it is in include tables", func() {
+			if backupConn.Version.Before("7") {
+				Skip("not applied for 6X and earlier")
+			}
+
+			_ = os.Chdir("resources")
+			command := exec.Command("make", "USE_PGXS=1", "install")
+			mustRunCommand(command)
+			_ = os.Chdir("..")
+
+			testhelper.AssertQueryRuns(backupConn, `
+				CREATE EXTENSION test_ext6;
+			`)
+
+			if backupConn.Version.AtLeast("7") {
+				testhelper.AssertQueryRuns(backupConn, `CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20);`)
+			} else {
+				testhelper.AssertQueryRuns(backupConn, `ALTER TABLE t_part ADD PARTITION test_part START (10) INCLUSIVE END (20) EXCLUSIVE`)
+			}
+
+			defer testhelper.AssertQueryRuns(backupConn, `DROP EXTENSION test_ext6;`)
+
+			timestamp := gpbackup(gpbackupPath, restoreHelperPath, "--backup-dir", backupDir, "--include-table", "public.test_part", "--leaf-partition-data")
+
+			metadataFileContents := getMetdataFileContents(backupDir, timestamp, "metadata.sql")
+
+			Expect(metadataFileContents).To(ContainSubstring("test_part"))
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+	})
 })

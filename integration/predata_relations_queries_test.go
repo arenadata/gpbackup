@@ -190,42 +190,6 @@ PARTITION BY LIST (gender)
 			Expect(tables).To(HaveLen(1))
 			structmatcher.ExpectStructsToMatchIncluding(&tableFoo, &tables[0], "Name", "Schema")
 		})
-		It("ignore tables those parents is in extension", func() {
-			testhelper.AssertQueryRuns(connectionPool,
-				`create table public.t_part (a int, b int, c text) partition by range (b) (start (1) end (3) every (1));`)
-			testhelper.AssertQueryRuns(connectionPool,
-				`create table public.t_part_e (a int, b int, c text) partition by range (b) (start (1) end (3) every (1));`)
-			testhelper.AssertQueryRuns(connectionPool, `set allow_system_table_mods=true;`)
-			testhelper.AssertQueryRuns(connectionPool,
-				`insert into pg_depend values(1259, 'public.t_part_e'::regclass::oid, 0, 'pg_extension'::regclass::oid, 123, 0, 'e');`)
-			testhelper.AssertQueryRuns(connectionPool,
-				`insert into pg_depend values(1259, 'public.t_part_e_1_prt_1'::regclass::oid, 0, 'pg_extension'::regclass::oid, 123, 0, 'e');`)
-
-			defer testhelper.AssertQueryRuns(connectionPool, "drop table public.t_part;")
-			defer testhelper.AssertQueryRuns(connectionPool, "drop table public.t_part_e;")
-			defer testhelper.AssertQueryRuns(connectionPool,
-				"delete from pg_depend where objid = 'public.t_part_e'::regclass::oid and refobjid = 123;")
-			defer testhelper.AssertQueryRuns(connectionPool,
-				"delete from pg_depend where objid = 'public.t_part_e_1_prt_1'::regclass::oid and refobjid = 123;")
-
-			tables := backup.GetIncludedUserTableRelations(connectionPool, []options.Relation{})
-
-			if connectionPool.Version.AtLeast("7") {
-				Expect(tables).To(HaveLen(3))
-			} else {
-				Expect(tables).To(HaveLen(1))
-			}
-
-			tPart := backup.Relation{Schema: "public", Name: "t_part"}
-			tPart1Prt1 := backup.Relation{Schema: "public", Name: "t_part_1_prt_1"}
-			tPart1Prt2 := backup.Relation{Schema: "public", Name: "t_part_1_prt_2"}
-
-			structmatcher.ExpectStructsToMatchIncluding(&tPart, &tables[0], "Name", "Schema")
-			if connectionPool.Version.AtLeast("7") {
-				structmatcher.ExpectStructsToMatchIncluding(&tPart1Prt1, &tables[1], "Name", "Schema")
-				structmatcher.ExpectStructsToMatchIncluding(&tPart1Prt2, &tables[2], "Name", "Schema")
-			}
-		})
 	})
 	Describe("GetAllSequenceRelations", func() {
 		It("returns a slice of all sequences", func() {
