@@ -2653,16 +2653,16 @@ LANGUAGE plpgsql NO SQL;`)
 		})
 	})
 	Describe("Filter out partitions these root is in extension", func() {
-		It("ignore partition these root is in extension", func() {
+		BeforeEach(func() {
 			_ = os.Chdir("resources")
 			command := exec.Command("make", "USE_PGXS=1", "install")
 			mustRunCommand(command)
 			_ = os.Chdir("..")
 
-			testhelper.AssertQueryRuns(backupConn, `
-				CREATE EXTENSION test_ext6;
-			`)
+			testhelper.AssertQueryRuns(backupConn, `CREATE EXTENSION test_ext6;`)
+		})
 
+		It("ignore partition these root is in extension", func() {
 			if backupConn.Version.AtLeast("7") {
 				testhelper.AssertQueryRuns(backupConn, `CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20);`)
 			} else {
@@ -2680,14 +2680,7 @@ LANGUAGE plpgsql NO SQL;`)
 		})
 
 		It("save inheritance if the parent is in the extension", func() {
-			_ = os.Chdir("resources")
-			command := exec.Command("make", "USE_PGXS=1", "install")
-			mustRunCommand(command)
-			_ = os.Chdir("..")
-
 			testhelper.AssertQueryRuns(backupConn, `
-				CREATE EXTENSION test_ext6;
-
 				CREATE TABLE public.t_child (c int) inherits (t_base);
 			`)
 
@@ -2716,15 +2709,6 @@ LANGUAGE plpgsql NO SQL;`)
 			if backupConn.Version.Before("7") {
 				Skip("not applied for 6X and earlier")
 			}
-
-			_ = os.Chdir("resources")
-			command := exec.Command("make", "USE_PGXS=1", "install")
-			mustRunCommand(command)
-			_ = os.Chdir("..")
-
-			testhelper.AssertQueryRuns(backupConn, `
-				CREATE EXTENSION test_ext6;
-			`)
 
 			if backupConn.Version.AtLeast("7") {
 				testhelper.AssertQueryRuns(backupConn, `CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20);`)
