@@ -2659,7 +2659,7 @@ LANGUAGE plpgsql NO SQL;`)
 			mustRunCommand(command)
 			_ = os.Chdir("..")
 
-			testhelper.AssertQueryRuns(backupConn, `CREATE EXTENSION IF NOT EXISTS test_ext6;`)
+			testhelper.AssertQueryRuns(backupConn, `CREATE EXTENSION test_ext6;`)
 		})
 
 		It("ignore partition these root is in extension", func() {
@@ -2710,7 +2710,11 @@ LANGUAGE plpgsql NO SQL;`)
 				Skip("not applied for 6X and earlier")
 			}
 
-			testhelper.AssertQueryRuns(backupConn, `CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20);`)
+			if backupConn.Version.AtLeast("7") {
+				testhelper.AssertQueryRuns(backupConn, `CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20);`)
+			} else {
+				testhelper.AssertQueryRuns(backupConn, `ALTER TABLE t_part ADD PARTITION test_part START (10) INCLUSIVE END (20) EXCLUSIVE`)
+			}
 
 			defer testhelper.AssertQueryRuns(backupConn, `DROP EXTENSION test_ext6;`)
 
