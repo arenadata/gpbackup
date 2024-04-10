@@ -148,11 +148,12 @@ func ConstructDefinitionsForTables(connectionPool *dbconn.DBConn, tableRelations
  */
 
 type PartitionLevelInfo struct {
-	Oid      uint32
-	Level    string
-	RootName string
-	RootOid  uint32
-	Name     string
+	Oid                 uint32
+	Level               string
+	RootName            string
+	RootOid             uint32
+	Name                string
+	IsParentInExtension bool
 }
 
 func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLevelInfo {
@@ -161,7 +162,8 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 			'p' AS level,
 			'' AS rootname,
 			0 AS rootoid,
-			quote_ident(pc.relname) AS name
+			quote_ident(pc.relname) AS name,
+			false as isparentinextension
 		FROM pg_partition p
 			JOIN pg_class pc ON p.parrelid = pc.oid
 		UNION ALL
@@ -169,13 +171,16 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 			CASE WHEN p.parlevel = levels.pl THEN 'l' ELSE 'i' END AS level,
 			quote_ident(cparent.relname) AS rootname,
 			cparent.oid AS rootoid,
-			quote_ident(c.relname) AS name
+			quote_ident(c.relname) AS name,
+			pd.objid is not NULL as isparentinextension
 		FROM pg_partition p
 			JOIN pg_partition_rule r ON p.oid = r.paroid
 			JOIN pg_class cparent ON cparent.oid = p.parrelid
 			JOIN pg_class c ON c.oid = r.parchildrelid
 			JOIN (SELECT parrelid AS relid, max(parlevel) AS pl
 				FROM pg_partition GROUP BY parrelid) AS levels ON p.parrelid = levels.relid
+			LEFT JOIN pg_inherits pi on pi.inhrelid = c.oid
+			LEFT JOIN (select objid from pg_depend where deptype = 'e') pd ON pd.objid = pi.inhparent
 		WHERE r.parchildrelid != 0`
 
 	atLeast7Query := `
@@ -190,10 +195,13 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 			CASE WHEN p.partrelid IS NOT NULL AND c.relispartition = false THEN 0
 				ELSE rc.oid
 			END AS rootoid,
-			quote_ident(c.relname) AS name
+			quote_ident(c.relname) AS name,
+			objid is not NULL as isparentinextension
 		FROM pg_class c
 			LEFT JOIN pg_partitioned_table p ON c.oid = p.partrelid
 			LEFT JOIN pg_class rc ON pg_partition_root(c.oid) = rc.oid
+			LEFT JOIN pg_inherits pi on c.oid = pi.inhrelid
+			LEFT JOIN (select objid from pg_depend where deptype = 'e') pd on objid = pi.inhparent
 		WHERE c.relispartition = true OR c.relkind = 'p'`
 
 	query := ""
@@ -664,7 +672,7 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 		}
 		// If we are filtering on tables, we only want to record dependencies on other tables in the list
 		if len(tableOidList) > 0 {
-			tableFilterStr = fmt.Sprintf("\nAND i.inhrelid IN (%s)", strings.Join(tableOidList, ","))
+			tableFilterStr = fmt.Sprintf("WHERE i.inhrelid IN (%s)", strings.Join(tableOidList, ","))
 		}
 	}
 
@@ -674,9 +682,9 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 	FROM pg_inherits i
 		JOIN pg_class p ON i.inhparent = p.oid
 		JOIN pg_namespace n ON p.relnamespace = n.oid
-	WHERE %s%s
+	%s
 	ORDER BY i.inhrelid, i.inhseqno`,
-		ExtensionFilterClause("p"), tableFilterStr)
+		tableFilterStr)
 
 	results := make([]Dependency, 0)
 	resultMap := make(map[uint32][]string)
@@ -722,11 +730,7 @@ type AttachPartitionInfo struct {
 }
 
 func GetAttachPartitionInfo(connectionPool *dbconn.DBConn) map[uint32]AttachPartitionInfo {
-	if connectionPool.Version.Before("7") {
-		return make(map[uint32]AttachPartitionInfo, 0)
-	}
-
-	query := `
+	query7 := `
 	SELECT
 		c.oid,
 		quote_ident(n.nspname) || '.' || quote_ident(c.relname) AS relname,
@@ -737,6 +741,31 @@ func GetAttachPartitionInfo(connectionPool *dbconn.DBConn) map[uint32]AttachPart
 		JOIN pg_class rc ON pg_partition_root(c.oid) = rc.oid
 		JOIN pg_namespace rn ON rc.relnamespace = rn.oid
 	WHERE c.relispartition = 't'`
+
+	query6 := `
+	SELECT 
+			r.parchildrelid AS oid,
+			quote_ident(c.relname) AS relname,
+			quote_ident(cparent.relname) AS parent,
+			case 
+			when parlistvalues = '<>' and parisdefault is false then
+				'START (' || pg_get_expr(parrangestart, c.oid) || ') ' || case when parrangestartincl is true then 'INCLUSIVE' else 'EXCLUSIVE' end ||
+				' END (' || pg_get_expr(parrangeend, c.oid) || ') ' || case when parrangeendincl is true then 'INCLUSIVE' else 'EXCLUSIVE' end
+			when parlistvalues <> '<>' then 'VALUES (' || pg_get_expr(parlistvalues, c.oid) || ')'
+			else 'DEFAULT'
+			end as expr
+		FROM pg_partition p
+			JOIN pg_partition_rule r ON p.oid = r.paroid
+			JOIN pg_class cparent ON cparent.oid = p.parrelid
+			JOIN pg_class c ON c.oid = r.parchildrelid
+		WHERE r.parchildrelid != 0;`
+
+	query := ""
+	if connectionPool.Version.AtLeast("7") {
+		query = query7
+	} else {
+		query = query6
+	}
 
 	results := make([]AttachPartitionInfo, 0)
 	err := connectionPool.Select(&results, query)

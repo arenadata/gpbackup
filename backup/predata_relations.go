@@ -50,7 +50,7 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 				metadataTables = append(metadataTables, table)
 			}
 			partType := table.PartitionLevelInfo.Level
-			if connectionPool.Version.AtLeast("7") {
+			if connectionPool.Version.AtLeast("7") || table.PartitionLevelInfo.IsParentInExtension {
 				// In GPDB 7+, we need to dump out the leaf partition DDL along with their
 				// ALTER TABLE ATTACH PARTITION commands to construct the partition table
 				metadataTables = append(metadataTables, table)
@@ -99,7 +99,7 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 			// since the COPY will be called on the top-most root partition. It just so
 			// happens that those particular partition types will always have an
 			// AttachPartitionInfo initialized.
-			if table.AttachPartitionInfo == (AttachPartitionInfo{}) {
+			if table.AttachPartitionInfo == (AttachPartitionInfo{}) || table.PartitionLevelInfo.IsParentInExtension {
 				dataTables = append(dataTables, table)
 			}
 		}
@@ -132,6 +132,11 @@ func AppendExtPartSuffix(name string) string {
  * backup process, and allows customers to copy just the CREATE TABLE block in order to use it directly.
  */
 func PrintCreateTableStatement(metadataFile *utils.FileWithByteCount, objToc *toc.TOC, table Table, tableMetadata ObjectMetadata) {
+
+	if table.PartitionLevelInfo.IsParentInExtension == true && connectionPool.Version.Before("7") {
+		return
+	}
+
 	start := metadataFile.ByteCount
 	// We use an empty TOC below to keep count of the bytes for testing purposes.
 	if table.IsExternal && table.PartitionLevelInfo.Level != "p" {
