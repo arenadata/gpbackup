@@ -87,7 +87,7 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 		columnNames = ConstructTableAttributesList(table.ColumnDefs)
 	}
 	tableName := table.FQN()
-	ignoreExternalPartitions := "IGNORE EXTERNAL PARTITIONS"
+	ignoreExternalPartitions := " IGNORE EXTERNAL PARTITIONS"
 	if table.ExtensionTableConfig != nil && *table.ExtensionTableConfig != "" {
 		if columnNames == "" {
 			columnNames = ConstructTableAttributesList(table.ColumnDefs)
@@ -99,7 +99,7 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 		}
 	}
 
-	query := fmt.Sprintf("COPY %s%s TO %s WITH CSV DELIMITER '%s' ON SEGMENT %s;", tableName, columnNames, copyCommand, tableDelim, ignoreExternalPartitions)
+	query := fmt.Sprintf("COPY %s%s TO %s WITH CSV DELIMITER '%s' ON SEGMENT%s;", tableName, columnNames, copyCommand, tableDelim, ignoreExternalPartitions)
 	gplog.Verbose("Worker %d: %s", connNum, query)
 	result, err := connectionPool.Exec(query, connNum)
 	if err != nil {
