@@ -266,7 +266,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					mutex.Unlock()
 				}
 
-				if backupConfig.SingleDataFile {
+				if backupConfig.SingleDataFile || MustGetFlagBool(options.RESIZE_CLUSTER) {
 					agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
 					if agentErr != nil {
 						gplog.Error(agentErr.Error())
