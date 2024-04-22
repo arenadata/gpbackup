@@ -48,6 +48,8 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 					table.Name = AppendExtPartSuffix(table.Name)
 				}
 				if table.ExtensionTableConfig == nil {
+					// If the table is not a configuration table for the extension,
+					// then add it to the metadata.
 					metadataTables = append(metadataTables, table)
 				}
 			}
@@ -56,10 +58,14 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 				// In GPDB 7+, we need to dump out the leaf partition DDL along with their
 				// ALTER TABLE ATTACH PARTITION commands to construct the partition table
 				if table.ExtensionTableConfig == nil {
+					// If the table is not a configuration table for the extension,
+					// then add it to the metadata.
 					metadataTables = append(metadataTables, table)
 				}
 			} else if partType != "l" && partType != "i" {
 				if table.ExtensionTableConfig == nil {
+					// If the table is not a configuration table for the extension,
+					// then add it to the metadata.
 					metadataTables = append(metadataTables, table)
 				}
 			}
@@ -101,6 +107,8 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 			}
 
 			if table.ExtensionTableConfig == nil {
+				// If the table is not a configuration table for the extension,
+				// then add it to the metadata.
 				metadataTables = append(metadataTables, table)
 			}
 			// In GPDB 7+, we need to filter out leaf and intermediate subroot partitions
