@@ -47,15 +47,27 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 					// and does not need the suffix added
 					table.Name = AppendExtPartSuffix(table.Name)
 				}
-				metadataTables = append(metadataTables, table)
+				if table.ExtensionTableConfig == nil {
+					// If the table is not a configuration table for the extension,
+					// then add it to the metadata.
+					metadataTables = append(metadataTables, table)
+				}
 			}
 			partType := table.PartitionLevelInfo.Level
 			if connectionPool.Version.AtLeast("7") {
 				// In GPDB 7+, we need to dump out the leaf partition DDL along with their
 				// ALTER TABLE ATTACH PARTITION commands to construct the partition table
-				metadataTables = append(metadataTables, table)
+				if table.ExtensionTableConfig == nil {
+					// If the table is not a configuration table for the extension,
+					// then add it to the metadata.
+					metadataTables = append(metadataTables, table)
+				}
 			} else if partType != "l" && partType != "i" {
-				metadataTables = append(metadataTables, table)
+				if table.ExtensionTableConfig == nil {
+					// If the table is not a configuration table for the extension,
+					// then add it to the metadata.
+					metadataTables = append(metadataTables, table)
+				}
 			}
 			if MustGetFlagBool(options.LEAF_PARTITION_DATA) {
 				if partType != "p" && partType != "i" {
@@ -94,7 +106,11 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 				table.Name = AppendExtPartSuffix(table.Name)
 			}
 
-			metadataTables = append(metadataTables, table)
+			if table.ExtensionTableConfig == nil {
+				// If the table is not a configuration table for the extension,
+				// then add it to the metadata.
+				metadataTables = append(metadataTables, table)
+			}
 			// In GPDB 7+, we need to filter out leaf and intermediate subroot partitions
 			// since the COPY will be called on the top-most root partition. It just so
 			// happens that those particular partition types will always have an
