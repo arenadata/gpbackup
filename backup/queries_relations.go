@@ -223,7 +223,7 @@ func GetForeignTableRelations(connectionPool *dbconn.DBConn) []Relation {
 func GetExtensionTableRelations(connectionPool *dbconn.DBConn) []Relation {
 	query := fmt.Sprintf(`
 	SELECT n.oid AS schemaoid,
-		c.oid AS oid,
+		c.oid,
 		quote_ident(n.nspname) AS schema,
 		quote_ident(c.relname) AS name
 	FROM pg_class c
