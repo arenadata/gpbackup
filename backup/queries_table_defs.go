@@ -794,11 +794,8 @@ type ExtensionTableConfig struct {
 
 func GetExtensionTableConfigs(connectionPool *dbconn.DBConn) map[uint32]*string {
 	gplog.Verbose("Retrieving extension table information")
-
-	query := "SELECT unnest(extconfig) oid, unnest(extcondition) condition FROM pg_catalog.pg_extension"
-
 	results := make([]ExtensionTableConfig, 0)
-	err := connectionPool.Select(&results, query)
+	err := connectionPool.Select(&results, "SELECT unnest(extconfig) oid, unnest(extcondition) condition FROM pg_catalog.pg_extension")
 	gplog.FatalOnError(err)
 	resultMap := make(map[uint32]*string)
 	for _, result := range results {
