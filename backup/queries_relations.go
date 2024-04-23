@@ -230,8 +230,8 @@ func GetExtensionTableRelations(connectionPool *dbconn.DBConn) []Relation {
 		JOIN pg_namespace n ON c.relnamespace = n.oid
 	WHERE %s
 		AND relkind IN ('r', 'p')
-		AND %s`,
-		relationAndSchemaFilterClause(), ExtensionConfigClause("c"))
+		AND c.oid IN (select unnest(extconfig) from pg_catalog.pg_extension)`,
+		relationAndSchemaFilterClause())
 
 	results := make([]Relation, 0)
 	err := connectionPool.Select(&results, query)

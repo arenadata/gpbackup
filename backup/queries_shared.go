@@ -333,15 +333,6 @@ func ExtensionFilterClause(namespace string) string {
 	return fmt.Sprintf("%s NOT IN (select objid from pg_depend where deptype = 'e')", oidStr)
 }
 
-func ExtensionConfigClause(namespace string) string {
-	oidStr := "oid"
-	if namespace != "" {
-		oidStr = fmt.Sprintf("%s.oid", namespace)
-	}
-
-	return fmt.Sprintf("%s IN (select unnest(extconfig) from pg_catalog.pg_extension)", oidStr)
-}
-
 type AccessMethod struct {
 	Oid     uint32
 	Name    string
