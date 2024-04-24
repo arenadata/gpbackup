@@ -742,6 +742,7 @@ func GetAttachPartitionInfo(connectionPool *dbconn.DBConn) map[uint32]AttachPart
 		JOIN pg_namespace rn ON rc.relnamespace = rn.oid
 	WHERE c.relispartition = 't'`
 
+	//TODO
 	query6 := `
 	SELECT 
 			r.parchildrelid AS oid,

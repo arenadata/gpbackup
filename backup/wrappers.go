@@ -651,15 +651,11 @@ func backupDependentObjects(metadataFile *utils.FileWithByteCount, tables []Tabl
 	PrintIdentityColumns(metadataFile, globalTOC, sequences)
 	PrintAlterSequenceStatements(metadataFile, globalTOC, sequences)
 	if connectionPool.Version.Before("7") {
-		extPartInfo, partInfoMap, extensionParentsInfoMap := GetExternalPartitionInfo(connectionPool)
+		extPartInfo, partInfoMap := GetPartitionsTreeInfo(connectionPool)
 
 		if len(extPartInfo) > 0 {
 			gplog.Verbose("Writing EXCHANGE PARTITION statements to metadata file")
-			PrintExchangeExternalPartitionStatements(metadataFile, globalTOC, extPartInfo, partInfoMap, tables)
-		}
-
-		if len(extensionParentsInfoMap) > 0 && MustGetFlagBool(options.LEAF_PARTITION_DATA) {
-			PrintAlterExtensionTablesStatements(metadataFile, globalTOC, extensionParentsInfoMap, partInfoMap, tables, filteredMetadata)
+			PrintAlterPartitionStatements(metadataFile, globalTOC, extPartInfo, partInfoMap, tables)
 		}
 	}
 	return viewsDependingOnConstraints

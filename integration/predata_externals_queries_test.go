@@ -165,7 +165,7 @@ LOG ERRORS PERSISTENTLY SEGMENT REJECT LIMIT 10 PERCENT`)
 			structmatcher.ExpectStructsToMatchExcluding(&protocolDef, &results[0], "Oid")
 		})
 	})
-	Describe("GetExternalPartitionInfo", func() {
+	Describe("GetPartitionsTreeInfo", func() {
 		BeforeEach(func() {
 			// For GPDB 7+, external partitions will have their own ATTACH PARTITION DDL commands.
 			if connectionPool.Version.AtLeast("7") {
@@ -190,7 +190,7 @@ EXECUTE 'echo -e "2\n1"' on host
 FORMAT 'csv';`)
 			testhelper.AssertQueryRuns(connectionPool, `ALTER TABLE public.part_tbl EXCHANGE PARTITION girls WITH TABLE public.part_tbl_ext_part_ WITHOUT VALIDATION;`)
 
-			resultExtPartitions, resultPartInfoMap, _ := backup.GetExternalPartitionInfo(connectionPool)
+			resultExtPartitions, resultPartInfoMap := backup.GetPartitionsTreeInfo(connectionPool)
 
 			Expect(resultExtPartitions).To(HaveLen(1))
 			Expect(resultPartInfoMap).To(HaveLen(3))
@@ -219,7 +219,7 @@ EXECUTE 'echo -e "2\n1"' on host
 FORMAT 'csv';`)
 			testhelper.AssertQueryRuns(connectionPool, `ALTER TABLE public.part_tbl EXCHANGE PARTITION FOR (RANK(1)) WITH TABLE public.part_tbl_ext_part_ WITHOUT VALIDATION;`)
 
-			resultExtPartitions, resultPartInfoMap, _ := backup.GetExternalPartitionInfo(connectionPool)
+			resultExtPartitions, resultPartInfoMap := backup.GetPartitionsTreeInfo(connectionPool)
 
 			Expect(resultExtPartitions).To(HaveLen(1))
 			Expect(resultPartInfoMap).To(HaveLen(2))
@@ -257,7 +257,7 @@ SUBPARTITION eur values ('eur'))
 			testhelper.AssertQueryRuns(connectionPool, `CREATE EXTERNAL TABLE public.part_tbl_ext_part_ (a int,b date,c text,d int) LOCATION ('gpfdist://127.0.0.1/apj') FORMAT 'text';`)
 			testhelper.AssertQueryRuns(connectionPool, `ALTER TABLE public.part_tbl ALTER PARTITION Dec16 EXCHANGE PARTITION apj WITH TABLE public.part_tbl_ext_part_ WITHOUT VALIDATION;`)
 
-			resultExtPartitions, _, _ := backup.GetExternalPartitionInfo(connectionPool)
+			resultExtPartitions, _ := backup.GetPartitionsTreeInfo(connectionPool)
 
 			Expect(resultExtPartitions).To(HaveLen(1))
 			expectedExternalPartition := backup.PartitionInfo{
@@ -294,7 +294,7 @@ PARTITION BY RANGE (year)
 			testhelper.AssertQueryRuns(connectionPool, `CREATE EXTERNAL TABLE public.part_tbl_ext_part_ (like public.part_tbl_1_prt_3_2_prt_1_3_prt_europe) LOCATION ('gpfdist://127.0.0.1/apj') FORMAT 'text';`)
 			testhelper.AssertQueryRuns(connectionPool, `ALTER TABLE public.part_tbl ALTER PARTITION FOR (RANK(3)) ALTER PARTITION FOR (RANK(1)) EXCHANGE PARTITION europe WITH TABLE public.part_tbl_ext_part_ WITHOUT VALIDATION;`)
 
-			resultExtPartitions, _, _ := backup.GetExternalPartitionInfo(connectionPool)
+			resultExtPartitions, _ := backup.GetPartitionsTreeInfo(connectionPool)
 
 			Expect(resultExtPartitions).To(HaveLen(1))
 			expectedExternalPartition := backup.PartitionInfo{
