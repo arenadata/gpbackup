@@ -33,13 +33,13 @@ var _ = Describe("backup integration tests", func() {
 			beforeAttStats := backup.GetAttributeStatistics(connectionPool, tables)
 			beforeTupleStats := backup.GetTupleStatistics(connectionPool, tables)
 			beforeTupleStat := beforeTupleStats[oldTableOid]
-			backup.PrintStatisticsStatements(backupfile, tocfile, tables, nil, nil)
 
 			// Drop and recreate the table to clear the statistics
 			testhelper.AssertQueryRuns(connectionPool, "DROP TABLE public.foo")
 			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.foo(i int, j text, k bool)")
 
 			// Reload the retrieved statistics into the new table
+			backup.PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
 			newTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo", backup.TYPE_RELATION)
@@ -77,13 +77,13 @@ var _ = Describe("backup integration tests", func() {
 			beforeAttStats := backup.GetAttributeStatistics(connectionPool, tables)
 			beforeTupleStats := backup.GetTupleStatistics(connectionPool, tables)
 			beforeTupleStat := beforeTupleStats[oldTableOid]
-			backup.PrintStatisticsStatements(backupfile, tocfile, tables, nil, nil)
 
 			// Drop and recreate the table to clear the statistics
 			testhelper.AssertQueryRuns(connectionPool, "DROP TABLE public.\"foo'\"\"''bar\"")
 			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.\"foo'\"\"''bar\"(i int, j text, k bool)")
 
 			// Reload the retrieved statistics into the new table
+			backup.PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
 			newTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo''\"''''bar", backup.TYPE_RELATION)
