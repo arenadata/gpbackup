@@ -781,11 +781,8 @@ func backupExtendedStatistic(metadataFile *utils.FileWithByteCount) {
  */
 
 func backupTableStatistics(statisticsFile *utils.FileWithByteCount, tables []Table) {
-	attStats := GetAttributeStatistics(connectionPool, tables)
-	tupleStats := GetTupleStatistics(connectionPool, tables)
-
 	backupSessionGUC(statisticsFile)
-	PrintStatisticsStatements(statisticsFile, globalTOC, tables, attStats, tupleStats)
+	PrintStatisticsStatements(statisticsFile, globalTOC, tables, nil, nil)
 }
 
 func backupIncrementalMetadata() {
