@@ -16,15 +16,21 @@ import (
 
 func PrintStatisticsStatements(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, tables []Table, attStats map[uint32][]AttributeStatistic, tupleStats map[uint32]TupleStatistic) {
 	for _, table := range tables {
-		if tupleStats == nil {
-			tupleStats = GetTupleStatistics(connectionPool, []Table{table})
+		var tupleStat TupleStatistic
+		if tupleStats != nil {
+			tupleStat = tupleStats[table.Oid]
+		} else {
+			tupleStat = GetTupleStatistics(connectionPool, []Table{table})[table.Oid]
 		}
-		tupleQuery := GenerateTupleStatisticsQuery(table, tupleStats[table.Oid])
+		tupleQuery := GenerateTupleStatisticsQuery(table, tupleStat)
 		printStatisticsStatementForTable(statisticsFile, tocfile, table, tupleQuery)
-		if attStats == nil {
-			attStats = GetAttributeStatistics(connectionPool, []Table{table})
+		var attStat []AttributeStatistic
+		if attStats != nil {
+			attStat = attStats[table.Oid]
+		} else {
+			attStat = GetAttributeStatistics(connectionPool, []Table{table})[table.Oid]
 		}
-		for _, attStat := range attStats[table.Oid] {
+		for _, attStat := range attStat {
 			attributeQueries := GenerateAttributeStatisticsQueries(table, attStat)
 			for _, attrQuery := range attributeQueries {
 				printStatisticsStatementForTable(statisticsFile, tocfile, table, attrQuery)
