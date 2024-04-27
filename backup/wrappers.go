@@ -134,7 +134,7 @@ func NewBackupConfig(dbName string, dbVersion string, backupVersion string, plug
 		SingleDataFile:        MustGetFlagBool(options.SINGLE_DATA_FILE),
 		Timestamp:             timestamp,
 		WithoutGlobals:        MustGetFlagBool(options.WITHOUT_GLOBALS),
-		WithStatistics:        MustGetFlagBool(options.WITH_STATS),
+		WithStatistics:        MustGetFlagInt(options.WITH_STATS) > 0,
 		Status:                history.BackupStatusInProgress,
 	}
 
@@ -783,7 +783,7 @@ func backupExtendedStatistic(metadataFile *utils.FileWithByteCount) {
 func backupTableStatistics(statisticsFile *utils.FileWithByteCount, tables []Table) {
 	backupSessionGUC(statisticsFile)
 
-	slice := 100
+	slice := MustGetFlagInt(options.WITH_STATS)
 	for start := 0; start < len(tables); start += slice {
 		end := start + slice
 		if end > len(tables) {

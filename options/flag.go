@@ -5,6 +5,8 @@ package options
  */
 
 import (
+	"fmt"
+	"math"
 	"regexp"
 	"strings"
 
@@ -86,7 +88,8 @@ func SetBackupFlagDefaults(flagSet *pflag.FlagSet) {
 	flagSet.Bool(SINGLE_DATA_FILE, false, "Back up all data to a single file instead of one per table")
 	flagSet.Int(COPY_QUEUE_SIZE, 1, "number of COPY commands gpbackup should enqueue when backing up using the --single-data-file option")
 	flagSet.Bool(VERBOSE, false, "Print verbose log messages")
-	flagSet.Bool(WITH_STATS, false, "Back up query plan statistics")
+	flagSet.Int(WITH_STATS, 0, "Back up query plan statistics")
+	flagSet.Lookup(WITH_STATS).NoOptDefVal = fmt.Sprintf("%v", math.MaxInt32)
 	flagSet.Bool(WITHOUT_GLOBALS, false, "Skip backup of global metadata")
 	flagSet.Bool(NO_INHERITS, false, "For a filtered backup, don't back up all tables that inherit included tables")
 }

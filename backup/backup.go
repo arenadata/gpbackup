@@ -194,7 +194,7 @@ func DoBackup() {
 	}
 
 	printDataBackupWarnings(numExtOrForeignTables)
-	if MustGetFlagBool(options.WITH_STATS) {
+	if MustGetFlagInt(options.WITH_STATS) > 0 {
 		backupStatistics(allTables)
 	}
 
@@ -211,7 +211,7 @@ func DoBackup() {
 	if pluginConfigFlag != "" {
 		pluginConfig.MustBackupFile(metadataFilename)
 		pluginConfig.MustBackupFile(globalFPInfo.GetTOCFilePath())
-		if MustGetFlagBool(options.WITH_STATS) {
+		if MustGetFlagInt(options.WITH_STATS) > 0 {
 			pluginConfig.MustBackupFile(globalFPInfo.GetStatisticsFilePath())
 		}
 		_ = utils.CopyFile(pluginConfigFlag, globalFPInfo.GetPluginConfigPath())
