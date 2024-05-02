@@ -783,11 +783,15 @@ func backupExtendedStatistic(metadataFile *utils.FileWithByteCount) {
 func backupTableStatistics(statisticsFile *utils.FileWithByteCount, tables []Table) {
 	backupSessionGUC(statisticsFile)
 
-	slice := MustGetFlagInt(options.WITH_STATS)
-	for start := 0; start < len(tables); start += slice {
+	length := len(tables)
+	slice := length / MustGetFlagInt(options.WITH_STATS)
+	if slice < 1 {
+		slice = 1
+	}
+	for start := 0; start < length; start += slice {
 		end := start + slice
-		if end > len(tables) {
-			end = len(tables)
+		if end > length {
+			end = length
 		}
 		attStats := GetAttributeStatistics(connectionPool, tables[start:end])
 		tupleStats := GetTupleStatistics(connectionPool, tables[start:end])
