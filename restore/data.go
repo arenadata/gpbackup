@@ -5,6 +5,7 @@ package restore
  */
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -214,6 +215,8 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	var numErrors int32
 	var mutex = &sync.Mutex{}
 	panicChan := make(chan error)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Make sure it's called to release resources even if no errors
 
 	for i := 0; i < connectionPool.NumConns; i++ {
 		workerPool.Add(1)
@@ -227,8 +230,15 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 
 			setGUCsForConnection(gucStatements, whichConn)
 			for entry := range tasks {
+				// Check if any error occurred in any other goroutines:
+				select {
+				case <-ctx.Done():
+					return // Error somewhere, terminate
+				default: // Default is must to avoid blocking
+				}
 				if wasTerminated {
 					dataProgressBar.(*pb.ProgressBar).NotPrint = true
+					cancel()
 					return
 				}
 				tableName := utils.MakeFQN(entry.Schema, entry.Name)
@@ -259,6 +269,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 						if connectionPool.NumConns > 1 {
 							utils.TerminateHangingCopySessions(connectionPool, fpInfo, fmt.Sprintf("gprestore_%s_%s", fpInfo.Timestamp, restoreStartTime), whichConn)
 						}
+						cancel()
 						return
 					} else if connectionPool.Version.AtLeast("6") && (backupConfig.SingleDataFile || MustGetFlagBool(options.RESIZE_CLUSTER)) {
 						// inform segment helpers to skip this entry
@@ -273,6 +284,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
 					if agentErr != nil {
 						gplog.Error(agentErr.Error())
+						cancel()
 						return
 					}
 				}
