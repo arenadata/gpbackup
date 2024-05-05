@@ -181,6 +181,7 @@ func GetFunctions(connectionPool *dbconn.DBConn) []Function {
 			prokind,
 			prosupport,
 			l.lanname AS language,
+			%s
             coalesce(array_to_string(ARRAY(SELECT 'FOR TYPE ' || nm.nspname || '.' || typ.typname
                 from
                     unnest(p.protrftypes) as trf_unnest
@@ -188,9 +189,8 @@ func GetFunctions(connectionPool *dbconn.DBConn) []Function {
                          on trf_unnest = typ.oid
 					left join pg_namespace nm
 						on typ.typnamespace = nm.oid
-                ), ', '), '') AS transformtypes,
-			%s
-				FROM pg_proc p
+                ), ', '), '') AS transformtypes
+		FROM pg_proc p
 			JOIN pg_catalog.pg_language l ON p.prolang = l.oid
 			LEFT JOIN pg_namespace n ON p.pronamespace = n.oid
 		WHERE %s
