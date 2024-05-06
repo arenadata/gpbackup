@@ -224,25 +224,16 @@ func RetrieveAndProcessTables() ([]Table, []Table, []Table) {
 	return metadataTables, dataTables, allTables
 }
 
-func retrieveFunctions(sortables *[]Sortable, metadataMap MetadataMap) ([]Function, []Function, map[uint32]FunctionInfo) {
+func retrieveFunctions(sortables *[]Sortable, metadataMap MetadataMap) ([]Function, map[uint32]FunctionInfo) {
 	gplog.Verbose("Retrieving function information")
 	functionMetadata := GetMetadataForObjectType(connectionPool, TYPE_FUNCTION)
 	addToMetadataMap(functionMetadata, metadataMap)
 	functions := GetFunctionsAllVersions(connectionPool)
 	funcInfoMap := GetFunctionOidToInfoMap(connectionPool)
 	objectCounts["Functions"] = len(functions)
-	independentFunctions := make([]Function, 0)
-	dependentFunctions := make([]Function, 0)
-	for _, function := range functions {
-		if function.IsDependOnTables {
-			dependentFunctions = append(dependentFunctions, function)
-		} else {
-			independentFunctions = append(independentFunctions, function)
-		}
-	}
-	*sortables = append(*sortables, convertToSortableSlice(independentFunctions)...)
+	*sortables = append(*sortables, convertToSortableSlice(functions)...)
 
-	return functions, dependentFunctions, funcInfoMap
+	return functions, funcInfoMap
 }
 
 func retrieveTransforms(sortables *[]Sortable) {
