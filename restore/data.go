@@ -26,7 +26,7 @@ var (
 	tableDelim = ","
 )
 
-func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
+func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
 	whichConn = connectionPool.ValidateConnNum(whichConn)
 	copyCommand := ""
 	readFromDestinationCommand := "cat"
@@ -62,7 +62,7 @@ func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttribute
 		} else {
 			gplog.Verbose(`Executing "%s" on master`, query)
 		}
-		result, err := connectionPool.Exec(query, whichConn)
+		result, err := connectionPool.ExecContext(queryContext, query, whichConn)
 		if err != nil {
 			errStr := fmt.Sprintf("Error loading data into table %s", tableName)
 
@@ -80,7 +80,7 @@ func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttribute
 	return numRows, err
 }
 
-func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.CoordinatorDataEntry, tableName string, whichConn int, origSize int, destSize int) error {
+func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FilePathInfo, entry toc.CoordinatorDataEntry, tableName string, whichConn int, origSize int, destSize int) error {
 	resizeCluster := MustGetFlagBool(options.RESIZE_CLUSTER)
 	destinationToRead := ""
 	if backupConfig.SingleDataFile || resizeCluster {
@@ -89,7 +89,7 @@ func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.Coordinator
 		destinationToRead = fpInfo.GetTableBackupFilePathForCopyCommand(entry.Oid, utils.GetPipeThroughProgram().Extension, backupConfig.SingleDataFile)
 	}
 	gplog.Debug("Reading from %s", destinationToRead)
-	numRowsRestored, err := CopyTableIn(connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
+	numRowsRestored, err := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
 	if err != nil {
 		return err
 	}
@@ -251,7 +251,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					err = TruncateTable(tableName, whichConn)
 				}
 				if err == nil {
-					err = restoreSingleTableData(&fpInfo, entry, tableName, whichConn, origSize, destSize)
+					err = restoreSingleTableData(ctx, &fpInfo, entry, tableName, whichConn, origSize, destSize)
 
 					if gplog.GetVerbosity() > gplog.LOGINFO {
 						// No progress bar at this log level, so we note table count here
@@ -266,9 +266,6 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					atomic.AddInt32(&numErrors, 1)
 					if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 						dataProgressBar.(*pb.ProgressBar).NotPrint = true
-						if connectionPool.NumConns > 1 {
-							utils.TerminateHangingCopySessions(connectionPool, fpInfo, fmt.Sprintf("gprestore_%s_%s", fpInfo.Timestamp, restoreStartTime), whichConn)
-						}
 						cancel()
 						return
 					} else if connectionPool.Version.AtLeast("6") && (backupConfig.SingleDataFile || MustGetFlagBool(options.RESIZE_CLUSTER)) {

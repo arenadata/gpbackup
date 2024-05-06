@@ -176,7 +176,7 @@ func InitializeSignalHandler(cleanupFunc func(bool), procDesc string, termFlag *
 }
 
 // TODO: Uniquely identify COPY commands in the multiple data file case to allow terminating sessions
-func TerminateHangingCopySessions(connectionPool *dbconn.DBConn, fpInfo filepath.FilePathInfo, appName string, whichConn ...int) {
+func TerminateHangingCopySessions(connectionPool *dbconn.DBConn, fpInfo filepath.FilePathInfo, appName string) {
 	var query string
 	copyFileName := fpInfo.GetSegmentPipePathForCopyCommand()
 	if connectionPool.Version.Before("6") {
@@ -195,7 +195,7 @@ func TerminateHangingCopySessions(connectionPool *dbconn.DBConn, fpInfo filepath
 	AND pid <> pg_backend_pid()`, appName, copyFileName)
 	}
 	// We don't check the error as the connection may have finished or been previously terminated
-	_, _ = connectionPool.Exec(query, whichConn...)
+	_, _ = connectionPool.Exec(query)
 }
 
 func ValidateGPDBVersionCompatibility(connectionPool *dbconn.DBConn) {
