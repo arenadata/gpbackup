@@ -257,7 +257,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 						dataProgressBar.(*pb.ProgressBar).NotPrint = true
 						return
-					} else if connectionPool.Version.AtLeast("6") && backupConfig.SingleDataFile {
+					} else if connectionPool.Version.AtLeast("6") && (backupConfig.SingleDataFile || MustGetFlagBool(options.RESIZE_CLUSTER)) {
 						// inform segment helpers to skip this entry
 						utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo)
 					}
@@ -266,7 +266,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					mutex.Unlock()
 				}
 
-				if backupConfig.SingleDataFile {
+				if backupConfig.SingleDataFile || MustGetFlagBool(options.RESIZE_CLUSTER) {
 					agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
 					if agentErr != nil {
 						gplog.Error(agentErr.Error())
