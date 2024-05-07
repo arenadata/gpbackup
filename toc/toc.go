@@ -3,7 +3,6 @@ package toc
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
@@ -124,18 +123,20 @@ const (
 
 func NewTOC(filename string) *TOC {
 	toc := &TOC{}
-	contents, err := ioutil.ReadFile(filename)
+	file, err := os.Open(filename)
 	gplog.FatalOnError(err)
-	err = yaml.Unmarshal(contents, toc)
+	dec := yaml.NewDecoder(file)
+	err = dec.Decode(toc)
 	gplog.FatalOnError(err)
 	return toc
 }
 
 func NewSegmentTOC(filename string) *SegmentTOC {
 	toc := &SegmentTOC{}
-	contents, err := ioutil.ReadFile(filename)
+	file, err := os.Open(filename)
 	gplog.FatalOnError(err)
-	err = yaml.Unmarshal(contents, toc)
+	dec := yaml.NewDecoder(file)
+	err = dec.Decode(toc)
 	gplog.FatalOnError(err)
 	return toc
 }
