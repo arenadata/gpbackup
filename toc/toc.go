@@ -125,6 +125,7 @@ func NewTOC(filename string) *TOC {
 	toc := &TOC{}
 	file, err := os.Open(filename)
 	gplog.FatalOnError(err)
+	defer file.Close()
 	dec := yaml.NewDecoder(file)
 	err = dec.Decode(toc)
 	gplog.FatalOnError(err)
@@ -135,6 +136,7 @@ func NewSegmentTOC(filename string) *SegmentTOC {
 	toc := &SegmentTOC{}
 	file, err := os.Open(filename)
 	gplog.FatalOnError(err)
+	defer file.Close()
 	dec := yaml.NewDecoder(file)
 	err = dec.Decode(toc)
 	gplog.FatalOnError(err)
