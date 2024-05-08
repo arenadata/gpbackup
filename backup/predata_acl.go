@@ -194,9 +194,12 @@ func getColumnACL(privileges sql.NullString, kind string) []ACL {
 		privilegesStr = privileges.String
 	}
 	columnMetadata := make([]ACL, 0)
-	acl := ParseACL(privilegesStr)
-	if acl != nil {
-		columnMetadata = append(columnMetadata, *acl)
+	privilegesSlice := strings.Split(privilegesStr, ",")
+	for _, privilege := range privilegesSlice {
+		acl := ParseACL(privilege)
+		if acl != nil {
+			columnMetadata = append(columnMetadata, *acl)
+		}
 	}
 	return columnMetadata
 }

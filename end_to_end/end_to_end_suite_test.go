@@ -2007,6 +2007,27 @@ LANGUAGE plpgsql NO SQL;`)
 				_, err := gprestoreCmd.CombinedOutput()
 				Expect(err).ToNot(HaveOccurred())
 			})
+			It("checks access privileges for multiple users on a column", func() {
+				testutils.SkipIfBefore6(backupConn)
+				if useOldBackupVersion {
+					Skip("This test is not needed for old backup versions")
+				}
+				testhelper.AssertQueryRuns(backupConn, "CREATE TABLE public.t1 (a int) DISTRIBUTED BY (a);")
+				testhelper.AssertQueryRuns(backupConn, "CREATE USER user1;")
+				testhelper.AssertQueryRuns(backupConn, "CREATE USER user2;")
+				testhelper.AssertQueryRuns(backupConn, "GRANT SELECT (a) on public.t1 to user1;")
+				testhelper.AssertQueryRuns(backupConn, "GRANT SELECT (a) on public.t1 to user2;")
+				defer testhelper.AssertQueryRuns(backupConn, "DROP USER user1;")
+				defer testhelper.AssertQueryRuns(backupConn, "DROP USER user2;")
+				defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE public.t1;")
+
+				timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
+
+				contents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
+				Expect(contents).To(ContainSubstring("CREATE TABLE public.t1 (\n\ta integer\n) DISTRIBUTED BY (a);"))
+				Expect(contents).To(ContainSubstring("GRANT SELECT (a) ON TABLE public.t1 TO user1;"))
+				Expect(contents).To(ContainSubstring("GRANT SELECT (a) ON TABLE public.t1 TO user2;"))
+			})
 		})
 	})
 	Describe("Restore to a different-sized cluster", FlakeAttempts(5), func() {
