@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/greenplum-db/gp-common-go-libs/structmatcher"
@@ -9,6 +8,7 @@ import (
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/options"
 	"github.com/greenplum-db/gpbackup/testutils"
+	"github.com/lib/pq"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -69,14 +69,15 @@ PARTITION BY RANGE (year)
 			testhelper.AssertQueryRuns(connectionPool, "ALTER TABLE public.atttable DROP COLUMN b")
 			testhelper.AssertQueryRuns(connectionPool, "ALTER TABLE public.atttable ALTER COLUMN e SET STORAGE PLAIN")
 			oid := testutils.OidFromObjectName(connectionPool, "public", "atttable", backup.TYPE_RELATION)
-			privileges := sql.NullString{String: "", Valid: false}
-			privilegesMulti := sql.NullString{String: "", Valid: false}
+			privileges := make(pq.StringArray, 0)
+			privilegesMulti := make(pq.StringArray, 0)
 			if connectionPool.Version.AtLeast("6") {
 				testhelper.AssertQueryRuns(connectionPool, "GRANT SELECT (c, d) ON TABLE public.atttable TO testrole")
-				privileges = sql.NullString{String: "testrole=r/testrole", Valid: true}
+				privileges = append(privileges, "testrole=r/testrole")
 				testhelper.AssertQueryRuns(connectionPool, "GRANT SELECT (e) ON TABLE public.atttable TO testrole")
 				testhelper.AssertQueryRuns(connectionPool, "GRANT SELECT (e) ON TABLE public.atttable TO anothertestrole")
-				privilegesMulti = sql.NullString{String: "testrole=r/testrole,anothertestrole=r/testrole", Valid: true}
+				privilegesMulti = append(privilegesMulti, "testrole=r/testrole")
+				privilegesMulti = append(privilegesMulti, "anothertestrole=r/testrole")
 			}
 			tableAtts := backup.GetColumnDefinitions(connectionPool)[oid]
 

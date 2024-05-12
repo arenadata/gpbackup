@@ -14,6 +14,7 @@ import (
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gpbackup/options"
 	"github.com/greenplum-db/gpbackup/toc"
+	"github.com/lib/pq"
 )
 
 type Table struct {
@@ -230,7 +231,7 @@ type ColumnDefinition struct {
 	StorageType           string
 	DefaultVal            string
 	Comment               string
-	Privileges            sql.NullString
+	Privileges            pq.StringArray
 	Kind                  string
 	Options               string
 	FdwOptions            string
@@ -302,7 +303,7 @@ func GetColumnDefinitions(connectionPool *dbconn.DBConn) map[uint32][]ColumnDefi
 		CASE WHEN a.attstorage != t.typstorage THEN a.attstorage ELSE '' END AS storagetype,
 		coalesce('('||pg_catalog.pg_get_expr(ad.adbin, ad.adrelid)||')', '') AS defaultval,
 		coalesce(d.description, '') AS comment,
-		array_to_string(a.attacl, ',') AS privileges,
+		a.attacl AS privileges,
 		CASE
 			WHEN a.attacl IS NULL THEN ''
 			WHEN array_upper(a.attacl, 1) = 0 THEN 'Empty'
@@ -350,7 +351,7 @@ func GetColumnDefinitions(connectionPool *dbconn.DBConn) map[uint32][]ColumnDefi
 		coalesce('('||pg_catalog.pg_get_expr(ad.adbin, ad.adrelid)||')', '') AS defaultval,
 		coalesce(d.description, '') AS comment,
 		a.attgenerated,
-		array_to_string(a.attacl, ',') AS privileges,
+		a.attacl AS privileges,
 		CASE
 			WHEN a.attacl IS NULL THEN ''
 			WHEN array_upper(a.attacl, 1) = 0 THEN 'Empty'

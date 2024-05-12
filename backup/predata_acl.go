@@ -1,7 +1,6 @@
 package backup
 
 import (
-	"database/sql"
 	"fmt"
 	"regexp"
 	"sort"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/greenplum-db/gpbackup/toc"
 	"github.com/greenplum-db/gpbackup/utils"
+	"github.com/lib/pq"
 )
 
 var ACLRegex = regexp.MustCompile(`^(.*)=([a-zA-Z\*]*)/(.*)$`)
@@ -186,15 +186,14 @@ func ConstructMetadataMap(results []MetadataQueryStruct) MetadataMap {
 	return metadataMap
 }
 
-func getColumnACL(privileges sql.NullString, kind string) []ACL {
-	privilegesStr := ""
+func getColumnACL(privileges pq.StringArray, kind string) []ACL {
+	privilegesSlice := make([]string, 0)
 	if kind == "Empty" {
-		privilegesStr = "GRANTEE=/GRANTOR"
-	} else if privileges.Valid {
-		privilegesStr = privileges.String
+		privilegesSlice = append(privilegesSlice, "GRANTEE=/GRANTOR")
+	} else if len(privileges) > 0 {
+		privilegesSlice = privileges
 	}
 	columnMetadata := make([]ACL, 0)
-	privilegesSlice := strings.Split(privilegesStr, ",")
 	for _, privilege := range privilegesSlice {
 		acl := ParseACL(privilege)
 		if acl != nil {

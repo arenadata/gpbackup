@@ -282,7 +282,7 @@ func PrintPostCreateTableStatements(metadataFile *utils.FileWithByteCount, objTo
 			escapedComment := utils.EscapeSingleQuotes(att.Comment)
 			statements = append(statements, fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s';", table.FQN(), att.Name, escapedComment))
 		}
-		if att.Privileges.Valid {
+		if len(att.Privileges) > 0 {
 			columnMetadata := ObjectMetadata{Privileges: getColumnACL(att.Privileges, att.Kind), Owner: tableMetadata.Owner}
 			columnPrivileges := columnMetadata.GetPrivilegesStatements(table.FQN(), toc.OBJ_COLUMN, att.Name)
 			statements = append(statements, strings.TrimSpace(columnPrivileges))
