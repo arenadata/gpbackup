@@ -7,6 +7,7 @@ import (
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/testutils"
 	"github.com/greenplum-db/gpbackup/toc"
+	"github.com/lib/pq"
 
 	. "github.com/onsi/ginkgo/v2"
 )
@@ -653,8 +654,8 @@ COMMENT ON COLUMN public.tablename.i IS 'This is a column comment.';
 COMMENT ON COLUMN public.tablename.j IS 'This is another column comment.';`)
 		})
 		It("prints a GRANT statement on a table column", func() {
-			privilegesColumnOne := backup.ColumnDefinition{Oid: 0, Num: 1, Name: "i", Type: "integer", StatTarget: -1, Privileges: sql.NullString{String: "testrole=r/testrole", Valid: true}}
-			privilegesColumnTwo := backup.ColumnDefinition{Oid: 1, Num: 2, Name: "j", Type: "character varying(20)", StatTarget: -1, Privileges: sql.NullString{String: "testrole2=arwx/testrole2", Valid: true}}
+			privilegesColumnOne := backup.ColumnDefinition{Oid: 0, Num: 1, Name: "i", Type: "integer", StatTarget: -1, Privileges: pq.StringArray{"testrole=r/testrole"}}
+			privilegesColumnTwo := backup.ColumnDefinition{Oid: 1, Num: 2, Name: "j", Type: "character varying(20)", StatTarget: -1, Privileges: pq.StringArray{"testrole2=arwx/testrole2"}}
 			col := []backup.ColumnDefinition{privilegesColumnOne, privilegesColumnTwo}
 			testTable.ColumnDefs = col
 			tableMetadata := backup.ObjectMetadata{Owner: "testrole"}
