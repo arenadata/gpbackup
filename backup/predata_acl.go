@@ -186,15 +186,9 @@ func ConstructMetadataMap(results []MetadataQueryStruct) MetadataMap {
 	return metadataMap
 }
 
-func getColumnACL(privileges pq.StringArray, kind string) []ACL {
-	privilegesSlice := make([]string, 0)
-	if kind == "Empty" {
-		privilegesSlice = append(privilegesSlice, "GRANTEE=/GRANTOR")
-	} else if len(privileges) > 0 {
-		privilegesSlice = privileges
-	}
+func getColumnACL(privileges pq.StringArray) []ACL {
 	columnMetadata := make([]ACL, 0)
-	for _, privilege := range privilegesSlice {
+	for _, privilege := range privileges {
 		acl := ParseACL(privilege)
 		if acl != nil {
 			columnMetadata = append(columnMetadata, *acl)
