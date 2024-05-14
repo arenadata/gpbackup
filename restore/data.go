@@ -26,7 +26,7 @@ var (
 	tableDelim = ","
 )
 
-func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
+func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int, isReplicated bool) (int64, error) {
 	whichConn = connectionPool.ValidateConnNum(whichConn)
 	copyCommand := ""
 	readFromDestinationCommand := "cat"
@@ -50,7 +50,7 @@ func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, ta
 	// During a larger-to-smaller restore, we need multiple COPY passes to load all the data.
 	// One pass is sufficient for smaller-to-larger and normal restores.
 	batches := 1
-	if resizeCluster && origSize > destSize {
+	if !isReplicated && resizeCluster && origSize > destSize {
 		batches = origSize / destSize
 		if origSize%destSize != 0 {
 			batches += 1
@@ -89,7 +89,7 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		destinationToRead = fpInfo.GetTableBackupFilePathForCopyCommand(entry.Oid, utils.GetPipeThroughProgram().Extension, backupConfig.SingleDataFile)
 	}
 	gplog.Debug("Reading from %s", destinationToRead)
-	numRowsRestored, err := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
+	numRowsRestored, err := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn, entry.IsReplicated)
 	if err != nil {
 		return err
 	}
