@@ -654,7 +654,7 @@ COMMENT ON COLUMN public.tablename.i IS 'This is a column comment.';
 COMMENT ON COLUMN public.tablename.j IS 'This is another column comment.';`)
 		})
 		It("prints a GRANT statement on a table column", func() {
-			privilegesColumnOne := backup.ColumnDefinition{Oid: 0, Num: 1, Name: "i", Type: "integer", StatTarget: -1, Privileges: pq.StringArray{"testrole=r/testrole"}}
+			privilegesColumnOne := backup.ColumnDefinition{Oid: 0, Num: 1, Name: "i", Type: "integer", StatTarget: -1, Privileges: pq.StringArray{"testrole=r/testrole", `" test, role "=r/testrole`}}
 			privilegesColumnTwo := backup.ColumnDefinition{Oid: 1, Num: 2, Name: "j", Type: "character varying(20)", StatTarget: -1, Privileges: pq.StringArray{"testrole2=arwx/testrole2"}}
 			col := []backup.ColumnDefinition{privilegesColumnOne, privilegesColumnTwo}
 			testTable.ColumnDefs = col
@@ -668,6 +668,7 @@ ALTER TABLE public.tablename OWNER TO testrole;
 REVOKE ALL (i) ON TABLE public.tablename FROM PUBLIC;
 REVOKE ALL (i) ON TABLE public.tablename FROM testrole;
 GRANT SELECT (i) ON TABLE public.tablename TO testrole;
+GRANT SELECT (i) ON TABLE public.tablename TO " test, role ";
 
 
 REVOKE ALL (j) ON TABLE public.tablename FROM PUBLIC;
