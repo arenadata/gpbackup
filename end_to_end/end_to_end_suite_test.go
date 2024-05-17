@@ -2195,6 +2195,9 @@ LANGUAGE plpgsql NO SQL;`)
 					numSegments := dbconn.MustSelectString(restoreConn, "SELECT numsegments FROM gp_distribution_policy where localoid = 'schemaone.test_table'::regclass::oid")
 					Expect(numSegments).To(Equal(strconv.Itoa(segmentCount)))
 
+					// check there is no pipe errors on segments
+					errSegments := dbconn.MustSelectString(restoreConn, fmt.Sprintf("SELECT exists (SELECT * FROM gp_toolkit.__gp_log_segment_ext WHERE logdatabase = current_database() AND logmessage LIKE 'read err msg from pipe%%_%06d_%%')", gprestoreCmd.Process.Pid))
+					Expect(errSegments).To(Equal("false"))
 				},
 				Entry("Can backup a 1-segment cluster and restore to current cluster with replicated tables", "20221104023842", "1-segment-db-replicated"),
 				Entry("Can backup a 3-segment cluster and restore to current cluster with replicated tables", "20221104023611", "3-segment-db-replicated"),
