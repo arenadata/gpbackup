@@ -26,21 +26,23 @@ var (
 	tableDelim = ","
 )
 
-func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
+func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int, isReplicated bool) (int64, error) {
 	whichConn = connectionPool.ValidateConnNum(whichConn)
 	copyCommand := ""
 	readFromDestinationCommand := "cat"
 	customPipeThroughCommand := utils.GetPipeThroughProgram().InputCommand
 	origSize, destSize, resizeCluster := GetResizeClusterInfo()
+	checkPipeExistsCommand := ""
 
 	if singleDataFile || resizeCluster {
 		//helper.go handles compression, so we don't want to set it here
 		customPipeThroughCommand = "cat -"
+		checkPipeExistsCommand = fmt.Sprintf("(timeout 300 bash -c \"while [ ! -p \"%s\" ]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1)) && ", destinationToRead, destinationToRead)
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		readFromDestinationCommand = fmt.Sprintf("%s restore_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
 	}
 
-	copyCommand = fmt.Sprintf("PROGRAM '%s %s | %s'", readFromDestinationCommand, destinationToRead, customPipeThroughCommand)
+	copyCommand = fmt.Sprintf("PROGRAM '%s%s %s | %s'", checkPipeExistsCommand, readFromDestinationCommand, destinationToRead, customPipeThroughCommand)
 
 	query := fmt.Sprintf("COPY %s%s FROM %s WITH CSV DELIMITER '%s' ON SEGMENT;", tableName, tableAttributes, copyCommand, tableDelim)
 
@@ -50,7 +52,7 @@ func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, ta
 	// During a larger-to-smaller restore, we need multiple COPY passes to load all the data.
 	// One pass is sufficient for smaller-to-larger and normal restores.
 	batches := 1
-	if resizeCluster && origSize > destSize {
+	if !isReplicated && resizeCluster && origSize > destSize {
 		batches = origSize / destSize
 		if origSize%destSize != 0 {
 			batches += 1
@@ -89,7 +91,7 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		destinationToRead = fpInfo.GetTableBackupFilePathForCopyCommand(entry.Oid, utils.GetPipeThroughProgram().Extension, backupConfig.SingleDataFile)
 	}
 	gplog.Debug("Reading from %s", destinationToRead)
-	numRowsRestored, err := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
+	numRowsRestored, err := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn, entry.IsReplicated)
 	if err != nil {
 		return err
 	}
