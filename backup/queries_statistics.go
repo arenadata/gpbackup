@@ -11,6 +11,7 @@ import (
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gpbackup/utils"
+	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
@@ -53,7 +54,7 @@ type AttributeStatistic struct {
 	Values5      pq.StringArray `db:"stavalues5"`
 }
 
-func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint32][]AttributeStatistic {
+func GetAttributeStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (*sqlx.Rows, error) {
 	inheritClause := ""
 	statSlotClause := ""
 	if connectionPool.Version.AtLeast("6") {
@@ -119,13 +120,20 @@ func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table) map[u
 		inheritClause, statSlotClause, statCollationClause,
 		SchemaFilterClause("n"), utils.SliceToQuotedString(tablenames))
 
-	results := make([]AttributeStatistic, 0)
-	err := connectionPool.Select(&results, query)
+	return connectionPool.Query(query)
+}
+
+func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint32][]AttributeStatistic {
+	results, err := GetAttributeStatisticsRows(connectionPool, tables)
 	gplog.FatalOnError(err)
 	stats := make(map[uint32][]AttributeStatistic)
-	for _, stat := range results {
+	for results.Next() {
+		var stat AttributeStatistic
+		err = results.StructScan(&stat)
+		gplog.FatalOnError(err)
 		stats[stat.Oid] = append(stats[stat.Oid], stat)
 	}
+	gplog.FatalOnError(results.Err())
 	return stats
 }
 
@@ -137,7 +145,7 @@ type TupleStatistic struct {
 	RelTuples float64
 }
 
-func GetTupleStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint32]TupleStatistic {
+func GetTupleStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (*sqlx.Rows, error) {
 	tablenames := make([]string, 0)
 	for _, table := range tables {
 		tablenames = append(tablenames, table.FQN())
@@ -155,12 +163,19 @@ func GetTupleStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint3
 	ORDER BY n.nspname, c.relname`,
 		SchemaFilterClause("n"), utils.SliceToQuotedString(tablenames))
 
-	results := make([]TupleStatistic, 0)
-	err := connectionPool.Select(&results, query)
+	return connectionPool.Query(query)
+}
+
+func GetTupleStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint32]TupleStatistic {
+	results, err := GetTupleStatisticsRows(connectionPool, tables)
 	gplog.FatalOnError(err)
 	stats := make(map[uint32]TupleStatistic)
-	for _, stat := range results {
+	for results.Next() {
+		var stat TupleStatistic
+		err = results.StructScan(&stat)
+		gplog.FatalOnError(err)
 		stats[stat.Oid] = stat
 	}
+	gplog.FatalOnError(results.Err())
 	return stats
 }
