@@ -10,6 +10,7 @@ import (
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/testutils"
 	"github.com/greenplum-db/gpbackup/toc"
+	"github.com/lib/pq"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -425,7 +426,7 @@ SET SUBPARTITION TEMPLATE ` + `
 		})
 		It("prints column level privileges", func() {
 			testutils.SkipIfBefore6(connectionPool)
-			privilegesColumnOne := backup.ColumnDefinition{Oid: 0, Num: 1, Name: "i", Type: "integer", StatTarget: -1, Privileges: sql.NullString{String: "testrole=r/testrole", Valid: true}}
+			privilegesColumnOne := backup.ColumnDefinition{Oid: 0, Num: 1, Name: "i", Type: "integer", StatTarget: -1, Privileges: pq.StringArray{"testrole=r/testrole", "anothertestrole=r/testrole"}}
 			tableMetadata.Owner = "testrole"
 			testTable.ColumnDefs = []backup.ColumnDefinition{privilegesColumnOne}
 			backup.PrintPostCreateTableStatements(backupfile, tocfile, testTable, tableMetadata, []uint32{0, 0})
