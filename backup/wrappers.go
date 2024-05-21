@@ -773,28 +773,26 @@ func backupExtendedStatistic(metadataFile *utils.FileWithByteCount) {
 
 func backupTableStatistics(statisticsFile *utils.FileWithByteCount, tables []Table) {
 	backupSessionGUC(statisticsFile)
+	tablesMap := make(map[uint32]Table)
+	for _, table := range tables {
+		tablesMap[table.Oid] = table
+	}
 	tupleStats, err := GetTupleStatisticsRows(connectionPool, tables)
 	gplog.FatalOnError(err)
 	for tupleStats.Next() {
-		var stat TupleStatistic
-		err = tupleStats.StructScan(&stat)
+		var tupleStat TupleStatistic
+		err = tupleStats.StructScan(&tupleStat)
 		gplog.FatalOnError(err)
-		table := Table{Relation: Relation{Schema: stat.Schema, Name: stat.Table}}
-		tupleQuery := GenerateTupleStatisticsQuery(table, stat)
-		printStatisticsStatementForTable(statisticsFile, globalTOC, table, tupleQuery)
+		printTupleStatisticsStatementForTable(statisticsFile, globalTOC, tablesMap[tupleStat.Oid], tupleStat)
 	}
 	gplog.FatalOnError(tupleStats.Err())
 	attStats, err := GetAttributeStatisticsRows(connectionPool, tables)
 	gplog.FatalOnError(err)
 	for attStats.Next() {
-		var stat AttributeStatistic
-		err = attStats.StructScan(&stat)
+		var attStat AttributeStatistic
+		err = attStats.StructScan(&attStat)
 		gplog.FatalOnError(err)
-		table := Table{Relation: Relation{Schema: stat.Schema, Name: stat.Table}}
-		attributeQueries := GenerateAttributeStatisticsQueries(table, stat)
-		for _, attrQuery := range attributeQueries {
-			printStatisticsStatementForTable(statisticsFile, globalTOC, table, attrQuery)
-		}
+		printAttributeStatisticsStatementForTable(statisticsFile, globalTOC, tablesMap[attStat.Oid], attStat)
 	}
 	gplog.FatalOnError(attStats.Err())
 }

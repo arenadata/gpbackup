@@ -128,10 +128,10 @@ func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table) map[u
 	gplog.FatalOnError(err)
 	stats := make(map[uint32][]AttributeStatistic)
 	for results.Next() {
-		var stat AttributeStatistic
-		err = results.StructScan(&stat)
+		var attStat AttributeStatistic
+		err = results.StructScan(&attStat)
 		gplog.FatalOnError(err)
-		stats[stat.Oid] = append(stats[stat.Oid], stat)
+		stats[attStat.Oid] = append(stats[attStat.Oid], attStat)
 	}
 	gplog.FatalOnError(results.Err())
 	return stats
@@ -171,10 +171,10 @@ func GetTupleStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint3
 	gplog.FatalOnError(err)
 	stats := make(map[uint32]TupleStatistic)
 	for results.Next() {
-		var stat TupleStatistic
-		err = results.StructScan(&stat)
+		var tupleStat TupleStatistic
+		err = results.StructScan(&tupleStat)
 		gplog.FatalOnError(err)
-		stats[stat.Oid] = stat
+		stats[tupleStat.Oid] = tupleStat
 	}
 	gplog.FatalOnError(results.Err())
 	return stats

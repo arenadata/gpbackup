@@ -14,15 +14,23 @@ import (
 	"github.com/lib/pq"
 )
 
+func printTupleStatisticsStatementForTable(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, table Table, tupleStat TupleStatistic) {
+	tupleQuery := GenerateTupleStatisticsQuery(table, tupleStat)
+	printStatisticsStatementForTable(statisticsFile, tocfile, table, tupleQuery)
+}
+
+func printAttributeStatisticsStatementForTable(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, table Table, attStat AttributeStatistic) {
+	attributeQueries := GenerateAttributeStatisticsQueries(table, attStat)
+	for _, attrQuery := range attributeQueries {
+		printStatisticsStatementForTable(statisticsFile, tocfile, table, attrQuery)
+	}
+}
+
 func PrintStatisticsStatements(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, tables []Table, attStats map[uint32][]AttributeStatistic, tupleStats map[uint32]TupleStatistic) {
 	for _, table := range tables {
-		tupleQuery := GenerateTupleStatisticsQuery(table, tupleStats[table.Oid])
-		printStatisticsStatementForTable(statisticsFile, tocfile, table, tupleQuery)
+		printTupleStatisticsStatementForTable(statisticsFile, tocfile, table, tupleStats[table.Oid])
 		for _, attStat := range attStats[table.Oid] {
-			attributeQueries := GenerateAttributeStatisticsQueries(table, attStat)
-			for _, attrQuery := range attributeQueries {
-				printStatisticsStatementForTable(statisticsFile, tocfile, table, attrQuery)
-			}
+			printAttributeStatisticsStatementForTable(statisticsFile, tocfile, table, attStat)
 		}
 	}
 }
