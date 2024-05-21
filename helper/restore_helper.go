@@ -487,6 +487,23 @@ func getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
 	return pipeWriter, fileHandle, nil
 }
 
+func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
+	// Restore subset is disabled in the plugin config
+	if !pluginConfig.CanRestoreSubset() {
+		return false
+	}
+	// Helper's option does not allow to use subset
+	if !*isFiltered  || *onErrorContinue {
+		return false
+	}
+	// Restore subset and compression does not allow together
+	if strings.HasSuffix(fileToRead, ".gz") || strings.HasSuffix(fileToRead, ".zst") {
+		return false
+	}
+
+	return true
+}
+
 func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (io.Reader, bool, error) {
 	isSubset := false
 	pluginConfig, err := utils.ReadPluginConfig(*pluginConfigFile)
@@ -495,7 +512,7 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 		return nil, false, err
 	}
 	cmdStr := ""
-	if objToc != nil && pluginConfig.CanRestoreSubset() && *isFiltered && !strings.HasSuffix(fileToRead, ".gz") && !strings.HasSuffix(fileToRead, ".zst") {
+	if objToc != nil && getSubsetFlag(fileToRead, pluginConfig) {
 		offsetsFile, _ := ioutil.TempFile("/tmp", "gprestore_offsets_")
 		defer func() {
 			offsetsFile.Close()

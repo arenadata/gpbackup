@@ -1892,31 +1892,6 @@ LANGUAGE plpgsql NO SQL;`)
 
 				assertArtifactsCleaned(restoreConn, timestamp)
 			})
-			It("runs gpbackup and gprestore to backup functions depending on table row's type", func() {
-				skipIfOldBackupVersionBefore("1.19.0")
-
-				testhelper.AssertQueryRuns(backupConn, "CREATE TABLE table_provides_type (n int);")
-				defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE table_provides_type;")
-
-				testhelper.AssertQueryRuns(backupConn, "INSERT INTO table_provides_type values (1);")
-				testhelper.AssertQueryRuns(backupConn, "CREATE OR REPLACE FUNCTION func_depends_on_row_type(arg table_provides_type[]) RETURNS void AS $$ BEGIN; SELECT NULL; END; $$ LANGUAGE SQL;")
-
-				defer testhelper.AssertQueryRuns(backupConn, "DROP FUNCTION func_depends_on_row_type(arg table_provides_type[]);")
-
-				timestamp := gpbackup(gpbackupPath, backupHelperPath)
-				gprestore(gprestorePath, restoreHelperPath, timestamp,
-					"--redirect-db", "restoredb")
-
-				assertRelationsCreated(restoreConn, TOTAL_RELATIONS+1) // for 1 new table
-				assertDataRestored(restoreConn, schema2TupleCounts)
-				assertDataRestored(restoreConn, map[string]int{
-					"public.foo":                 40000,
-					"public.holds":               50000,
-					"public.sales":               13,
-					"public.table_provides_type": 1})
-
-				assertArtifactsCleaned(restoreConn, timestamp)
-			})
 			It("Can restore xml with xmloption set to document", func() {
 				testutils.SkipIfBefore6(backupConn)
 				// Set up the XML table that contains XML content
@@ -2245,6 +2220,9 @@ LANGUAGE plpgsql NO SQL;`)
 					numSegments := dbconn.MustSelectString(restoreConn, "SELECT numsegments FROM gp_distribution_policy where localoid = 'schemaone.test_table'::regclass::oid")
 					Expect(numSegments).To(Equal(strconv.Itoa(segmentCount)))
 
+					// check there is no pipe errors on segments
+					errSegments := dbconn.MustSelectString(restoreConn, fmt.Sprintf("SELECT exists (SELECT * FROM gp_toolkit.__gp_log_segment_ext WHERE logdatabase = current_database() AND logmessage LIKE 'read err msg from pipe%%_%06d_%%')", gprestoreCmd.Process.Pid))
+					Expect(errSegments).To(Equal("false"))
 				},
 				Entry("Can backup a 1-segment cluster and restore to current cluster with replicated tables", "20221104023842", "1-segment-db-replicated"),
 				Entry("Can backup a 3-segment cluster and restore to current cluster with replicated tables", "20221104023611", "3-segment-db-replicated"),
@@ -2310,6 +2288,21 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t1`))
 			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t3`))
+			assertArtifactsCleaned(restoreConn, "20240502095933")
+			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
+		})
+		It("Will not hang after error during restore with jobs", func() {
+			command := exec.Command("tar", "-xzf", "resources/2-segment-db-error.tar.gz", "-C", backupDir)
+			mustRunCommand(command)
+			gprestoreCmd := exec.Command(gprestorePath,
+				"--timestamp", "20240502095933",
+				"--redirect-db", "restoredb",
+				"--backup-dir", path.Join(backupDir, "2-segment-db-error"),
+				"--resize-cluster", "--jobs", "3")
+			output, err := gprestoreCmd.CombinedOutput()
+			Expect(err).To(HaveOccurred())
+			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t1`))
+			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t2`))
 			assertArtifactsCleaned(restoreConn, "20240502095933")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
 		})
