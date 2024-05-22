@@ -278,12 +278,13 @@ EXECUTE 'echo -e "2\n1"' on host
 FORMAT 'csv';`)
 			externalPartitions := []backup.PartitionInfo{externalPartition}
 
-			backup.PrintAlterPartitionStatements(backupfile, tocfile, externalPartitions, emptyPartInfoMap, tables)
+			backup.PrintExchangeExternalPartitionStatements(backupfile, tocfile, externalPartitions, emptyPartInfoMap, tables)
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
-			resultExtPartitions, resultPartInfoMap := backup.GetPartitionsTreeInfo(connectionPool)
+			resultExtPartitions, resultPartInfoMap, extensionParentsInfoMap := backup.GetExternalPartitionInfo(connectionPool)
 			Expect(resultExtPartitions).To(HaveLen(1))
 			Expect(resultPartInfoMap).To(HaveLen(3))
+			Expect(extensionParentsInfoMap).To(HaveLen(0))
 			structmatcher.ExpectStructsToMatchExcluding(&externalPartition, &resultExtPartitions[0], "PartitionRuleOid", "RelationOid", "ParentRelationOid")
 		})
 		It("writes an alter statement for an unnamed range partition", func() {
@@ -309,12 +310,13 @@ EXECUTE 'echo -e "2\n1"' on host
 FORMAT 'csv';`)
 			externalPartitions := []backup.PartitionInfo{externalPartition}
 
-			backup.PrintAlterPartitionStatements(backupfile, tocfile, externalPartitions, emptyPartInfoMap, tables)
+			backup.PrintExchangeExternalPartitionStatements(backupfile, tocfile, externalPartitions, emptyPartInfoMap, tables)
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
-			resultExtPartitions, resultPartInfoMap := backup.GetPartitionsTreeInfo(connectionPool)
+			resultExtPartitions, resultPartInfoMap, extensionParentsInfoMap := backup.GetExternalPartitionInfo(connectionPool)
 			Expect(resultExtPartitions).To(HaveLen(1))
 			Expect(resultPartInfoMap).To(HaveLen(2))
+			Expect(extensionParentsInfoMap).To(HaveLen(0))
 			structmatcher.ExpectStructsToMatchExcluding(&externalPartition, &resultExtPartitions[0], "PartitionRuleOid", "RelationOid", "ParentRelationOid")
 		})
 		It("writes an alter statement for a two level partition", func() {
@@ -361,10 +363,10 @@ SUBPARTITION eur values ('eur'))
 			partInfoMap := map[uint32]backup.PartitionInfo{externalPartitionParent.PartitionRuleOid: externalPartitionParent}
 			externalPartitions := []backup.PartitionInfo{externalPartition}
 
-			backup.PrintAlterPartitionStatements(backupfile, tocfile, externalPartitions, partInfoMap, tables)
+			backup.PrintExchangeExternalPartitionStatements(backupfile, tocfile, externalPartitions, partInfoMap, tables)
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
-			resultExtPartitions, _ := backup.GetPartitionsTreeInfo(connectionPool)
+			resultExtPartitions, _, _ := backup.GetExternalPartitionInfo(connectionPool)
 			externalPartition.RelationOid = testutils.OidFromObjectName(connectionPool, "public", "part_tbl_1_prt_dec16_2_prt_apj", backup.TYPE_RELATION)
 			Expect(resultExtPartitions).To(HaveLen(1))
 			structmatcher.ExpectStructsToMatchExcluding(&externalPartition, &resultExtPartitions[0], "PartitionRuleOid", "PartitionParentRuleOid", "ParentRelationOid")
@@ -424,10 +426,10 @@ PARTITION BY RANGE (year)
 			partInfoMap := map[uint32]backup.PartitionInfo{externalPartitionParent1.PartitionRuleOid: externalPartitionParent1, externalPartitionParent2.PartitionRuleOid: externalPartitionParent2}
 			externalPartitions := []backup.PartitionInfo{externalPartition}
 
-			backup.PrintAlterPartitionStatements(backupfile, tocfile, externalPartitions, partInfoMap, tables)
+			backup.PrintExchangeExternalPartitionStatements(backupfile, tocfile, externalPartitions, partInfoMap, tables)
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
-			resultExtPartitions, _ := backup.GetPartitionsTreeInfo(connectionPool)
+			resultExtPartitions, _, _ := backup.GetExternalPartitionInfo(connectionPool)
 			externalPartition.RelationOid = testutils.OidFromObjectName(connectionPool, "public", "part_tbl_1_prt_3_2_prt_1_3_prt_europe", backup.TYPE_RELATION)
 			Expect(resultExtPartitions).To(HaveLen(1))
 			structmatcher.ExpectStructsToMatchExcluding(&externalPartition, &resultExtPartitions[0], "PartitionRuleOid", "PartitionParentRuleOid", "ParentRelationOid")

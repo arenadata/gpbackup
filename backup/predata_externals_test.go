@@ -537,7 +537,7 @@ GRANT ALL ON PROTOCOL s3 TO testrole;`}
 				IsExternal:             true,
 			}
 			externalPartitions := []backup.PartitionInfo{externalPartition}
-			backup.PrintAlterPartitionStatements(backupfile, tocfile, externalPartitions, emptyPartInfoMap, tables)
+			backup.PrintExchangeExternalPartitionStatements(backupfile, tocfile, externalPartitions, emptyPartInfoMap, tables)
 			testutils.AssertBufferContents(tocfile.PredataEntries, buffer, `ALTER TABLE public.partition_table EXCHANGE PARTITION partition_name WITH TABLE public.partition_table_ext_part_ WITHOUT VALIDATION;
 
 DROP TABLE public.partition_table_ext_part_;`)
@@ -555,7 +555,7 @@ DROP TABLE public.partition_table_ext_part_;`)
 				IsExternal:             true,
 			}
 			externalPartitions := []backup.PartitionInfo{externalPartition}
-			backup.PrintAlterPartitionStatements(backupfile, tocfile, externalPartitions, emptyPartInfoMap, tables)
+			backup.PrintExchangeExternalPartitionStatements(backupfile, tocfile, externalPartitions, emptyPartInfoMap, tables)
 			testutils.AssertBufferContents(tocfile.PredataEntries, buffer, `ALTER TABLE public.partition_table EXCHANGE PARTITION FOR (RANK(1)) WITH TABLE public.partition_table_ext_part_ WITHOUT VALIDATION;
 
 DROP TABLE public.partition_table_ext_part_;`)
@@ -585,7 +585,7 @@ DROP TABLE public.partition_table_ext_part_;`)
 			}
 			partInfoMap := map[uint32]backup.PartitionInfo{externalPartitionParent.PartitionRuleOid: externalPartitionParent}
 			externalPartitions := []backup.PartitionInfo{externalPartition}
-			backup.PrintAlterPartitionStatements(backupfile, tocfile, externalPartitions, partInfoMap, tables)
+			backup.PrintExchangeExternalPartitionStatements(backupfile, tocfile, externalPartitions, partInfoMap, tables)
 			testutils.AssertBufferContents(tocfile.PredataEntries, buffer, `ALTER TABLE public.partition_table ALTER PARTITION FOR (RANK(3)) EXCHANGE PARTITION FOR (RANK(1)) WITH TABLE public.partition_table_ext_part_ WITHOUT VALIDATION;
 
 DROP TABLE public.partition_table_ext_part_;`)
@@ -615,7 +615,7 @@ DROP TABLE public.partition_table_ext_part_;`)
 			}
 			partInfoMap := map[uint32]backup.PartitionInfo{externalPartitionParent.PartitionRuleOid: externalPartitionParent}
 			externalPartitions := []backup.PartitionInfo{externalPartition}
-			backup.PrintAlterPartitionStatements(backupfile, tocfile, externalPartitions, partInfoMap, tables)
+			backup.PrintExchangeExternalPartitionStatements(backupfile, tocfile, externalPartitions, partInfoMap, tables)
 			testutils.AssertBufferContents(tocfile.PredataEntries, buffer, `ALTER TABLE public.partition_table ALTER PARTITION partition_name EXCHANGE PARTITION FOR (RANK(1)) WITH TABLE public.partition_table_ext_part_ WITHOUT VALIDATION;
 
 DROP TABLE public.partition_table_ext_part_;`)
@@ -656,7 +656,7 @@ DROP TABLE public.partition_table_ext_part_;`)
 			}
 			partInfoMap := map[uint32]backup.PartitionInfo{externalPartitionParent1.PartitionRuleOid: externalPartitionParent1, externalPartitionParent2.PartitionRuleOid: externalPartitionParent2}
 			externalPartitions := []backup.PartitionInfo{externalPartition}
-			backup.PrintAlterPartitionStatements(backupfile, tocfile, externalPartitions, partInfoMap, tables)
+			backup.PrintExchangeExternalPartitionStatements(backupfile, tocfile, externalPartitions, partInfoMap, tables)
 			testutils.AssertBufferContents(tocfile.PredataEntries, buffer, `ALTER TABLE public.partition_table ALTER PARTITION FOR (RANK(3)) ALTER PARTITION partition_name EXCHANGE PARTITION FOR (RANK(1)) WITH TABLE public.partition_table_ext_part_ WITHOUT VALIDATION;
 
 DROP TABLE public.partition_table_ext_part_;`)

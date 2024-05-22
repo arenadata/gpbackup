@@ -57,13 +57,7 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 			if connectionPool.Version.AtLeast("7") || table.PartitionLevelInfo.IsParentInExtension {
 				// In GPDB 7+, we need to dump out the leaf partition DDL along with their
 				// ALTER TABLE ATTACH PARTITION commands to construct the partition table
-				// In 6X and earlier, we need to do this if the parent is in an extension to add such partitions after
-				// creating the extension.
-				if table.ExtensionTableConfig == nil {
-					// If the table is not a configuration table for the extension,
-					// then add it to the metadata.
-					metadataTables = append(metadataTables, table)
-				}
+				metadataTables = append(metadataTables, table)
 			} else if partType != "l" && partType != "i" {
 				if table.ExtensionTableConfig == nil {
 					// If the table is not a configuration table for the extension,
@@ -117,8 +111,6 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 			// since the COPY will be called on the top-most root partition. It just so
 			// happens that those particular partition types will always have an
 			// AttachPartitionInfo initialized.
-			// Or if the IsParentInExtension is set, it means that the parent of this partition is in the extension and
-			// we need to backup it as new root.
 			if table.AttachPartitionInfo == (AttachPartitionInfo{}) || table.PartitionLevelInfo.IsParentInExtension {
 				dataTables = append(dataTables, table)
 			}

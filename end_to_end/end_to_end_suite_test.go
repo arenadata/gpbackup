@@ -2670,32 +2670,38 @@ LANGUAGE plpgsql NO SQL;`)
 			testhelper.AssertQueryRuns(backupConn, `DROP EXTENSION test_ext6 CASCADE;`)
 		})
 
-		It("backup the partition whose parent is in the extension.", func() {
+		It("backup partition these parent is in extension", func() {
 			if backupConn.Version.AtLeast("7") {
-				testhelper.AssertQueryRuns(backupConn, `
-					CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20) PARTITION BY LIST(c);
-					CREATE TABLE t_part_1_prt_test_part_2_prt_a_part PARTITION OF test_part FOR VALUES IN ('a');
-					CREATE TABLE t_part_1_prt_test_part_2_prt_b_part PARTITION OF test_part FOR VALUES IN ('b');
-					CREATE TABLE t_part_1_prt_1_2_prt_part_c PARTITION OF t_part_1_prt_1 FOR VALUES IN ('c');`)
+				testhelper.AssertQueryRuns(backupConn,
+					`
+							CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20) PARTITION BY LIST(c);
+							CREATE TABLE part_a PARTITION OF test_part FOR VALUES IN ('a');
+							CREATE TABLE part_b PARTITION OF test_part FOR VALUES IN ('b');
+							CREATE TABLE part_c PARTITION OF t_part_1_prt_1 FOR VALUES IN ('c');
+
+							INSERT INTO part_a SELECT a, 15, a, 'a' FROM generate_series(1, 100)a;
+							INSERT INTO part_b SELECT a, 16, a, 'b' FROM generate_series(1, 100)a;
+							INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 100)a;
+					`)
 			} else {
-				testhelper.AssertQueryRuns(backupConn, `
-					ALTER TABLE t_part ADD PARTITION test_part START (10) END (20);
-					ALTER TABLE t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_c VALUES ('c');`)
+				testhelper.AssertQueryRuns(backupConn,
+					`
+							ALTER TABLE t_part ADD PARTITION test_part START (10) END (20);
+							ALTER TABLE t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_c VALUES ('c');
+
+							INSERT INTO t_part_1_prt_1_2_prt_part_c SELECT a, 0, a, 'c' FROM generate_series(1, 100)a;
+							INSERT INTO t_part_1_prt_test_part_2_prt_a_part SELECT a, 15, a, 'a' FROM generate_series(1, 100)a;
+							INSERT INTO t_part_1_prt_test_part_2_prt_b_part SELECT a, 16, a, 'b' FROM generate_series(1, 100)a;
+					`)
 			}
-
-			testhelper.AssertQueryRuns(backupConn, `
-				INSERT INTO t_part_1_prt_test_part_2_prt_a_part SELECT a, 15, a, 'a' FROM generate_series(1, 10)a;
-				INSERT INTO t_part_1_prt_test_part_2_prt_b_part SELECT a, 16, a, 'b' FROM generate_series(1, 20)a;
-				INSERT INTO t_part_1_prt_1_2_prt_part_c SELECT a, 0, a, 'c' FROM generate_series(1, 30)a;`)
-
 			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
 			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
 
 			if backupConn.Version.AtLeast("7") {
-				Expect(metadataFileContents).To(ContainSubstring("test_part"))
-				Expect(metadataFileContents).To(ContainSubstring("t_part_1_prt_test_part_2_prt_a_part"))
-				Expect(metadataFileContents).To(ContainSubstring("t_part_1_prt_test_part_2_prt_b_part"))
-				Expect(metadataFileContents).To(ContainSubstring("t_part_1_prt_1_2_prt_part_c"))
+				Expect(metadataFileContents).To(ContainSubstring("t_part"))
+				Expect(metadataFileContents).To(ContainSubstring("part_a"))
+				Expect(metadataFileContents).To(ContainSubstring("part_b"))
+				Expect(metadataFileContents).To(ContainSubstring("part_c"))
 			} else {
 				// In 6X we will create test_part, part_a and part_b in a single DDL
 				Expect(metadataFileContents).To(ContainSubstring("test_part"))
@@ -2704,15 +2710,20 @@ LANGUAGE plpgsql NO SQL;`)
 
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
 
-			assertDataRestored(restoreConn, map[string]int{
-				"public.t_part_1_prt_test_part_2_prt_a_part": 10,
-				"public.t_part_1_prt_test_part_2_prt_b_part": 20,
-				"public.t_part_1_prt_1_2_prt_part_c":         30,
-			})
+			testQuery := `select count(*) from t_part;`
+			rows, err := restoreConn.Query(testQuery)
+			defer rows.Close()
+
+			Expect(err).To(BeNil(), "%s", testQuery)
+			Expect(rows.Next()).To(BeTrue())
+
+			count := 0
+			Expect(rows.Scan(&count)).To(BeNil())
+			Expect(count).To(Equal(300))
 
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
-		It("ignore partitions whose parents are in extension in 6X if flag '--leaf-partition-data' is not provided.", func() {
+		It("ignore partitions these parents are in extension in 6X if flag '--leaf-partition-data' is not provided.", func() {
 			if backupConn.Version.AtLeast("7") {
 				Skip("not relevant for 7X")
 			}
@@ -2725,19 +2736,21 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(metadataFileContents).ToNot(ContainSubstring("test_part"))
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
-		It("normally handles the '--include-table' during backup", func() {
+		It("normally handles the '--include-table'", func() {
 			tablePartA := ""
 			tablePartC := ""
 			if backupConn.Version.AtLeast("7") {
-				testhelper.AssertQueryRuns(backupConn, `
+				testhelper.AssertQueryRuns(backupConn,
+					`
 							CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20) PARTITION BY LIST(c);
 							CREATE TABLE part_a PARTITION OF test_part FOR VALUES IN ('a');
 							CREATE TABLE part_b PARTITION OF test_part FOR VALUES IN ('b');
 							CREATE TABLE part_c PARTITION OF t_part_1_prt_1 FOR VALUES IN ('c');
 
-							INSERT INTO part_a SELECT a, 15, a, 'a' FROM generate_series(1, 10)a;
-							INSERT INTO part_b SELECT a, 16, a, 'b' FROM generate_series(1, 20)a;
-							INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 30)a;`)
+							INSERT INTO part_a SELECT a, 15, a, 'a' FROM generate_series(1, 100)a;
+							INSERT INTO part_b SELECT a, 16, a, 'b' FROM generate_series(1, 100)a;
+							INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 100)a;
+					`)
 				tablePartA = "public.part_a"
 				tablePartC = "public.part_c"
 			} else {
@@ -2745,12 +2758,10 @@ LANGUAGE plpgsql NO SQL;`)
 					`
 							ALTER TABLE t_part ADD PARTITION test_part START (10) END (20);
 							ALTER TABLE t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_c VALUES ('c');
-							ALTER TABLE t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_d VALUES ('d');
 
-							INSERT INTO t_part_1_prt_test_part_2_prt_a_part SELECT a, 15, a, 'a' FROM generate_series(1, 10)a;
-							INSERT INTO t_part_1_prt_test_part_2_prt_b_part SELECT a, 16, a, 'b' FROM generate_series(1, 20)a;
-							INSERT INTO t_part_1_prt_1_2_prt_part_c SELECT a, 0, a, 'c' FROM generate_series(1, 30)a;
-							INSERT INTO t_part_1_prt_1_2_prt_part_d SELECT a, 0, a, 'd' FROM generate_series(1, 40)a;
+							INSERT INTO t_part_1_prt_1_2_prt_part_c SELECT a, 0, a, 'c' FROM generate_series(1, 100)a;
+							INSERT INTO t_part_1_prt_test_part_2_prt_a_part SELECT a, 15, a, 'a' FROM generate_series(1, 100)a;
+							INSERT INTO t_part_1_prt_test_part_2_prt_b_part SELECT a, 16, a, 'b' FROM generate_series(1, 100)a;
 					`)
 				tablePartA = "public.t_part_1_prt_test_part_2_prt_a_part"
 				tablePartC = "public.t_part_1_prt_1_2_prt_part_c"
@@ -2771,9 +2782,6 @@ LANGUAGE plpgsql NO SQL;`)
 			} else {
 				Expect(metadataFileContents).To(ContainSubstring("ALTER TABLE public.t_part ADD PARTITION test_part START (10) INCLUSIVE END (20) EXCLUSIVE;"))
 				Expect(metadataFileContents).To(ContainSubstring("ALTER TABLE public.t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_c VALUES ('c'::text);"))
-				//In 6X we also should backup siblings
-				Expect(metadataFileContents).To(ContainSubstring("ALTER TABLE public.t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_d VALUES ('d'::text);"))
-				//We shouldn't create explicit create leaf partiton if it's parent is not in extension
 				Expect(metadataFileContents).ToNot(ContainSubstring("a_part"))
 				Expect(metadataFileContents).ToNot(ContainSubstring("b_part"))
 			}
@@ -2783,65 +2791,16 @@ LANGUAGE plpgsql NO SQL;`)
 
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
 
-			if backupConn.Version.AtLeast("7") {
-				assertDataRestored(restoreConn, map[string]int{
-					"public.part_a": 10,
-					"public.part_c": 30,
-				})
-			} else {
-				assertDataRestored(restoreConn, map[string]int{
-					"public.t_part_1_prt_test_part_2_prt_a_part": 10,
-					"public.t_part_1_prt_test_part_2_prt_b_part": 20,
-					"public.t_part_1_prt_1_2_prt_part_c":         30,
-					"public.t_part_1_prt_1_2_prt_part_d":         40,
-				})
-			}
+			testQuery := `select count(*) from t_part;`
+			rows, err := restoreConn.Query(testQuery)
+			defer rows.Close()
 
-			assertArtifactsCleaned(restoreConn, timestamp)
-		})
+			Expect(err).To(BeNil(), "%s", testQuery)
+			Expect(rows.Next()).To(BeTrue())
 
-		It("normally handles the '--exclude-table' during backup", func() {
-			if backupConn.Version.AtLeast("7") {
-				testhelper.AssertQueryRuns(backupConn, `
-					CREATE TABLE t_part_1_prt_1_2_prt_part_c PARTITION OF t_part_1_prt_1 FOR VALUES IN ('c');
-					CREATE TABLE t_part_1_prt_1_2_prt_part_d PARTITION OF t_part_1_prt_1 FOR VALUES IN ('d');`)
-			} else {
-				testhelper.AssertQueryRuns(backupConn, `
-					ALTER TABLE t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_c VALUES ('c');
-					ALTER TABLE t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_d VALUES ('d');`)
-			}
-
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data",
-				"--exclude-table", "public.t_part_1_prt_1_2_prt_part_c")
-
-			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
-
-			if backupConn.Version.AtLeast("7") {
-				Expect(metadataFileContents).To(ContainSubstring("ALTER TABLE ONLY public.t_part_1_prt_1 ATTACH PARTITION public.t_part_1_prt_1_2_prt_part_d FOR VALUES IN ('d');"))
-				Expect(metadataFileContents).ToNot(ContainSubstring("ALTER TABLE ONLY public.t_part_1_prt_1 ATTACH PARTITION public.t_part_1_prt_1_2_prt_part_c FOR VALUES IN ('c');"))
-			} else {
-				Expect(metadataFileContents).To(ContainSubstring("ALTER TABLE public.t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_d VALUES ('d'::text);"))
-				Expect(metadataFileContents).ToNot(ContainSubstring("ALTER TABLE public.t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_c VALUES ('c'::text);"))
-			}
-
-			assertArtifactsCleaned(restoreConn, timestamp)
-		})
-
-		It("backup the default partition the last one", func() {
-			if backupConn.Version.AtLeast("7") {
-				Skip("not relevant for 7X")
-			}
-
-			testhelper.AssertQueryRuns(backupConn, `
-				ALTER TABLE d_part ADD DEFAULT PARTITION extra;
-				ALTER TABLE d_part SPLIT DEFAULT PARTITION START(10) END(20);
-				`)
-
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
-
-			// if the default partition is not added last, then we will get an error during recovery, since after adding
-			// the default partition, we can add new partitions only through the split of the default one.
-			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
+			count := 0
+			Expect(rows.Scan(&count)).To(BeNil())
+			Expect(count).To(Equal(200))
 
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
@@ -2862,24 +2821,31 @@ LANGUAGE plpgsql NO SQL;`)
 			if backupConn.Version.Before("7") {
 				Skip("not relevant for 6X earlier")
 			}
-			testhelper.AssertQueryRuns(backupConn, `
+			testhelper.AssertQueryRuns(backupConn,
+				`
 							CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20) PARTITION BY LIST(c);
 							CREATE TABLE part_a PARTITION OF test_part FOR VALUES IN ('a');
 							CREATE TABLE part_b PARTITION OF test_part FOR VALUES IN ('b');
 							CREATE TABLE part_c PARTITION OF t_part_1_prt_1 FOR VALUES IN ('c');
 
-							INSERT INTO part_a SELECT a, 15, a, 'a' FROM generate_series(1, 10)a;
-							INSERT INTO part_b SELECT a, 16, a, 'b' FROM generate_series(1, 20)a;
-							INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 30)a;`)
+							INSERT INTO part_a SELECT a, 15, a, 'a' FROM generate_series(1, 100)a;
+							INSERT INTO part_b SELECT a, 16, a, 'b' FROM generate_series(1, 100)a;
+							INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 100)a;
+					`)
 
 			timestamp := gpbackup(gpbackupPath, backupHelperPath)
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--redirect-db", "restoredb")
 
-			assertDataRestored(restoreConn, map[string]int{
-				"public.part_a": 10,
-				"public.part_b": 20,
-				"public.part_c": 30,
-			})
+			testQuery := `select count(*) from t_part;`
+			rows, err := restoreConn.Query(testQuery)
+			defer rows.Close()
+
+			Expect(err).To(BeNil(), "%s", testQuery)
+			Expect(rows.Next()).To(BeTrue())
+
+			count := 0
+			Expect(rows.Scan(&count)).To(BeNil())
+			Expect(count).To(Equal(300))
 
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})

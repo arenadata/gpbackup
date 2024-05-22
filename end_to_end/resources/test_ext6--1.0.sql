@@ -11,6 +11,3 @@ CREATE TABLE t_part (id int, a int, b int , c text)
         (START (0) INCLUSIVE
         END (3) EXCLUSIVE
         EVERY (1));
-
-CREATE TABLE d_part (a int, b int, c int) DISTRIBUTED BY (a)
-PARTITION BY RANGE (b) (START (0) END (3) EVERY (1));
