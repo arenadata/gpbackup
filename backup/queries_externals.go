@@ -179,7 +179,6 @@ type PartitionInfo struct {
 	PartitionName          string
 	PartitionRank          int
 	IsExternal             bool
-	IsParentInExtension    bool
 }
 
 func (pi PartitionInfo) GetMetadataEntry() (string, toc.MetadataEntry) {
@@ -194,11 +193,11 @@ func (pi PartitionInfo) GetMetadataEntry() (string, toc.MetadataEntry) {
 		}
 }
 
-func GetExternalPartitionInfo(connectionPool *dbconn.DBConn) ([]PartitionInfo, map[uint32]PartitionInfo, []PartitionInfo) {
+func GetExternalPartitionInfo(connectionPool *dbconn.DBConn) ([]PartitionInfo, map[uint32]PartitionInfo) {
 	// For GPDB 7+, external partitions will have their own ATTACH PARTITION DDL command
 	// instead of a complicated EXCHANGE PARTITION command.
 	if connectionPool.Version.AtLeast("7") {
-		return []PartitionInfo{}, make(map[uint32]PartitionInfo, 0), []PartitionInfo{}
+		return []PartitionInfo{}, make(map[uint32]PartitionInfo, 0)
 	}
 
 	results := make([]PartitionInfo, 0)
@@ -213,20 +212,13 @@ func GetExternalPartitionInfo(connectionPool *dbconn.DBConn) ([]PartitionInfo, m
 		CASE WHEN pp.parkind <> 'r'::"char" OR pr1.parisdefault THEN 0
 			ELSE pg_catalog.rank() OVER (PARTITION BY pp.oid, cl.relname, pp.parlevel, cl3.relname
 				ORDER BY pr1.parisdefault, pr1.parruleord) END AS partitionrank,
-		CASE WHEN e.reloid IS NOT NULL then 't' ELSE 'f' END AS isexternal,
-		inhrelid is not null as isparentinextension
+		CASE WHEN e.reloid IS NOT NULL then 't' ELSE 'f' END AS isexternal
 	FROM pg_namespace n, pg_namespace n2, pg_class cl
 		LEFT JOIN pg_tablespace sp ON cl.reltablespace = sp.oid, pg_class cl2
 		LEFT JOIN pg_tablespace sp3 ON cl2.reltablespace = sp3.oid, pg_partition pp, pg_partition_rule pr1
 		LEFT JOIN pg_partition_rule pr2 ON pr1.parparentrule = pr2.oid
 		LEFT JOIN pg_class cl3 ON pr2.parchildrelid = cl3.oid
 		LEFT JOIN pg_exttable e ON e.reloid = pr1.parchildrelid
-		LEFT JOIN (
-			select inhrelid 
-			from pg_depend 
-			join pg_inherits on objid = inhparent 
-			where deptype = 'e' 
-			and inhrelid not in (select objid from pg_depend where deptype = 'e')) pd on pr1.parchildrelid = inhrelid
 	WHERE pp.paristemplate = false
 		AND pp.parrelid = cl.oid
 		AND pr1.paroid = pp.oid
@@ -237,16 +229,13 @@ func GetExternalPartitionInfo(connectionPool *dbconn.DBConn) ([]PartitionInfo, m
 	gplog.FatalOnError(err)
 
 	extPartitions := make([]PartitionInfo, 0)
-	extensionParents := make([]PartitionInfo, 0)
 	partInfoMap := make(map[uint32]PartitionInfo, len(results))
 	for _, partInfo := range results {
 		if partInfo.IsExternal {
 			extPartitions = append(extPartitions, partInfo)
-		} else if partInfo.IsParentInExtension {
-			extensionParents = append(extensionParents, partInfo)
 		}
 		partInfoMap[partInfo.PartitionRuleOid] = partInfo
 	}
 
-	return extPartitions, partInfoMap, extensionParents
+	return extPartitions, partInfoMap
 }

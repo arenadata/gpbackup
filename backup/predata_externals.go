@@ -9,7 +9,6 @@ package backup
 import (
 	"database/sql"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/greenplum-db/gpbackup/toc"
@@ -387,60 +386,5 @@ func PrintExchangeExternalPartitionStatements(metadataFile *utils.FileWithByteCo
 
 		section, entry := externalPartition.GetMetadataEntry()
 		objToc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount, []uint32{maxParentTier[0] + 1, maxParentTier[1]})
-	}
-}
-
-func PrintAlterExtensionTablesStatements(metadataFile *utils.FileWithByteCount, objToc *toc.TOC, extPartitions []PartitionInfo, partInfoMap map[uint32]PartitionInfo, tables []Table, metadataMap MetadataMap) {
-	tableMap := make(map[uint32]Table, len(tables))
-	for _, table := range tables {
-		tableMap[table.Oid] = table
-	}
-	partitionNameReg := regexp.MustCompile(`r\d+`)
-	for _, extensionPartition := range extPartitions {
-		extPartRelationName := tableMap[extensionPartition.RelationOid].FQN()
-		table, ok := tableMap[extensionPartition.RelationOid]
-		if extPartRelationName == "" || !ok {
-			continue // Not included in the list of tables to back up
-		}
-
-		parentRelationName := utils.MakeFQN(extensionPartition.ParentSchema, extensionPartition.ParentRelationName)
-		start := metadataFile.ByteCount
-		alterPartitionStr := ""
-		maxParentTier := []uint32{0, 0}
-		currentPartition := extensionPartition
-		for currentPartition.PartitionParentRuleOid != 0 {
-			parent := partInfoMap[currentPartition.PartitionParentRuleOid]
-			if parent.PartitionName == "" {
-				alterPartitionStr = fmt.Sprintf("ALTER PARTITION FOR (RANK(%d)) ", parent.PartitionRank) + alterPartitionStr
-			} else {
-				// Keep track of deepest tier for partition parents, to ensure that the alter
-				// statement is always run after the parent exists
-				parentTier, ok := globalTierMap[UniqueID{ClassID: PG_CLASS_OID, Oid: parent.RelationOid}]
-				if ok && parentTier[0] > maxParentTier[0] {
-					maxParentTier = parentTier
-				}
-
-				alterPartitionStr = fmt.Sprintf("ALTER PARTITION %s ", parent.PartitionName) + alterPartitionStr
-			}
-			currentPartition = parent
-		}
-		metadataFile.MustPrintf("\n\nALTER TABLE %s %s", parentRelationName, alterPartitionStr)
-
-		if extensionPartition.PartitionName == "" {
-			testStr := partitionNameReg.FindString(table.Name)
-			metadataFile.MustPrintf("ADD PARTITION %s ", testStr)
-		} else {
-			metadataFile.MustPrintf("ADD PARTITION %s ", extensionPartition.PartitionName)
-		}
-
-		metadataFile.MustPrintf("%s", table.AttachPartitionInfo.Expr)
-
-		if table.StorageOpts != "" {
-			metadataFile.MustPrintf(" WITH (%s)", table.StorageOpts)
-		}
-
-		section, entry := extensionPartition.GetMetadataEntry()
-		objToc.AddMetadataEntry(section, entry, start, metadataFile.ByteCount, []uint32{maxParentTier[0] + 1, maxParentTier[1]})
-		metadataFile.MustPrintf(";")
 	}
 }
