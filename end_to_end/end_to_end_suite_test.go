@@ -2657,7 +2657,7 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(string(output)).To(ContainSubstring("Multiple timestamp directories found"))
 		})
 	})
-	Describe("Backup partition whose parent is in extension", func() {
+	Describe("Backup partition these parent is in extension", func() {
 		BeforeEach(func() {
 			_ = os.Chdir("resources")
 			command := exec.Command("make", "USE_PGXS=1", "install")
@@ -2773,7 +2773,7 @@ LANGUAGE plpgsql NO SQL;`)
 				Expect(metadataFileContents).To(ContainSubstring("ALTER TABLE public.t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_c VALUES ('c'::text);"))
 				//In 6X we also should backup siblings
 				Expect(metadataFileContents).To(ContainSubstring("ALTER TABLE public.t_part ALTER PARTITION FOR (RANK(1)) ADD PARTITION part_d VALUES ('d'::text);"))
-				//We shouldn't explicit create leaf partition if it's parent is not in extension
+				//We shouldn't create explicit create leaf partiton if it's parent is not in extension
 				Expect(metadataFileContents).ToNot(ContainSubstring("a_part"))
 				Expect(metadataFileContents).ToNot(ContainSubstring("b_part"))
 			}
