@@ -390,7 +390,8 @@ func (o Options) GetUserTableRelationsWithIncludeFiltering(connectionPool *dbcon
 				return nil, err
 			}
 			if len(childOids) > 0 {
-				childPartitionFilter = fmt.Sprintf(`OR c.oid IN (%s)`, strings.Join(childOids, ", "))
+				childPartitionFilter = fmt.Sprintf(
+					`OR c.oid IN (%s)`, strings.Join(childOids, ", "))
 			}
 			includeOids = childOids
 		}
