@@ -3,7 +3,7 @@ package toc
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"regexp"
 	"strings"
 
@@ -123,35 +123,58 @@ const (
 
 func NewTOC(filename string) *TOC {
 	toc := &TOC{}
-	contents, err := ioutil.ReadFile(filename)
+	file, err := os.Open(filename)
 	gplog.FatalOnError(err)
-	err = yaml.Unmarshal(contents, toc)
+	defer file.Close()
+	dec := yaml.NewDecoder(file)
+	err = dec.Decode(toc)
 	gplog.FatalOnError(err)
 	return toc
 }
 
 func NewSegmentTOC(filename string) *SegmentTOC {
 	toc := &SegmentTOC{}
-	contents, err := ioutil.ReadFile(filename)
+	file, err := os.Open(filename)
 	gplog.FatalOnError(err)
-	err = yaml.Unmarshal(contents, toc)
+	defer file.Close()
+	dec := yaml.NewDecoder(file)
+	err = dec.Decode(toc)
 	gplog.FatalOnError(err)
 	return toc
 }
 
 func (toc *TOC) WriteToFileAndMakeReadOnly(filename string) {
-	contents, err := yaml.Marshal(toc)
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	gplog.FatalOnError(err)
-	err = utils.WriteToFileAndMakeReadOnly(filename, contents)
+	defer file.Close()
+	enc := yaml.NewEncoder(file)
+	defer enc.Close()
+	err = enc.Encode(toc)
+	gplog.FatalOnError(err)
+	err = file.Chmod(0444)
+	gplog.FatalOnError(err)
+	err = file.Sync()
 	gplog.FatalOnError(err)
 }
 
 func (toc *SegmentTOC) WriteToFileAndMakeReadOnly(filename string) error {
-	contents, err := yaml.Marshal(toc)
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
-	return utils.WriteToFileAndMakeReadOnly(filename, contents)
+	defer file.Close()
+	enc := yaml.NewEncoder(file)
+	defer enc.Close()
+	err = enc.Encode(toc)
+	if err != nil {
+		return err
+	}
+	err = file.Chmod(0444)
+	if err != nil {
+		return err
+	}
+	err = file.Sync()
+	return err
 }
 
 type StatementWithType struct {
