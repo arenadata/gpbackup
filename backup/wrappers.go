@@ -780,15 +780,9 @@ func backupTableStatistics(statisticsFile *utils.FileWithByteCount, tables []Tab
 	GetTupleStatistics(connectionPool, tables, func(tupleStat *TupleStatistic) {
 		printTupleStatisticsStatementForTable(statisticsFile, globalTOC, tablesMap[tupleStat.Oid], *tupleStat)
 	})
-	attStats, err := getAttributeStatisticsRows(connectionPool, tables)
-	gplog.FatalOnError(err)
-	for attStats.Next() {
-		var attStat AttributeStatistic
-		err = attStats.StructScan(&attStat)
-		gplog.FatalOnError(err)
-		printAttributeStatisticsStatementForTable(statisticsFile, globalTOC, tablesMap[attStat.Oid], attStat)
-	}
-	gplog.FatalOnError(attStats.Err())
+	GetAttributeStatistics(connectionPool, tables, func(attStat *AttributeStatistic) {
+		printAttributeStatisticsStatementForTable(statisticsFile, globalTOC, tablesMap[attStat.Oid], *attStat)
+	})
 }
 
 func backupIncrementalMetadata() {

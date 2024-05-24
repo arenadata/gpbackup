@@ -11,7 +11,6 @@ import (
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gpbackup/utils"
-	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
@@ -54,7 +53,7 @@ type AttributeStatistic struct {
 	Values5      pq.StringArray `db:"stavalues5"`
 }
 
-func getAttributeStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (*sqlx.Rows, error) {
+func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table, processRow func(attStat *AttributeStatistic)) {
 	inheritClause := ""
 	statSlotClause := ""
 	if connectionPool.Version.AtLeast("6") {
@@ -120,21 +119,14 @@ func getAttributeStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (
 		inheritClause, statSlotClause, statCollationClause,
 		SchemaFilterClause("n"), utils.SliceToQuotedString(tablenames))
 
-	return connectionPool.Query(query)
-}
-
-func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint32][]AttributeStatistic {
-	results, err := getAttributeStatisticsRows(connectionPool, tables)
-	gplog.FatalOnError(err)
-	stats := make(map[uint32][]AttributeStatistic)
-	for results.Next() {
+	rows, err := connectionPool.Query(query)
+	for rows.Next() {
 		var attStat AttributeStatistic
-		err = results.StructScan(&attStat)
+		err = rows.StructScan(&attStat)
 		gplog.FatalOnError(err)
-		stats[attStat.Oid] = append(stats[attStat.Oid], attStat)
+		processRow(&attStat)
 	}
-	gplog.FatalOnError(results.Err())
-	return stats
+	gplog.FatalOnError(rows.Err())
 }
 
 type TupleStatistic struct {
