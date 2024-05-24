@@ -54,7 +54,7 @@ type AttributeStatistic struct {
 	Values5      pq.StringArray `db:"stavalues5"`
 }
 
-func GetAttributeStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (*sqlx.Rows, error) {
+func getAttributeStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (*sqlx.Rows, error) {
 	inheritClause := ""
 	statSlotClause := ""
 	if connectionPool.Version.AtLeast("6") {
@@ -124,7 +124,7 @@ func GetAttributeStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (
 }
 
 func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint32][]AttributeStatistic {
-	results, err := GetAttributeStatisticsRows(connectionPool, tables)
+	results, err := getAttributeStatisticsRows(connectionPool, tables)
 	gplog.FatalOnError(err)
 	stats := make(map[uint32][]AttributeStatistic)
 	for results.Next() {
@@ -145,7 +145,7 @@ type TupleStatistic struct {
 	RelTuples float64
 }
 
-func GetTupleStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (*sqlx.Rows, error) {
+func getTupleStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (*sqlx.Rows, error) {
 	tablenames := make([]string, 0)
 	for _, table := range tables {
 		tablenames = append(tablenames, table.FQN())
@@ -167,7 +167,7 @@ func GetTupleStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (*sql
 }
 
 func GetTupleStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint32]TupleStatistic {
-	results, err := GetTupleStatisticsRows(connectionPool, tables)
+	results, err := getTupleStatisticsRows(connectionPool, tables)
 	gplog.FatalOnError(err)
 	stats := make(map[uint32]TupleStatistic)
 	for results.Next() {
