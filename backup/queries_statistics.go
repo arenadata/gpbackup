@@ -120,7 +120,7 @@ func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table, proce
 		SchemaFilterClause("n"), utils.SliceToQuotedString(tablenames))
 
 	rows, err := connectionPool.Query(query)
-	gplog.FatalOnError(rows.Err())
+	gplog.FatalOnError(err)
 	for rows.Next() {
 		var attStat AttributeStatistic
 		err = rows.StructScan(&attStat)
