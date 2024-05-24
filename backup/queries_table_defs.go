@@ -14,6 +14,7 @@ import (
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gpbackup/options"
 	"github.com/greenplum-db/gpbackup/toc"
+	"github.com/lib/pq"
 )
 
 type Table struct {
@@ -230,8 +231,7 @@ type ColumnDefinition struct {
 	StorageType           string
 	DefaultVal            string
 	Comment               string
-	Privileges            sql.NullString
-	Kind                  string
+	Privileges            pq.StringArray
 	Options               string
 	FdwOptions            string
 	Collation             string
@@ -302,15 +302,7 @@ func GetColumnDefinitions(connectionPool *dbconn.DBConn) map[uint32][]ColumnDefi
 		CASE WHEN a.attstorage != t.typstorage THEN a.attstorage ELSE '' END AS storagetype,
 		coalesce('('||pg_catalog.pg_get_expr(ad.adbin, ad.adrelid)||')', '') AS defaultval,
 		coalesce(d.description, '') AS comment,
-		CASE
-			WHEN a.attacl IS NULL THEN NULL
-			WHEN array_upper(a.attacl, 1) = 0 THEN a.attacl[0]
-			ELSE unnest(a.attacl) END AS privileges,
-		CASE
-			WHEN a.attacl IS NULL THEN ''
-			WHEN array_upper(a.attacl, 1) = 0 THEN 'Empty'
-			ELSE ''
-		END AS kind,
+		a.attacl AS privileges,
 		coalesce(pg_catalog.array_to_string(a.attoptions, ','), '') AS options,
 		coalesce(array_to_string(ARRAY(SELECT option_name || ' ' || quote_literal(option_value) FROM pg_options_to_table(attfdwoptions) ORDER BY option_name), ', '), '') AS fdwoptions,
 		CASE WHEN a.attcollation <> t.typcollation THEN quote_ident(cn.nspname) || '.' || quote_ident(coll.collname) ELSE '' END AS collation,
@@ -353,12 +345,7 @@ func GetColumnDefinitions(connectionPool *dbconn.DBConn) map[uint32][]ColumnDefi
 		coalesce('('||pg_catalog.pg_get_expr(ad.adbin, ad.adrelid)||')', '') AS defaultval,
 		coalesce(d.description, '') AS comment,
 		a.attgenerated,
-		ljl_unnest AS privileges,
-		CASE
-			WHEN a.attacl IS NULL THEN ''
-			WHEN array_upper(a.attacl, 1) = 0 THEN 'Empty'
-			ELSE ''
-		END AS kind,
+		a.attacl AS privileges,
 		coalesce(pg_catalog.array_to_string(a.attoptions, ','), '') AS options,
 		coalesce(array_to_string(ARRAY(SELECT option_name || ' ' || quote_literal(option_value) FROM pg_options_to_table(attfdwoptions) ORDER BY option_name), ', '), '') AS fdwoptions,
 		CASE WHEN a.attcollation <> t.typcollation THEN quote_ident(cn.nspname) || '.' || quote_ident(coll.collname) ELSE '' END AS collation,
@@ -375,7 +362,6 @@ func GetColumnDefinitions(connectionPool *dbconn.DBConn) map[uint32][]ColumnDefi
 		LEFT JOIN pg_collation coll ON a.attcollation = coll.oid
 		LEFT JOIN pg_namespace cn ON coll.collnamespace = cn.oid
 		LEFT JOIN pg_seclabel sec ON sec.objoid = a.attrelid AND sec.classoid = 'pg_class'::regclass AND sec.objsubid = a.attnum
-		LEFT JOIN LATERAL unnest(a.attacl) ljl_unnest ON a.attacl IS NOT NULL AND array_length(a.attacl, 1) != 0
 	WHERE %s
 		AND c.reltype <> 0
 		AND a.attnum > 0::pg_catalog.int2
