@@ -151,11 +151,12 @@ func ConstructDefinitionsForTables(connectionPool *dbconn.DBConn, tableRelations
  */
 
 type PartitionLevelInfo struct {
-	Oid      uint32
-	Level    string
-	RootName string
-	RootOid  uint32
-	Name     string
+	Oid                 uint32
+	Level               string
+	RootName            string
+	RootOid             uint32
+	Name                string
+	IsParentInExtension bool
 }
 
 func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLevelInfo {
@@ -164,7 +165,8 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 			'p' AS level,
 			'' AS rootname,
 			0 AS rootoid,
-			quote_ident(pc.relname) AS name
+			quote_ident(pc.relname) AS name,
+			false AS isparentinextension
 		FROM pg_partition p
 			JOIN pg_class pc ON p.parrelid = pc.oid
 		UNION ALL
@@ -172,7 +174,8 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 			CASE WHEN p.parlevel = levels.pl THEN 'l' ELSE 'i' END AS level,
 			quote_ident(cparent.relname) AS rootname,
 			cparent.oid AS rootoid,
-			quote_ident(c.relname) AS name
+			quote_ident(c.relname) AS name,
+			false AS isparentinextension
 		FROM pg_partition p
 			JOIN pg_partition_rule r ON p.oid = r.paroid
 			JOIN pg_class cparent ON cparent.oid = p.parrelid
@@ -193,10 +196,13 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 			CASE WHEN p.partrelid IS NOT NULL AND c.relispartition = false THEN 0
 				ELSE rc.oid
 			END AS rootoid,
-			quote_ident(c.relname) AS name
+			quote_ident(c.relname) AS name,
+			objid is not NULL as isparentinextension
 		FROM pg_class c
 			LEFT JOIN pg_partitioned_table p ON c.oid = p.partrelid
 			LEFT JOIN pg_class rc ON pg_partition_root(c.oid) = rc.oid
+			LEFT JOIN pg_inherits pi on c.oid = pi.inhrelid
+			LEFT JOIN (select objid from pg_depend where deptype = 'e') pd on objid = pi.inhparent
 		WHERE c.relispartition = true OR c.relkind = 'p'`
 
 	query := ""
@@ -667,8 +673,17 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 		}
 		// If we are filtering on tables, we only want to record dependencies on other tables in the list
 		if len(tableOidList) > 0 {
-			tableFilterStr = fmt.Sprintf("\nAND i.inhrelid IN (%s)", strings.Join(tableOidList, ","))
+			tableFilterStr = fmt.Sprintf("\nWHERE i.inhrelid IN (%s)", strings.Join(tableOidList, ","))
 		}
+	}
+
+	if connectionPool.Version.Before("7") {
+		if tableFilterStr == "" {
+			tableFilterStr = "\nWHERE "
+		} else {
+			tableFilterStr += " AND "
+		}
+		tableFilterStr += ExtensionFilterClause("p")
 	}
 
 	query := fmt.Sprintf(`
@@ -677,9 +692,8 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 	FROM pg_inherits i
 		JOIN pg_class p ON i.inhparent = p.oid
 		JOIN pg_namespace n ON p.relnamespace = n.oid
-	WHERE %s%s
-	ORDER BY i.inhrelid, i.inhseqno`,
-		ExtensionFilterClause("p"), tableFilterStr)
+	%s
+	ORDER BY i.inhrelid, i.inhseqno`, tableFilterStr)
 
 	results := make([]Dependency, 0)
 	resultMap := make(map[uint32][]string)
