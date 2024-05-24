@@ -145,7 +145,7 @@ type TupleStatistic struct {
 	RelTuples float64
 }
 
-func getTupleStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (*sqlx.Rows, error) {
+func GetTupleStatistics(connectionPool *dbconn.DBConn, tables []Table, processRow func(tupleStat *TupleStatistic)) {
 	tablenames := make([]string, 0)
 	for _, table := range tables {
 		tablenames = append(tablenames, table.FQN())
@@ -163,19 +163,13 @@ func getTupleStatisticsRows(connectionPool *dbconn.DBConn, tables []Table) (*sql
 	ORDER BY n.nspname, c.relname`,
 		SchemaFilterClause("n"), utils.SliceToQuotedString(tablenames))
 
-	return connectionPool.Query(query)
-}
-
-func GetTupleStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint32]TupleStatistic {
-	results, err := getTupleStatisticsRows(connectionPool, tables)
+	rows, err := connectionPool.Query(query)
 	gplog.FatalOnError(err)
-	stats := make(map[uint32]TupleStatistic)
-	for results.Next() {
+	for rows.Next() {
 		var tupleStat TupleStatistic
-		err = results.StructScan(&tupleStat)
+		err = rows.StructScan(&tupleStat)
 		gplog.FatalOnError(err)
-		stats[tupleStat.Oid] = tupleStat
+		processRow(&tupleStat)
 	}
-	gplog.FatalOnError(results.Err())
-	return stats
+	gplog.FatalOnError(rows.Err())
 }

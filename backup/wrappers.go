@@ -777,15 +777,9 @@ func backupTableStatistics(statisticsFile *utils.FileWithByteCount, tables []Tab
 	for _, table := range tables {
 		tablesMap[table.Oid] = table
 	}
-	tupleStats, err := getTupleStatisticsRows(connectionPool, tables)
-	gplog.FatalOnError(err)
-	for tupleStats.Next() {
-		var tupleStat TupleStatistic
-		err = tupleStats.StructScan(&tupleStat)
-		gplog.FatalOnError(err)
-		printTupleStatisticsStatementForTable(statisticsFile, globalTOC, tablesMap[tupleStat.Oid], tupleStat)
-	}
-	gplog.FatalOnError(tupleStats.Err())
+	GetTupleStatistics(connectionPool, tables, func(tupleStat *TupleStatistic) {
+		printTupleStatisticsStatementForTable(statisticsFile, globalTOC, tablesMap[tupleStat.Oid], *tupleStat)
+	})
 	attStats, err := getAttributeStatisticsRows(connectionPool, tables)
 	gplog.FatalOnError(err)
 	for attStats.Next() {

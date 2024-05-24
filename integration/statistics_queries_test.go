@@ -83,7 +83,10 @@ var _ = Describe("backup integration tests", func() {
 	})
 	Describe("GetTupleStatistics", func() {
 		It("returns tuple statistics for a table", func() {
-			tupleStats := backup.GetTupleStatistics(connectionPool, tables)
+			tupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				tupleStats[tupleStat.Oid] = *tupleStat
+			})
 			Expect(tupleStats).To(HaveLen(1))
 			tableTupleStats := tupleStats[tableOid]
 

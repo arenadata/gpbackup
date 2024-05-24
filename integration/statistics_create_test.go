@@ -31,7 +31,10 @@ var _ = Describe("backup integration tests", func() {
 			tables[0].Oid = oldTableOid
 
 			beforeAttStats := backup.GetAttributeStatistics(connectionPool, tables)
-			beforeTupleStats := backup.GetTupleStatistics(connectionPool, tables)
+			beforeTupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				beforeTupleStats[tupleStat.Oid] = *tupleStat
+			})
 			beforeTupleStat := beforeTupleStats[oldTableOid]
 
 			// Drop and recreate the table to clear the statistics
@@ -45,7 +48,10 @@ var _ = Describe("backup integration tests", func() {
 			newTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo", backup.TYPE_RELATION)
 			tables[0].Oid = newTableOid
 			afterAttStats := backup.GetAttributeStatistics(connectionPool, tables)
-			afterTupleStats := backup.GetTupleStatistics(connectionPool, tables)
+			afterTupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				afterTupleStats[tupleStat.Oid] = *tupleStat
+			})
 			afterTupleStat := afterTupleStats[newTableOid]
 
 			oldAtts := beforeAttStats[oldTableOid]
@@ -75,7 +81,10 @@ var _ = Describe("backup integration tests", func() {
 			tables[0].Oid = oldTableOid
 
 			beforeAttStats := backup.GetAttributeStatistics(connectionPool, tables)
-			beforeTupleStats := backup.GetTupleStatistics(connectionPool, tables)
+			beforeTupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				beforeTupleStats[tupleStat.Oid] = *tupleStat
+			})
 			beforeTupleStat := beforeTupleStats[oldTableOid]
 
 			// Drop and recreate the table to clear the statistics
@@ -89,7 +98,10 @@ var _ = Describe("backup integration tests", func() {
 			newTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo''\"''''bar", backup.TYPE_RELATION)
 			tables[0].Oid = newTableOid
 			afterAttStats := backup.GetAttributeStatistics(connectionPool, tables)
-			afterTupleStats := backup.GetTupleStatistics(connectionPool, tables)
+			afterTupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				afterTupleStats[tupleStat.Oid] = *tupleStat
+			})
 			afterTupleStat := afterTupleStats[newTableOid]
 
 			oldAtts := beforeAttStats[oldTableOid]
