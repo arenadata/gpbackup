@@ -57,7 +57,11 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 			if connectionPool.Version.AtLeast("7") {
 				// In GPDB 7+, we need to dump out the leaf partition DDL along with their
 				// ALTER TABLE ATTACH PARTITION commands to construct the partition table
-				metadataTables = append(metadataTables, table)
+				if table.ExtensionTableConfig == nil {
+					// If the table is not a configuration table for the extension,
+					// then add it to the metadata.
+					metadataTables = append(metadataTables, table)
+				}
 			} else if partType != "l" && partType != "i" {
 				if table.ExtensionTableConfig == nil {
 					// If the table is not a configuration table for the extension,
