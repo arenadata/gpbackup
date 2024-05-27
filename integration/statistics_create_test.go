@@ -5,10 +5,21 @@ import (
 	"github.com/greenplum-db/gp-common-go-libs/testhelper"
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/testutils"
+	"github.com/greenplum-db/gpbackup/toc"
+	"github.com/greenplum-db/gpbackup/utils"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+func PrintStatisticsStatements(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, tables []backup.Table, attStats map[uint32][]backup.AttributeStatistic, tupleStats map[uint32]backup.TupleStatistic) {
+	for _, table := range tables {
+		backup.PrintTupleStatisticsStatementForTable(statisticsFile, tocfile, table, tupleStats[table.Oid])
+		for _, attStat := range attStats[table.Oid] {
+			backup.PrintAttributeStatisticsStatementForTable(statisticsFile, tocfile, table, attStat)
+		}
+	}
+}
 
 var _ = Describe("backup integration tests", func() {
 	BeforeEach(func() {
@@ -45,7 +56,7 @@ var _ = Describe("backup integration tests", func() {
 			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.foo(i int, j text, k bool)")
 
 			// Reload the retrieved statistics into the new table
-			backup.PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
+			PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
 			newTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo", backup.TYPE_RELATION)
@@ -101,7 +112,7 @@ var _ = Describe("backup integration tests", func() {
 			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.\"foo'\"\"''bar\"(i int, j text, k bool)")
 
 			// Reload the retrieved statistics into the new table
-			backup.PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
+			PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
 			newTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo''\"''''bar", backup.TYPE_RELATION)

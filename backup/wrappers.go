@@ -778,10 +778,10 @@ func backupTableStatistics(statisticsFile *utils.FileWithByteCount, tables []Tab
 		tablesMap[table.Oid] = table
 	}
 	GetTupleStatistics(connectionPool, tables, func(tupleStat *TupleStatistic) {
-		printTupleStatisticsStatementForTable(statisticsFile, globalTOC, tablesMap[tupleStat.Oid], *tupleStat)
+		PrintTupleStatisticsStatementForTable(statisticsFile, globalTOC, tablesMap[tupleStat.Oid], *tupleStat)
 	})
 	GetAttributeStatistics(connectionPool, tables, func(attStat *AttributeStatistic) {
-		printAttributeStatisticsStatementForTable(statisticsFile, globalTOC, tablesMap[attStat.Oid], *attStat)
+		PrintAttributeStatisticsStatementForTable(statisticsFile, globalTOC, tablesMap[attStat.Oid], *attStat)
 	})
 }
 
