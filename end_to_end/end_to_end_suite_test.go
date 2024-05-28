@@ -2672,7 +2672,8 @@ LANGUAGE plpgsql NO SQL;`)
 		})
 
 		AfterEach(func() {
-			testhelper.AssertQueryRuns(backupConn, `DROP EXTENSION test_ext6 CASCADE;`)
+			testhelper.AssertQueryRuns(backupConn, "DROP EXTENSION IF EXISTS test_ext6 CASCADE;")
+			testhelper.AssertQueryRuns(restoreConn, "DROP EXTENSION IF EXISTS test_ext6 CASCADE;")
 		})
 
 		It("backup the partition whose parent is in the extension", func() {
@@ -2762,6 +2763,14 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(metadataFileContents).To(ContainSubstring("part_c"))
 			Expect(metadataFileContents).ToNot(ContainSubstring("part_d"))
 
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
+
+			assertDataRestored(restoreConn, map[string]int{
+				"public.part_c": 10,
+			})
+
+			assertTablesNotRestored(restoreConn, []string{"part_d"})
+
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
 
@@ -2779,6 +2788,15 @@ LANGUAGE plpgsql NO SQL;`)
 			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
 			Expect(metadataFileContents).ToNot(ContainSubstring("part_c"))
 			Expect(metadataFileContents).To(ContainSubstring("part_d"))
+
+			testhelper.AssertQueryRuns(restoreConn, "CREATE EXTENSION test_ext6;")
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
+
+			assertDataRestored(restoreConn, map[string]int{
+				"public.part_d": 20,
+			})
+
+			assertTablesNotRestored(restoreConn, []string{"part_c"})
 
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
@@ -2824,6 +2842,14 @@ LANGUAGE plpgsql NO SQL;`)
 			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
 			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
 			Expect(metadataFileContents).To(ContainSubstring("INHERITS (public.parent)"))
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
+
+			exists := make([]bool, 0)
+			err := restoreConn.Select(&exists,
+				"SELECT EXISTS(select * from pg_inherits where inhrelid = 'child'::regclass and inhparent = 'parent'::regclass);")
+
+			Expect(err).To(BeNil())
+			Expect(exists[0]).To(BeTrue())
 
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})

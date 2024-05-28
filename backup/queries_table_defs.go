@@ -677,13 +677,18 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 		}
 	}
 
+	// In 7X and later, tables in extensions should not be filtered out, since the parent name is
+	// later used for creating DDL for partitioned tables whose parent tables may be in the extension.
+	// Filtering can also lead to a loss of inheritance if the parent table is in an extension.
+	// For 6X and earlier, we don't want to change the behavior, so we filter out the tables from the extension.
+	extensionFilter := ""
 	if connectionPool.Version.Before("7") {
 		if tableFilterStr == "" {
-			tableFilterStr = "\nWHERE "
+			extensionFilter = "\nWHERE "
 		} else {
-			tableFilterStr += " AND "
+			extensionFilter += " AND "
 		}
-		tableFilterStr += ExtensionFilterClause("p")
+		extensionFilter += ExtensionFilterClause("p")
 	}
 
 	query := fmt.Sprintf(`
@@ -692,8 +697,8 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 	FROM pg_inherits i
 		JOIN pg_class p ON i.inhparent = p.oid
 		JOIN pg_namespace n ON p.relnamespace = n.oid
-	%s
-	ORDER BY i.inhrelid, i.inhseqno`, tableFilterStr)
+	%s%s
+	ORDER BY i.inhrelid, i.inhseqno`, tableFilterStr, extensionFilter)
 
 	results := make([]Dependency, 0)
 	resultMap := make(map[uint32][]string)
