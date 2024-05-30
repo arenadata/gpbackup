@@ -3,6 +3,7 @@ package toc
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
@@ -134,11 +135,9 @@ func NewTOC(filename string) *TOC {
 
 func NewSegmentTOC(filename string) *SegmentTOC {
 	toc := &SegmentTOC{}
-	file, err := os.Open(filename)
+	contents, err := ioutil.ReadFile(filename)
 	gplog.FatalOnError(err)
-	defer file.Close()
-	dec := yaml.NewDecoder(file)
-	err = dec.Decode(toc)
+	err = yaml.Unmarshal(contents, toc)
 	gplog.FatalOnError(err)
 	return toc
 }
@@ -158,23 +157,11 @@ func (toc *TOC) WriteToFileAndMakeReadOnly(filename string) {
 }
 
 func (toc *SegmentTOC) WriteToFileAndMakeReadOnly(filename string) error {
-	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	contents, err := yaml.Marshal(toc)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	enc := yaml.NewEncoder(file)
-	defer enc.Close()
-	err = enc.Encode(toc)
-	if err != nil {
-		return err
-	}
-	err = file.Chmod(0444)
-	if err != nil {
-		return err
-	}
-	err = file.Sync()
-	return err
+	return utils.WriteToFileAndMakeReadOnly(filename, contents)
 }
 
 type StatementWithType struct {
