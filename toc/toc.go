@@ -8,9 +8,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/goccy/go-yaml"
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gpbackup/utils"
-	"gopkg.in/yaml.v2"
 )
 
 type TOC struct {
