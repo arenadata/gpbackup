@@ -684,7 +684,7 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 	extensionFilter := ""
 	if connectionPool.Version.Before("7") {
 		if tableFilterStr == "" {
-			extensionFilter = "\nWHERE "
+			extensionFilter += "\nWHERE "
 		} else {
 			extensionFilter += " AND "
 		}

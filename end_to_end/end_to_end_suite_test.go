@@ -2819,15 +2819,18 @@ LANGUAGE plpgsql NO SQL;`)
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
 
-		It("allows the user to exclude partitions that interfere with recovery if the default partition in the extension contains data", func() {
+		It("allows the user to exclude partitions that hinder restore if the default partition in the extension contains data", func() {
 			testhelper.AssertQueryRuns(backupConn, `
 					ALTER EXTENSION test_ext6 DROP TABLE d_part_1_prt_extra;
-					ALTER TABLE d_part SPLIT DEFAULT PARTITION START (10) END (20);
+					ALTER TABLE d_part SPLIT DEFAULT PARTITION START (10) END (20)
+						INTO (PARTITION new_part, default partition);
 					ALTER EXTENSION test_ext6 ADD TABLE d_part_1_prt_extra;`)
 
 			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb",
 				"--exclude-table", "public.d_part")
+
+			assertTablesNotRestored(restoreConn, []string{"d_part_1_prt_new_part"})
 
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
