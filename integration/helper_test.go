@@ -39,13 +39,13 @@ here is some data
 here is some data
 `
 	expectedTOC = `dataentries:
-  1:
+  "1":
     startbyte: 0
     endbyte: 18
-  2:
+  "2":
     startbyte: 18
     endbyte: 36
-  3:
+  "3":
     startbyte: 36
     endbyte: 54
 `
@@ -264,13 +264,13 @@ var _ = Describe("gpbackup_helper end to end integration tests", func() {
 
 			// Write custom TOC
 			customTOC := fmt.Sprintf(`dataentries:
-  1:
+  "1":
     startbyte: 0
     endbyte: 18
-  2:
+  "2":
     startbyte: 18
     endbyte: %[1]d
-  3:
+  "3":
     startbyte: %[1]d
     endbyte: %d
 `, dataLength+18, dataLength+18+18)
