@@ -212,6 +212,25 @@ object-relational database management system');`)
 				Expect(functionDeps[funcEntry]).To(HaveKey(compositeEntry))
 				Expect(functionDeps[funcEntry]).To(HaveKey(baseEntry))
 			})
+			It("construct dependencies correctly for a function dependent on an array of relation row's type", func() {
+				testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.some_table(a int, b int)")
+				defer testhelper.AssertQueryRuns(connectionPool, "DROP TABLE public.some_table CASCADE")
+				testhelper.AssertQueryRuns(connectionPool, "CREATE FUNCTION public.some_function(arg public.some_table[]) RETURNS int AS $$ SELECT 42; $$ LANGUAGE SQL;")
+				defer testhelper.AssertQueryRuns(connectionPool, "DROP FUNCTION public.some_function(arg public.some_table[]);")
+
+				functionOid := testutils.OidFromObjectName(connectionPool, "public", "some_function", backup.TYPE_FUNCTION)
+				funcEntry := backup.UniqueID{ClassID: backup.PG_PROC_OID, Oid: functionOid}
+				tableOid := testutils.OidFromObjectName(connectionPool, "public", "some_table", backup.TYPE_RELATION)
+				tableEntry := backup.UniqueID{ClassID: backup.PG_CLASS_OID, Oid: tableOid}
+				backupSet := map[backup.UniqueID]bool{funcEntry: true, tableEntry: true}
+				tables := make([]backup.Table, 0)
+
+				functionDeps := backup.GetDependencies(connectionPool, backupSet, tables)
+
+				Expect(functionDeps).To(HaveLen(1))
+				Expect(functionDeps[funcEntry]).To(HaveLen(1))
+				Expect(functionDeps[funcEntry]).To(HaveKey(tableEntry))
+			})
 		})
 		Describe("type dependencies", func() {
 			var (

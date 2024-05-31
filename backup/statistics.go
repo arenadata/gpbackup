@@ -14,16 +14,15 @@ import (
 	"github.com/lib/pq"
 )
 
-func PrintStatisticsStatements(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, tables []Table, attStats map[uint32][]AttributeStatistic, tupleStats map[uint32]TupleStatistic) {
-	for _, table := range tables {
-		tupleQuery := GenerateTupleStatisticsQuery(table, tupleStats[table.Oid])
-		printStatisticsStatementForTable(statisticsFile, tocfile, table, tupleQuery)
-		for _, attStat := range attStats[table.Oid] {
-			attributeQueries := GenerateAttributeStatisticsQueries(table, attStat)
-			for _, attrQuery := range attributeQueries {
-				printStatisticsStatementForTable(statisticsFile, tocfile, table, attrQuery)
-			}
-		}
+func PrintTupleStatisticsStatementForTable(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, table Table, tupleStat TupleStatistic) {
+	tupleQuery := GenerateTupleStatisticsQuery(table, tupleStat)
+	printStatisticsStatementForTable(statisticsFile, tocfile, table, tupleQuery)
+}
+
+func PrintAttributeStatisticsStatementForTable(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, table Table, attStat AttributeStatistic) {
+	attributeQueries := GenerateAttributeStatisticsQueries(table, attStat)
+	for _, attrQuery := range attributeQueries {
+		printStatisticsStatementForTable(statisticsFile, tocfile, table, attrQuery)
 	}
 }
 
