@@ -2882,7 +2882,7 @@ LANGUAGE plpgsql NO SQL;`)
 
 			exists := make([]bool, 0)
 			err := restoreConn.Select(&exists,
-				"SELECT EXISTS(select * from pg_inherits where inhrelid = 'child'::regclass and inhparent = 'parent'::regclass);")
+				"SELECT EXISTS(SELECT FROM pg_inherits WHERE inhrelid = 'child'::regclass AND inhparent = 'parent'::regclass);")
 
 			Expect(err).To(BeNil())
 			Expect(exists[0]).To(BeTrue())

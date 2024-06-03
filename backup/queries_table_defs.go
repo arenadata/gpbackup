@@ -198,12 +198,12 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 				ELSE rc.oid
 			END AS rootoid,
 			quote_ident(c.relname) AS name,
-			objid is not NULL as isparentinextension
+			pd.objid is not NULL as isparentinextension
 		FROM pg_class c
 			LEFT JOIN pg_partitioned_table p ON c.oid = p.partrelid
 			LEFT JOIN pg_class rc ON pg_partition_root(c.oid) = rc.oid
-			LEFT JOIN pg_inherits pi on c.oid = pi.inhrelid
-			LEFT JOIN (select objid from pg_depend where deptype = 'e') pd on objid = pi.inhparent
+			LEFT JOIN pg_inherits pi ON c.oid = pi.inhrelid
+			LEFT JOIN pg_depend pd ON objid = pi.inhparent AND deptype = 'e'
 		WHERE c.relispartition = true OR c.relkind = 'p'`
 
 	query := ""
