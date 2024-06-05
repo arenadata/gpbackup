@@ -264,8 +264,8 @@ func DoCleanup() {
 		 * to generate an EOF before it is deleted.
 		 *
 		 * Also, it is possible, that after EOF is issued (releasing the current reader process), but before the pipe is
-		 * removed, a new reader process can start reading the pipe. To avoid such situation, we create a special file 
-		 * for the pipe (with '_removal_flag' suffix), and delete it only after all pipe shenanigans are done. 
+		 * removed, a new reader process can start reading the pipe. To avoid such situation, we create a special file
+		 * for the pipe (with '_removal_flag' suffix), and delete it only after all pipe shenanigans are done.
 		 * Reader side should check that this file doesn't exist before accessing the pipe file.
 		 */
 		var pipeRemovalFlagFilename string
