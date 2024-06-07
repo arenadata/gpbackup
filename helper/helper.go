@@ -282,11 +282,12 @@ func DoCleanup() {
 				fileHandlePipe.Close()
 			}
 		}
-		
+
 		err = deletePipe(pipeName)
 		if err != nil {
 			log("Encountered error removing pipe %s: %v", pipeName, err)
 		}
+
 		if *restoreAgent {
 			utils.RemoveFileIfExists(pipeRemovalFlagFilename)
 		}
