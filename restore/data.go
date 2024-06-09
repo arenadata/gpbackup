@@ -37,10 +37,7 @@ func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, ta
 	if singleDataFile || resizeCluster {
 		//helper.go handles compression, so we don't want to set it here
 		customPipeThroughCommand = "cat -"
-		// Before accessing the pipe file, we need to check that the "_removal_flag" file is not present.
-		// For more details, refer to comments in helper's DoCleanup() function.
-		pipeRemovalFlagFilename := fmt.Sprintf("%s_removal_flag", destinationToRead)
-		checkPipeExistsCommand = fmt.Sprintf("((test ! -e \"%s\" && (timeout 300 bash -c \"while [ ! -p \"%s\" ]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1))) || (echo \"Pipe is in progress of removal %s\">&2; exit 1)) && ", pipeRemovalFlagFilename, destinationToRead, destinationToRead, destinationToRead)
+		checkPipeExistsCommand = fmt.Sprintf("(timeout 300 bash -c \"while [ ! -p \"%s\" ]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1)) && ", destinationToRead, destinationToRead)
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		readFromDestinationCommand = fmt.Sprintf("%s restore_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
 	}

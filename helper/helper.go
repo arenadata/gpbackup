@@ -264,21 +264,17 @@ func DoCleanup() {
 		 * to generate an EOF before it is deleted.
 		 *
 		 * Also, it is possible, that after EOF is issued (releasing the current reader process), but before the pipe is
-		 * removed, a new reader process can start reading the pipe. To avoid such situation, we create a special file
-		 * for the pipe (with '_removal_flag' suffix), and delete it only after all pipe shenanigans are done.
-		 * Reader side should check that this file doesn't exist before accessing the pipe file.
+		 * removed, a new reader process can start reading the pipe. To avoid such situation, we rename the file before
+		 * closing it.
 		 */
-		var pipeRemovalFlagFilename string
 		if *restoreAgent {
-			pipeRemovalFlagFilename = fmt.Sprintf("%s_removal_flag", pipeName)
-			fileHandlePipeRemovalFlag, err := utils.OpenFileForWrite(pipeRemovalFlagFilename)
-			if err == nil {
-				fileHandlePipeRemovalFlag.Close()
-			}
-
-			// Open and close the pipe file to generate an EOF.
 			fileHandlePipe, err := os.OpenFile(pipeName, os.O_WRONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
 			if err == nil {
+				newPipeName := fmt.Sprintf("%s_rm", pipeName)
+				err = os.Rename(pipeName, newPipeName)
+				if err == nil {
+					pipeName = newPipeName
+				}
 				fileHandlePipe.Close()
 			}
 		}
@@ -286,10 +282,6 @@ func DoCleanup() {
 		err = deletePipe(pipeName)
 		if err != nil {
 			log("Encountered error removing pipe %s: %v", pipeName, err)
-		}
-
-		if *restoreAgent {
-			utils.RemoveFileIfExists(pipeRemovalFlagFilename)
 		}
 	}
 
