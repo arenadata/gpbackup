@@ -314,7 +314,7 @@ var _ = Describe("End to End plugin tests", func() {
 
 				testhelper.AssertQueryRuns(backupConn, "CREATE TABLE t0(a int);")
 				testhelper.AssertQueryRuns(backupConn, "INSERT INTO t0 SELECT i FROM generate_series(1, 10)i;")
-				defer testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0;")
+				defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE t0;")
 
 				timestamp := gpbackup(gpbackupPath, backupHelperPath,
 					"--single-data-file",
