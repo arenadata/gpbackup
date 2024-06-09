@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	path "path/filepath"
+	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
@@ -14,6 +15,7 @@ import (
 	"github.com/greenplum-db/gpbackup/testutils"
 	"github.com/greenplum-db/gpbackup/utils"
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 func copyPluginToAllHosts(conn *dbconn.DBConn, pluginPath string) {
@@ -306,6 +308,42 @@ var _ = Describe("End to End plugin tests", func() {
 					Skip("This test is only needed for the most recent backup versions")
 				}
 			})
+			It("Will not hang if gpbackup and gprestore runs with single-data-file and plugin fails at init for restore", func(ctx SpecContext) {
+				pluginExecutablePath := fmt.Sprintf("%s/src/github.com/greenplum-db/gpbackup/plugins/example_plugin.bash", os.Getenv("GOPATH"))
+				copyPluginToAllHosts(backupConn, pluginExecutablePath)
+
+				testhelper.AssertQueryRuns(backupConn, "CREATE TABLE t0(a int);")
+				testhelper.AssertQueryRuns(backupConn, "INSERT INTO t0 SELECT i FROM generate_series(1, 10)i;")
+				defer testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0;")
+
+				timestamp := gpbackup(gpbackupPath, backupHelperPath,
+					"--single-data-file",
+					"--plugin-config", pluginConfigPath)
+
+				backupCluster.GenerateAndExecuteCommand(
+					"Instruct plugin to fail",
+					cluster.ON_HOSTS,
+					func(contentID int) string {
+						return fmt.Sprintf("touch /tmp/GPBACKUP_PLUGIN_FAIL")
+					})
+
+				gprestoreCmd := exec.Command(gprestorePath,
+					"--timestamp", timestamp,
+					"--redirect-db", "restoredb",
+					"--plugin-config", pluginConfigPath)
+
+				_, err := gprestoreCmd.CombinedOutput()
+				Expect(err).To(HaveOccurred())
+
+				backupCluster.GenerateAndExecuteCommand(
+					"Unset plugin failure",
+					cluster.ON_HOSTS,
+					func(contentID int) string {
+						return fmt.Sprintf("rm /tmp/GPBACKUP_PLUGIN_FAIL")
+					})
+
+				assertArtifactsCleaned(restoreConn, timestamp)
+			}, SpecTimeout(time.Second*30))
 			It("runs gpbackup and gprestore with plugin, single-data-file, and no-compression", func() {
 				pluginExecutablePath := fmt.Sprintf("%s/src/github.com/greenplum-db/gpbackup/plugins/example_plugin.bash", os.Getenv("GOPATH"))
 				copyPluginToAllHosts(backupConn, pluginExecutablePath)
