@@ -264,18 +264,13 @@ func DoCleanup() {
 		 * to generate an EOF before it is deleted.
 		 *
 		 * Also, it is possible, that after EOF is issued (releasing the current reader process), but before the pipe is
-		 * removed, a new reader process can start reading the pipe. To avoid such situation, we rename the file before
-		 * closing it.
+		 * removed, a new reader process can start reading the pipe. To avoid such situation, we close the file handle
+		 * after we have removed the file.
 		 */
 		if *restoreAgent {
 			fileHandlePipe, err := os.OpenFile(pipeName, os.O_WRONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
 			if err == nil {
-				newPipeName := fmt.Sprintf("%s_rm", pipeName)
-				err = os.Rename(pipeName, newPipeName)
-				if err == nil {
-					pipeName = newPipeName
-				}
-				fileHandlePipe.Close()
+				defer fileHandlePipe.Close()
 			}
 		}
 
