@@ -266,9 +266,18 @@ func DoCleanup() {
 		 * Also, it is possible, that after EOF is issued (releasing the current reader process), but before the pipe is
 		 * removed, a new reader process can start reading the pipe. To avoid such situation, we close the file handle
 		 * after we have removed the file.
+		 *
+		 * Similar problem can happen with backup helper. If it finishes its work right after start, before opening the
+		 * pipe for reading, the writing side will stay hanging on the other pipe's end. So, we also open and close the
+		 * pipe to release the writing side.
 		 */
 		if *restoreAgent {
 			fileHandlePipe, err := os.OpenFile(pipeName, os.O_WRONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
+			if err == nil {
+				defer fileHandlePipe.Close()
+			}
+		} else if *backupAgent {
+			fileHandlePipe, err := os.OpenFile(pipeName, os.O_RDONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
 			if err == nil {
 				defer fileHandlePipe.Close()
 			}
