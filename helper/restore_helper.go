@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gpbackup/toc"
 	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/klauspost/compress/zstd"
@@ -49,6 +50,13 @@ type RestoreReader struct {
 	seekReader io.ReadSeeker
 	readerType ReaderType
 	errBuf     bytes.Buffer
+}
+
+func (r *RestoreReader) logPlugin() {
+	errMsg := strings.Trim(r.errBuf.String(), "\x00")
+	if len(errMsg) != 0 {
+		gplog.Warn("Plugin: %s", errMsg)
+	}
 }
 
 func (r *RestoreReader) positionReader(pos uint64, oid int) error {
@@ -149,6 +157,7 @@ func doRestoreAgent() error {
 			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
 
 			if err != nil {
+				readers[contentToRestore].logPlugin()
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
 			}
@@ -222,6 +231,7 @@ func doRestoreAgent() error {
 					// to a map entry here intentionally.
 					readers[contentToRestore], err = getRestoreDataReader(filename, nil, nil)
 					if err != nil {
+						readers[contentToRestore].logPlugin()
 						logError(fmt.Sprintf("Error encountered getting restore data reader: %v", err))
 						return err
 					}
@@ -287,6 +297,7 @@ func doRestoreAgent() error {
 				log(fmt.Sprintf("Oid %d: Data Reader - Start Byte: %d; End Byte: %d; Last Byte: %d", oid, start[contentToRestore], end[contentToRestore], lastByte[contentToRestore]))
 				err = readers[contentToRestore].positionReader(start[contentToRestore]-lastByte[contentToRestore], oid)
 				if err != nil {
+					readers[contentToRestore].logPlugin()
 					logError(fmt.Sprintf("Oid %d: Error reading from pipe: %v", oid, err))
 					return err
 				}
@@ -315,12 +326,7 @@ func doRestoreAgent() error {
 				if *singleDataFile {
 					lastByte[contentToRestore] += uint64(bytesRead)
 				}
-				errBuf := readers[contentToRestore].errBuf
-				if errBuf.Len() > 0 {
-					err = errors.Wrap(err, strings.Trim(errBuf.String(), "\x00"))
-				} else {
-					err = errors.Wrap(err, "Error copying data")
-				}
+				err = errors.Wrap(err, "Error copying data")
 				goto LoopEnd
 			}
 
@@ -368,6 +374,7 @@ func doRestoreAgent() error {
 		log(fmt.Sprintf("Oid %d: Successfully flushed and closed pipe", oid))
 
 	LoopEnd:
+		readers[contentToRestore].logPlugin()
 		log(fmt.Sprintf("Oid %d: Attempt to delete pipe", oid))
 		errPipe := deletePipe(currentPipe)
 		if errPipe != nil {
@@ -461,12 +468,6 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 		restoreReader.bufReader = bufio.NewReader(zstdReader)
 	} else {
 		restoreReader.bufReader = bufio.NewReader(readHandle)
-	}
-
-	// Check that no error has occurred in plugin command
-	errMsg := strings.Trim(restoreReader.errBuf.String(), "\x00")
-	if len(errMsg) != 0 {
-		return nil, errors.New(errMsg)
 	}
 
 	return restoreReader, err
