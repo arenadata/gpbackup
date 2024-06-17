@@ -52,7 +52,7 @@ type RestoreReader struct {
 	errBuf     bytes.Buffer
 }
 
-func (r *RestoreReader) logPlugin() {
+func (r *RestoreReader) logPluginStderr() {
 	errMsg := strings.Trim(r.errBuf.String(), "\x00")
 	if len(errMsg) != 0 {
 		gplog.Warn("Plugin: %s", errMsg)
@@ -157,7 +157,6 @@ func doRestoreAgent() error {
 			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
 
 			if err != nil {
-				readers[contentToRestore].logPlugin()
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
 			}
@@ -212,6 +211,13 @@ func doRestoreAgent() error {
 
 		contentToRestore := *content
 
+		// Check on plugin on every iteration.
+		defer func() {
+			if readers[contentToRestore] != nil {
+				readers[contentToRestore].logPluginStderr()
+			}
+		}()
+
 		for b := 0; b < batches; b++ {
 			if replicatedTables != nil && replicatedTables[oid] && b > 0 {
 				// table was already restored to this segment in a previous batch
@@ -231,7 +237,6 @@ func doRestoreAgent() error {
 					// to a map entry here intentionally.
 					readers[contentToRestore], err = getRestoreDataReader(filename, nil, nil)
 					if err != nil {
-						readers[contentToRestore].logPlugin()
 						logError(fmt.Sprintf("Error encountered getting restore data reader: %v", err))
 						return err
 					}
@@ -297,7 +302,6 @@ func doRestoreAgent() error {
 				log(fmt.Sprintf("Oid %d: Data Reader - Start Byte: %d; End Byte: %d; Last Byte: %d", oid, start[contentToRestore], end[contentToRestore], lastByte[contentToRestore]))
 				err = readers[contentToRestore].positionReader(start[contentToRestore]-lastByte[contentToRestore], oid)
 				if err != nil {
-					readers[contentToRestore].logPlugin()
 					logError(fmt.Sprintf("Oid %d: Error reading from pipe: %v", oid, err))
 					return err
 				}
@@ -374,7 +378,6 @@ func doRestoreAgent() error {
 		log(fmt.Sprintf("Oid %d: Successfully flushed and closed pipe", oid))
 
 	LoopEnd:
-		readers[contentToRestore].logPlugin()
 		log(fmt.Sprintf("Oid %d: Attempt to delete pipe", oid))
 		errPipe := deletePipe(currentPipe)
 		if errPipe != nil {
