@@ -48,14 +48,31 @@ var (
 type RestoreReader struct {
 	bufReader  *bufio.Reader
 	seekReader io.ReadSeeker
+	pluginCmd  *pluginCmd
 	readerType ReaderType
-	errBuf     bytes.Buffer
 }
 
-func (r *RestoreReader) logPluginStderr() {
-	errMsg := strings.Trim(r.errBuf.String(), "\x00")
-	if len(errMsg) != 0 {
-		gplog.Warn("Plugin: %s", errMsg)
+func (r *RestoreReader) logPluginStatus() {
+	if r.pluginCmd.exitErr != nil {
+		gplog.Warn("Plugin exited unexpectedly: %s", r.pluginCmd.exitErr)
+	}
+	// Plugin may have used stderr to log errors.
+	errLog := strings.Trim(r.pluginCmd.stderrBuffer.String(), "\x00")
+	if len(errLog) != 0 {
+		gplog.Warn("Plugin log: %s", errLog)
+	}
+}
+
+// End plugin processes that we don't need anymore.
+func (r *RestoreReader) endPluginProcess() {
+	// ProcessState is not populated if process is still running.
+	if r.pluginCmd.ProcessState == nil {
+		err := r.pluginCmd.Process.Kill()
+		if err != nil {
+			logError("Could not kill long-running plugin process (%d): %s", r.pluginCmd.Process.Pid, err)
+		} else {
+			gplog.Warn("Long-running plugin process (%d) was killed", r.pluginCmd.Process.Pid)
+		}
 	}
 }
 
@@ -213,8 +230,10 @@ func doRestoreAgent() error {
 
 		// Check on plugin on every iteration.
 		defer func() {
-			if readers[contentToRestore] != nil {
-				readers[contentToRestore].logPluginStderr()
+			r := readers[contentToRestore];
+			if r != nil && r.pluginCmd != nil {
+				r.logPluginStatus()
+				r.endPluginProcess()
 			}
 		}()
 
@@ -425,10 +444,12 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 	var seekHandle io.ReadSeeker
 	var isSubset bool
 	var err error = nil
+	var pluginCmd *pluginCmd = nil
 	restoreReader := new(RestoreReader)
 
 	if *pluginConfigFile != "" {
-		readHandle, isSubset, err = startRestorePluginCommand(fileToRead, objToc, oidList, &restoreReader.errBuf)
+		pluginCmd, readHandle, isSubset, err = startRestorePluginCommand(fileToRead, objToc, oidList)
+		restoreReader.pluginCmd = pluginCmd
 		if isSubset {
 			// Reader that operates on subset data
 			restoreReader.readerType = SUBSET
@@ -511,12 +532,20 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 	return true
 }
 
-func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int, errBuffer *bytes.Buffer) (io.Reader, bool, error) {
+type pluginCmd struct {
+	*exec.Cmd
+	stderrBuffer *bytes.Buffer
+	exitErr error
+}
+
+func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*pluginCmd, io.Reader, bool, error) {
+	var errBuf bytes.Buffer
+
 	isSubset := false
 	pluginConfig, err := utils.ReadPluginConfig(*pluginConfigFile)
 	if err != nil {
 		logError(fmt.Sprintf("Error encountered when reading plugin config: %v", err))
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	cmdStr := ""
 	if objToc != nil && getSubsetFlag(fileToRead, pluginConfig) {
@@ -541,10 +570,22 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 
 	readHandle, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
-	cmd.Stderr = errBuffer
+	cmd.Stderr = &errBuf
 
-	err = cmd.Start()
-	return readHandle, isSubset, err
+	pluginCmd := pluginCmd{cmd, &errBuf, nil}
+
+	err = pluginCmd.Start()
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	// Wait for command as to not create zombies.
+	go func(){
+		err = pluginCmd.Wait()
+		pluginCmd.exitErr = err
+	}()
+
+	return &pluginCmd, readHandle, isSubset, err
 }
