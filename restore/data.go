@@ -33,16 +33,22 @@ func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, ta
 	customPipeThroughCommand := utils.GetPipeThroughProgram().InputCommand
 	origSize, destSize, resizeCluster := GetResizeClusterInfo()
 	checkPipeExistsCommand := ""
+	checkHelperErrorFileCommand := ""
 
 	if singleDataFile || resizeCluster {
 		//helper.go handles compression, so we don't want to set it here
 		customPipeThroughCommand = "cat -"
 		checkPipeExistsCommand = fmt.Sprintf("(timeout 300 bash -c \"while [ ! -p \"%s\" ]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1)) && ", destinationToRead, destinationToRead)
+		// If, by the end of reading from the pipe, the restore helper error file exists, it means restore helper faced
+		// an error during table restore, and we can't rely on COPY results (even if GPDB reported Ok status),
+		// as restore helper could push into the pipe less data than expected (or even no data at all).
+		helperErrorFileName := fmt.Sprintf("%s_error", globalFPInfo.GetSegmentPipePathForCopyCommand())
+		checkHelperErrorFileCommand = fmt.Sprintf(" && test ! -e \"%s\"", helperErrorFileName)
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		readFromDestinationCommand = fmt.Sprintf("%s restore_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
 	}
 
-	copyCommand = fmt.Sprintf("PROGRAM '%s%s %s | %s'", checkPipeExistsCommand, readFromDestinationCommand, destinationToRead, customPipeThroughCommand)
+	copyCommand = fmt.Sprintf("PROGRAM '%s%s %s | %s%s'", checkPipeExistsCommand, readFromDestinationCommand, destinationToRead, customPipeThroughCommand, checkHelperErrorFileCommand)
 
 	query := fmt.Sprintf("COPY %s%s FROM %s WITH CSV DELIMITER '%s' ON SEGMENT;", tableName, tableAttributes, copyCommand, tableDelim)
 
