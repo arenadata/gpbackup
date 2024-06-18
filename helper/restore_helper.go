@@ -52,11 +52,8 @@ type RestoreReader struct {
 	readerType ReaderType
 }
 
+// Plugin may have used stderr to log errors.
 func (r *RestoreReader) logPluginStatus() {
-	if r.pluginCmd.exitErr != nil {
-		gplog.Warn("Plugin exited unexpectedly: %s", r.pluginCmd.exitErr)
-	}
-	// Plugin may have used stderr to log errors.
 	errLog := strings.Trim(r.pluginCmd.stderrBuffer.String(), "\x00")
 	if len(errLog) != 0 {
 		gplog.Warn("Plugin log: %s", errLog)
@@ -65,15 +62,27 @@ func (r *RestoreReader) logPluginStatus() {
 
 // End plugin processes that we don't need anymore.
 func (r *RestoreReader) endPluginProcess() {
-	// ProcessState is not populated if process is still running.
-	if r.pluginCmd.ProcessState == nil {
-		err := r.pluginCmd.Process.Kill()
-		if err != nil {
-			logError("Could not kill long-running plugin process (%d): %s", r.pluginCmd.Process.Pid, err)
+	var waitErr chan error
+	go func(){
+		waitErr<-r.pluginCmd.Wait()
+	}()
+	go func(){
+		select {
+		case err := <-waitErr:
+			if err != nil {
+				logError("Plugin process exited with an error: %s", err)
+			}
+			// Process is done and was reaped.
+			return
+		case <-time.After(time.Second):
+			// Wait() took longer than expected, time to kill.
+		}
+		if err := r.pluginCmd.Process.Kill(); err != nil {
+			gplog.Warn("Could not kill long-running plugin process (%d): %s", r.pluginCmd.Process.Pid, err)
 		} else {
 			gplog.Warn("Long-running plugin process (%d) was killed", r.pluginCmd.Process.Pid)
 		}
-	}
+	}()
 }
 
 func (r *RestoreReader) positionReader(pos uint64, oid int) error {
@@ -534,8 +543,8 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 
 type pluginCmd struct {
 	*exec.Cmd
+	// Both readable/writable stderr
 	stderrBuffer *bytes.Buffer
-	exitErr error
 }
 
 func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*pluginCmd, io.Reader, bool, error) {
@@ -565,27 +574,20 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 	} else {
 		cmdStr = fmt.Sprintf("%s restore_data %s %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath, fileToRead)
 	}
-	log(cmdStr)
-	cmd := exec.Command("bash", "-c", cmdStr)
 
-	readHandle, err := cmd.StdoutPipe()
+	log(cmdStr)
+	pluginCmd := pluginCmd{exec.Command("bash", "-c", cmdStr), &errBuf}
+
+	readHandle, err := pluginCmd.StdoutPipe()
 	if err != nil {
 		return nil, nil, false, err
 	}
-	cmd.Stderr = &errBuf
-
-	pluginCmd := pluginCmd{cmd, &errBuf, nil}
+	pluginCmd.Stderr = &errBuf
 
 	err = pluginCmd.Start()
 	if err != nil {
 		return nil, nil, false, err
 	}
-
-	// Wait for command as to not create zombies.
-	go func(){
-		err = pluginCmd.Wait()
-		pluginCmd.exitErr = err
-	}()
 
 	return &pluginCmd, readHandle, isSubset, err
 }
