@@ -275,9 +275,9 @@ var _ = Describe("gpbackup_helper end to end integration tests", func() {
 
 			go func() {
 				for _, i := range []int{1, 3} {
-					ioutil.ReadFile(fmt.Sprintf("%s_%d", pipeFile, i))
+					contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d", pipeFile, i))
 					// Empty output
-					//Expect(contents).To(Equal([]byte{}))
+					Expect(contents).To(Equal([]byte{}))
 				}
 			}()
 
