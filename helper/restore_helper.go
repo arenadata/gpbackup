@@ -62,9 +62,13 @@ func (r *RestoreReader) logPluginStatus() {
 
 // End plugin processes that we don't need anymore.
 func (r *RestoreReader) endPluginProcess() {
-	var waitErr chan error
+	waitErr := make(chan error)
 	go func(){
-		waitErr<-r.pluginCmd.Wait()
+		if r.pluginCmd.ProcessState == nil {
+			waitErr<-r.pluginCmd.Wait()
+		} else {
+			waitErr<-nil
+		}
 	}()
 	go func(){
 		select {
@@ -543,7 +547,6 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 
 type pluginCmd struct {
 	*exec.Cmd
-	// Both readable/writable stderr
 	stderrBuffer *bytes.Buffer
 }
 
