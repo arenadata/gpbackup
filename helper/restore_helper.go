@@ -63,14 +63,14 @@ func (r *RestoreReader) logPluginStatus() {
 // End plugin processes that we don't need anymore.
 func (r *RestoreReader) endPluginProcess() {
 	waitErr := make(chan error)
-	go func(){
+	go func() {
 		if r.pluginCmd.ProcessState == nil {
-			waitErr<-r.pluginCmd.Wait()
+			waitErr <- r.pluginCmd.Wait()
 		} else {
-			waitErr<-nil
+			waitErr <- nil
 		}
 	}()
-	go func(){
+	go func() {
 		select {
 		case err := <-waitErr:
 			if err != nil {
@@ -243,7 +243,7 @@ func doRestoreAgent() error {
 
 		// Check on plugin on every iteration.
 		defer func() {
-			r := readers[contentToRestore];
+			r := readers[contentToRestore]
 			if r != nil && r.pluginCmd != nil {
 				r.logPluginStatus()
 				r.endPluginProcess()
@@ -534,7 +534,7 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 		return false
 	}
 	// Helper's option does not allow to use subset
-	if !*isFiltered  || *onErrorContinue {
+	if !*isFiltered || *onErrorContinue {
 		return false
 	}
 	// Restore subset and compression does not allow together
