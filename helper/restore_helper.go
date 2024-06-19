@@ -52,7 +52,7 @@ type RestoreReader struct {
 	readerType ReaderType
 }
 
-// Plugin may have used stderr to log errors.
+// Plugin may have used stderr to log errors. Log them as warnings.
 func (r *RestoreReader) logPluginStatus() {
 	errLog := strings.Trim(r.pluginCmd.stderrBuffer.String(), "\x00")
 	if len(errLog) != 0 {
@@ -60,15 +60,13 @@ func (r *RestoreReader) logPluginStatus() {
 	}
 }
 
-// End plugin processes that we don't need anymore.
+// End plugin processes that we don't need anymore. Wait() is called on a
+// process to reap it. If the process doesn't exit within one second, it is
+// killed.
 func (r *RestoreReader) endPluginProcess() {
 	waitErr := make(chan error)
 	go func() {
-		if r.pluginCmd.ProcessState == nil {
-			waitErr <- r.pluginCmd.Wait()
-		} else {
-			waitErr <- nil
-		}
+		waitErr <- r.pluginCmd.Wait()
 	}()
 	select {
 	case err := <-waitErr:
@@ -242,9 +240,11 @@ func doRestoreAgent() error {
 		// Check on plugin on every iteration.
 		defer func() {
 			r := readers[contentToRestore]
-			if r != nil && r.pluginCmd != nil {
+			if r != nil && r.pluginCmd != nil && !r.pluginCmd.isEnded {
 				r.logPluginStatus()
 				r.endPluginProcess()
+				// Only log once per plugin command.
+				r.pluginCmd.isEnded = true
 			}
 		}()
 
@@ -543,9 +543,19 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 	return true
 }
 
+// pluginCmd is needed to keep track of readable stderr and whether the command
+// has already been ended.
 type pluginCmd struct {
 	*exec.Cmd
+	// stderr that can be read from.
 	stderrBuffer *bytes.Buffer
+	isEnded      bool
+}
+
+func newPluginCmd(errBuf *bytes.Buffer, name string, arg ...string) *pluginCmd {
+	cmd := exec.Command(name, arg...)
+	cmd.Stderr = errBuf
+	return &pluginCmd{cmd, errBuf, false}
 }
 
 func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*pluginCmd, io.Reader, bool, error) {
@@ -577,18 +587,17 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 	}
 
 	log(cmdStr)
-	pluginCmd := pluginCmd{exec.Command("bash", "-c", cmdStr), &errBuf}
+	pluginCmd := newPluginCmd(&errBuf, "bash", "-c", cmdStr)
 
 	readHandle, err := pluginCmd.StdoutPipe()
 	if err != nil {
 		return nil, nil, false, err
 	}
-	pluginCmd.Stderr = &errBuf
 
 	err = pluginCmd.Start()
 	if err != nil {
 		return nil, nil, false, err
 	}
 
-	return &pluginCmd, readHandle, isSubset, err
+	return pluginCmd, readHandle, isSubset, err
 }
