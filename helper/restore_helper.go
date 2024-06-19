@@ -70,23 +70,21 @@ func (r *RestoreReader) endPluginProcess() {
 			waitErr <- nil
 		}
 	}()
-	go func() {
-		select {
-		case err := <-waitErr:
-			if err != nil {
-				logError("Plugin process exited with an error: %s", err)
-			}
-			// Process is done and was reaped.
-			return
-		case <-time.After(time.Second):
-			// Wait() took longer than expected, time to kill.
+	select {
+	case err := <-waitErr:
+		if err != nil {
+			logError("Plugin process exited with an error: %s", err)
 		}
-		if err := r.pluginCmd.Process.Kill(); err != nil {
-			gplog.Warn("Could not kill long-running plugin process (%d): %s", r.pluginCmd.Process.Pid, err)
-		} else {
-			gplog.Warn("Long-running plugin process (%d) was killed", r.pluginCmd.Process.Pid)
-		}
-	}()
+		// Process is done and was reaped.
+		return
+	case <-time.After(time.Second):
+		// Wait() took longer than expected, time to kill.
+	}
+	if err := r.pluginCmd.Process.Kill(); err != nil {
+		gplog.Warn("Could not kill long-running plugin process (%d): %s", r.pluginCmd.Process.Pid, err)
+	} else {
+		gplog.Warn("Long-running plugin process (%d) was killed", r.pluginCmd.Process.Pid)
+	}
 }
 
 func (r *RestoreReader) positionReader(pos uint64, oid int) error {
