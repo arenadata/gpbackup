@@ -296,7 +296,7 @@ var _ = Describe("gpbackup_helper end to end integration tests", func() {
 			Expect(err).To(HaveOccurred())
 
 			outputStr := string(output)
-			Expect(outputStr).To(ContainSubstring("Very important plugin error"))
+			Expect(outputStr).To(ContainSubstring("Plugin process exited with an error"))
 
 			err = exec.Command("rm", "/tmp/GPBACKUP_PLUGIN_DIE").Run()
 			Expect(err).ToNot(HaveOccurred())

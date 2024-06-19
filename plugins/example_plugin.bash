@@ -80,7 +80,6 @@ restore_data() {
   if [ -e "/tmp/GPBACKUP_PLUGIN_LOG_TO_STDERR" ] ; then
     echo 'Some plugin warning' >&2
   elif [ -e "/tmp/GPBACKUP_PLUGIN_DIE" ] ; then
-    echo 'Very important plugin error' >&2
     exit 1
   fi
 	cat /tmp/plugin_dest/$timestamp_day_dir/$timestamp_dir/$filename
