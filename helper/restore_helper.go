@@ -52,16 +52,16 @@ type RestoreReader struct {
 	readerType ReaderType
 }
 
-// Plugin may have used stderr to log errors. Log them as warnings.
-func (r *RestoreReader) logPluginStatus() {
+// Log plugin's stderr as warnings.
+func (r *RestoreReader) logPluginStderr() {
 	errLog := strings.Trim(r.pluginCmd.stderrBuffer.String(), "\x00")
 	if len(errLog) != 0 {
-		gplog.Warn("Plugin log: %s", errLog)
+		gplog.Warn(fmt.Sprintf("Plugin log: %s", errLog))
 	}
 }
 
-// End plugin processes that we don't need anymore. Wait() is called on a
-// process to reap it. If the process doesn't exit within one second, it is
+// End plugin processes that is not needed anymore. Wait() is called on a
+// process to reap it, and if the process doesn't exit within one second, it is
 // killed.
 func (r *RestoreReader) endPluginProcess() {
 	waitErr := make(chan error)
@@ -71,17 +71,29 @@ func (r *RestoreReader) endPluginProcess() {
 	select {
 	case err := <-waitErr:
 		if err != nil {
-			logError("Plugin process exited with an error: %s", err)
+			logError(fmt.Sprintf("Plugin process exited with an error: %s", err))
 		}
 		// Process is done and was reaped.
 		return
 	case <-time.After(time.Second):
-		// Wait() took longer than expected, time to kill.
+		// Wait() took longer than expected.
 	}
 	if err := r.pluginCmd.Process.Kill(); err != nil {
-		gplog.Warn("Could not kill long-running plugin process (%d): %s", r.pluginCmd.Process.Pid, err)
+		gplog.Warn(fmt.Sprintf("Could not kill long-running plugin process (%d): %s", r.pluginCmd.Process.Pid, err))
 	} else {
-		gplog.Warn("Long-running plugin process (%d) was killed", r.pluginCmd.Process.Pid)
+		gplog.Warn(fmt.Sprintf("Long-running plugin process (%d) was killed", r.pluginCmd.Process.Pid))
+	}
+}
+
+// Reap plugin process and log plugin stderr. This should be called on every
+// reader that used a plugin as to not leave any zombies behind.
+func finalizeReaderPlugin(r *RestoreReader) {
+	if r != nil && r.pluginCmd != nil && !r.pluginCmd.isEnded {
+		log(fmt.Sprintf("Finalizing plugin process (%d)", r.pluginCmd.Process.Pid))
+		r.logPluginStderr()
+		r.endPluginProcess()
+		// Only finalize once per plugin command.
+		r.pluginCmd.isEnded = true
 	}
 }
 
@@ -187,6 +199,7 @@ func doRestoreAgent() error {
 				return err
 			}
 			log(fmt.Sprintf("Using reader type: %s", readers[contentToRestore].readerType))
+			defer finalizeReaderPlugin(readers[contentToRestore])
 
 			contentToRestore += *destSize
 		}
@@ -237,17 +250,6 @@ func doRestoreAgent() error {
 
 		contentToRestore := *content
 
-		// Check on plugin on every iteration.
-		defer func() {
-			r := readers[contentToRestore]
-			if r != nil && r.pluginCmd != nil && !r.pluginCmd.isEnded {
-				r.logPluginStatus()
-				r.endPluginProcess()
-				// Only log once per plugin command.
-				r.pluginCmd.isEnded = true
-			}
-		}()
-
 		for b := 0; b < batches; b++ {
 			if replicatedTables != nil && replicatedTables[oid] && b > 0 {
 				// table was already restored to this segment in a previous batch
@@ -270,6 +272,7 @@ func doRestoreAgent() error {
 						logError(fmt.Sprintf("Error encountered getting restore data reader: %v", err))
 						return err
 					}
+					defer finalizeReaderPlugin(readers[contentToRestore])
 				}
 			}
 
@@ -403,11 +406,15 @@ func doRestoreAgent() error {
 				goto LoopEnd
 			}
 
+			finalizeReaderPlugin(readers[contentToRestore])
+
 			contentToRestore += *destSize
 		}
 		log(fmt.Sprintf("Oid %d: Successfully flushed and closed pipe", oid))
 
 	LoopEnd:
+		finalizeReaderPlugin(readers[contentToRestore])
+
 		log(fmt.Sprintf("Oid %d: Attempt to delete pipe", oid))
 		errPipe := deletePipe(currentPipe)
 		if errPipe != nil {
@@ -483,6 +490,7 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 		// error logging handled by calling functions
 		return nil, err
 	}
+	log(fmt.Sprintf("Started plugin process (%d)", pluginCmd.Process.Pid))
 
 	// Set the underlying stream reader in restoreReader
 	if restoreReader.readerType == SEEKABLE {
@@ -595,9 +603,6 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 	}
 
 	err = pluginCmd.Start()
-	if err != nil {
-		return nil, nil, false, err
-	}
 
 	return pluginCmd, readHandle, isSubset, err
 }
