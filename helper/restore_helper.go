@@ -193,13 +193,13 @@ func doRestoreAgent() error {
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
 			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
+			defer finalizeReaderPlugin(readers[contentToRestore])
 
 			if err != nil {
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
 			}
 			log(fmt.Sprintf("Using reader type: %s", readers[contentToRestore].readerType))
-			defer finalizeReaderPlugin(readers[contentToRestore])
 
 			contentToRestore += *destSize
 		}
@@ -268,11 +268,11 @@ func doRestoreAgent() error {
 					// re-use them but still having them in a map simplifies overall code flow.  We repeatedly assign
 					// to a map entry here intentionally.
 					readers[contentToRestore], err = getRestoreDataReader(filename, nil, nil)
+					defer finalizeReaderPlugin(readers[contentToRestore])
 					if err != nil {
 						logError(fmt.Sprintf("Error encountered getting restore data reader: %v", err))
 						return err
 					}
-					defer finalizeReaderPlugin(readers[contentToRestore])
 				}
 			}
 
@@ -490,7 +490,9 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 		// error logging handled by calling functions
 		return nil, err
 	}
-	log(fmt.Sprintf("Started plugin process (%d)", pluginCmd.Process.Pid))
+	if pluginCmd != nil {
+		log(fmt.Sprintf("Started plugin process (%d)", pluginCmd.Process.Pid))
+	}
 
 	// Set the underlying stream reader in restoreReader
 	if restoreReader.readerType == SEEKABLE {
@@ -555,7 +557,6 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 // has already been ended.
 type pluginCmd struct {
 	*exec.Cmd
-	// stderr that can be read from.
 	stderrBuffer *bytes.Buffer
 	isEnded      bool
 }
