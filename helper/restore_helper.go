@@ -193,12 +193,11 @@ func doRestoreAgent() error {
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
 			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
-			defer finalizeReaderPlugin(readers[contentToRestore])
-
 			if err != nil {
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
 			}
+			defer finalizeReaderPlugin(readers[contentToRestore])
 			log(fmt.Sprintf("Using reader type: %s", readers[contentToRestore].readerType))
 
 			contentToRestore += *destSize
@@ -268,11 +267,11 @@ func doRestoreAgent() error {
 					// re-use them but still having them in a map simplifies overall code flow.  We repeatedly assign
 					// to a map entry here intentionally.
 					readers[contentToRestore], err = getRestoreDataReader(filename, nil, nil)
-					defer finalizeReaderPlugin(readers[contentToRestore])
 					if err != nil {
 						logError(fmt.Sprintf("Error encountered getting restore data reader: %v", err))
 						return err
 					}
+					defer finalizeReaderPlugin(readers[contentToRestore])
 				}
 			}
 
@@ -334,6 +333,7 @@ func doRestoreAgent() error {
 			if *singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
 				log(fmt.Sprintf("Oid %d: Data Reader - Start Byte: %d; End Byte: %d; Last Byte: %d", oid, start[contentToRestore], end[contentToRestore], lastByte[contentToRestore]))
 				err = readers[contentToRestore].positionReader(start[contentToRestore]-lastByte[contentToRestore], oid)
+				defer finalizeReaderPlugin(readers[contentToRestore])
 				if err != nil {
 					logError(fmt.Sprintf("Oid %d: Error reading from pipe: %v", oid, err))
 					return err
@@ -372,6 +372,12 @@ func doRestoreAgent() error {
 			}
 			log(fmt.Sprintf("Oid %d: Copied %d bytes into the pipe", oid, bytesRead))
 
+			// SDF reads the pipe by chunks in several iterations but Wait()
+			// call will close the pipe immediately. Let defer do the work.
+			if !*singleDataFile {
+				finalizeReaderPlugin(readers[contentToRestore])
+			}
+
 			log(fmt.Sprintf("Closing pipe for oid %d: %s", oid, currentPipe))
 
 			// Recreate pipe to prevent data holdover bug
@@ -406,15 +412,11 @@ func doRestoreAgent() error {
 				goto LoopEnd
 			}
 
-			finalizeReaderPlugin(readers[contentToRestore])
-
 			contentToRestore += *destSize
 		}
 		log(fmt.Sprintf("Oid %d: Successfully flushed and closed pipe", oid))
 
 	LoopEnd:
-		finalizeReaderPlugin(readers[contentToRestore])
-
 		log(fmt.Sprintf("Oid %d: Attempt to delete pipe", oid))
 		errPipe := deletePipe(currentPipe)
 		if errPipe != nil {
