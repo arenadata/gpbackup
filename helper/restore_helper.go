@@ -71,11 +71,11 @@ func (r *RestoreReader) endPluginProcess() {
 // Reap plugin process and log plugin stderr. This should be called on every
 // reader that used a plugin as to not leave any zombies behind.
 func finalizeReaderPlugin(r *RestoreReader) {
-	if r != nil && r.pluginCmd != nil && !r.pluginCmd.isEnded {
+	if r != nil && r.pluginCmd != nil && !r.pluginCmd.isFinalized {
 		r.logPluginStderr()
 		r.endPluginProcess()
 		// Only finalize once per plugin command.
-		r.pluginCmd.isEnded = true
+		r.pluginCmd.isFinalized = true
 	}
 }
 
@@ -175,6 +175,7 @@ func doRestoreAgent() error {
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
 			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
+
 			if err != nil {
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
@@ -354,8 +355,9 @@ func doRestoreAgent() error {
 			}
 			log(fmt.Sprintf("Oid %d: Copied %d bytes into the pipe", oid, bytesRead))
 
-			// SDF reads the pipe by chunks in several iterations but Wait()
-			// call will close the pipe immediately. Let defer do the work.
+			// SDF reads the pipe output by chunks in several iterations, but
+			// Wait() from finalizeReaderPlugin() call will close the pipe
+			// immediately. Let defer close it instead.
 			if !*singleDataFile {
 				finalizeReaderPlugin(readers[contentToRestore])
 			}
@@ -538,11 +540,11 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 }
 
 // pluginCmd is needed to keep track of readable stderr and whether the command
-// has already been ended.
+// has already been finalized.
 type pluginCmd struct {
 	*exec.Cmd
 	stderrBuffer *bytes.Buffer
-	isEnded      bool
+	isFinalized  bool
 }
 
 func newPluginCmd(errBuf *bytes.Buffer, name string, arg ...string) *pluginCmd {
