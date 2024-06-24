@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
@@ -225,6 +226,27 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	panicChan := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Make sure it's called to release resources even if no errors
+
+	// Launch a checker that polls if the restore helper has ended with an error.
+	// It is our 'Ultima ratio regum' - in case restore helper couldn't read a file with the oid list, it is not aware
+	// about the pipes, pre-created by the gprestore, and it can't close them.  So we cancel all pending COPY commands
+	// from here after giving a chance to the restore helper to close pipes on its own.
+	if backupConfig.SingleDataFile || resizeCluster {
+		go func() {
+			for {
+				time.Sleep(5 * time.Second)
+				remoteOutput := globalCluster.GenerateAndExecuteCommand("Checking gpbackup_helper agent failure", cluster.ON_SEGMENTS, func(contentID int) string {
+					helperErrorFileName := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID))
+					return fmt.Sprintf("! ls %s", helperErrorFileName)
+				})
+				if remoteOutput.NumErrors != 0 {
+					// the delay below is to give the restore helper a chance to close all pipes, if it can...
+					time.Sleep(5 * time.Second)
+					cancel()
+				}
+			}
+		}()
+	}
 
 	for i := 0; i < connectionPool.NumConns; i++ {
 		workerPool.Add(1)
