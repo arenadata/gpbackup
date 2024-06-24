@@ -303,41 +303,6 @@ var _ = Describe("gpbackup_helper end to end integration tests", func() {
 
 			assertErrorsHandled()
 		})
-		It("gpbackup_helper will kill plugin process if plugin process didn't terminate properly", func() {
-			setupRestoreFiles("", true)
-
-			err := exec.Command("touch", "/tmp/GPBACKUP_PLUGIN_STOP").Run()
-			Expect(err).ToNot(HaveOccurred())
-
-			go func() {
-				for _, i := range []int{1, 3} {
-					contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d", pipeFile, i))
-					Expect(string(contents)).To(Equal("here is some data\n"))
-				}
-			}()
-
-			args := []string{
-				"--toc-file", tocFile,
-				"--oid-file", oidFile,
-				"--pipe-file", pipeFile,
-				"--content", "1",
-				"--single-data-file",
-				"--restore-agent",
-				"--data-file", dataFileFullPath,
-				"--plugin-config", pluginConfigPath}
-			helperCmd := exec.Command(gpbackupHelperPath, args...)
-
-			output, err := helperCmd.CombinedOutput()
-			Expect(err).ToNot(HaveOccurred())
-
-			outputStr := string(output)
-			Expect(outputStr).To(ContainSubstring("Long-running plugin process"))
-
-			err = exec.Command("rm", "/tmp/GPBACKUP_PLUGIN_STOP").Run()
-			Expect(err).ToNot(HaveOccurred())
-
-			assertNoErrors()
-		})
 		It("Generates error file when restore agent interrupted", func() {
 			setupRestoreFiles("gzip", false)
 			helperCmd := gpbackupHelper(gpbackupHelperPath, "--restore-agent", "--data-file", dataFileFullPath+".gz", "--single-data-file")

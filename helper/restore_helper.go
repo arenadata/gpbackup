@@ -60,28 +60,11 @@ func (r *RestoreReader) logPluginStderr() {
 	}
 }
 
-// End plugin processes that is not needed anymore. Wait() is called on a
-// process to reap it, and if the process doesn't exit within one second, it is
-// killed.
+// Wait for plugin process that should be already finished.
 func (r *RestoreReader) endPluginProcess() {
-	waitErr := make(chan error)
-	go func() {
-		waitErr <- r.pluginCmd.Wait()
-	}()
-	select {
-	case err := <-waitErr:
-		if err != nil {
-			logError(fmt.Sprintf("Plugin process exited with an error: %s", err))
-		}
-		// Process is done and was reaped.
-		return
-	case <-time.After(time.Second):
-		// Wait() took longer than expected.
-	}
-	if err := r.pluginCmd.Process.Kill(); err != nil {
-		gplog.Warn(fmt.Sprintf("Could not kill long-running plugin process (%d): %s", r.pluginCmd.Process.Pid, err))
-	} else {
-		gplog.Warn(fmt.Sprintf("Long-running plugin process (%d) was killed", r.pluginCmd.Process.Pid))
+	log(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.Process.Pid))
+	if err := r.pluginCmd.Wait(); err != nil {
+		logError(fmt.Sprintf("Plugin process exited with an error: %s", err))
 	}
 }
 
@@ -89,7 +72,6 @@ func (r *RestoreReader) endPluginProcess() {
 // reader that used a plugin as to not leave any zombies behind.
 func finalizeReaderPlugin(r *RestoreReader) {
 	if r != nil && r.pluginCmd != nil && !r.pluginCmd.isEnded {
-		log(fmt.Sprintf("Finalizing plugin process (%d)", r.pluginCmd.Process.Pid))
 		r.logPluginStderr()
 		r.endPluginProcess()
 		// Only finalize once per plugin command.

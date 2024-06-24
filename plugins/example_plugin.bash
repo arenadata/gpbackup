@@ -83,9 +83,6 @@ restore_data() {
     exit 1
   fi
 	cat /tmp/plugin_dest/$timestamp_day_dir/$timestamp_dir/$filename
-  if [ -e "/tmp/GPBACKUP_PLUGIN_STOP" ] ; then
-    sleep 15
-  fi
 }
 
 delete_backup() {
