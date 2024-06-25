@@ -52,31 +52,32 @@ type RestoreReader struct {
 	readerType ReaderType
 }
 
-// Log plugin's stderr as warnings.
-func (r *RestoreReader) logPluginStderr() {
+func (r *RestoreReader) endPluginProcess() error {
+	// Log plugin's stderr.
 	errLog := strings.Trim(r.pluginCmd.stderrBuffer.String(), "\x00")
 	if len(errLog) != 0 {
 		gplog.Warn(fmt.Sprintf("Plugin log: %s", errLog))
 	}
-}
 
-// Wait for plugin process that should be already finished.
-func (r *RestoreReader) endPluginProcess() {
+	// Wait for plugin process that should be already finished.
 	log(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.Process.Pid))
 	if err := r.pluginCmd.Wait(); err != nil {
 		logError(fmt.Sprintf("Plugin process exited with an error: %s", err))
+		return err;
 	}
+
+	// Only finalize once per plugin command.
+	r.pluginCmd.isFinalized = true
+	return nil
 }
 
 // Reap plugin process and log plugin stderr. This should be called on every
 // reader that used a plugin as to not leave any zombies behind.
-func finalizeReaderPlugin(r *RestoreReader) {
+func finalizeReaderPlugin(r *RestoreReader) error {
 	if r != nil && r.pluginCmd != nil && !r.pluginCmd.isFinalized {
-		r.logPluginStderr()
-		r.endPluginProcess()
-		// Only finalize once per plugin command.
-		r.pluginCmd.isFinalized = true
+		return r.endPluginProcess()
 	}
+	return nil
 }
 
 func (r *RestoreReader) positionReader(pos uint64, oid int) error {
@@ -175,12 +176,11 @@ func doRestoreAgent() error {
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
 			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
-
+			defer finalizeReaderPlugin(readers[contentToRestore])
 			if err != nil {
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
 			}
-			defer finalizeReaderPlugin(readers[contentToRestore])
 			log(fmt.Sprintf("Using reader type: %s", readers[contentToRestore].readerType))
 
 			contentToRestore += *destSize
@@ -254,7 +254,6 @@ func doRestoreAgent() error {
 						logError(fmt.Sprintf("Error encountered getting restore data reader: %v", err))
 						return err
 					}
-					defer finalizeReaderPlugin(readers[contentToRestore])
 				}
 			}
 
@@ -359,7 +358,10 @@ func doRestoreAgent() error {
 			// Wait() from finalizeReaderPlugin() call will close the pipe
 			// immediately. Let defer close it instead.
 			if !*singleDataFile {
-				finalizeReaderPlugin(readers[contentToRestore])
+				if err = finalizeReaderPlugin(readers[contentToRestore]); err != nil {
+					// Error is alredy logged.
+					return err
+				}
 			}
 
 			log(fmt.Sprintf("Closing pipe for oid %d: %s", oid, currentPipe))
