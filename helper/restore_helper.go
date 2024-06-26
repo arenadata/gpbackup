@@ -67,7 +67,7 @@ func (r *RestoreReader) logPlugin() {
 func (r *RestoreReader) waitForPlugin() error {
 	if r.pluginCmd != nil && !r.pluginCmd.isEnded {
 		log(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.Process.Pid))
-		err := r.pluginCmd.Wait();
+		err := r.pluginCmd.Wait()
 		r.pluginCmd.isEnded = true
 		if err != nil {
 			logError(fmt.Sprintf("Plugin process exited with an error: %s", err))
@@ -553,7 +553,7 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 type pluginCmd struct {
 	*exec.Cmd
 	stderrBuffer *bytes.Buffer
-	isEnded  bool
+	isEnded      bool
 }
 
 func newPluginCmd(errBuf *bytes.Buffer, name string, arg ...string) *pluginCmd {
