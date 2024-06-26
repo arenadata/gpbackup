@@ -52,30 +52,27 @@ type RestoreReader struct {
 	readerType ReaderType
 }
 
-func (r *RestoreReader) endPluginProcess() error {
-	// Log plugin's stderr.
-	errLog := strings.Trim(r.pluginCmd.stderrBuffer.String(), "\x00")
-	if len(errLog) != 0 {
-		gplog.Warn(fmt.Sprintf("Plugin log: %s", errLog))
+// Log plugin's stderr as warnings.
+func (r *RestoreReader) logPlugin() {
+	if r.pluginCmd != nil {
+		errLog := strings.Trim(r.pluginCmd.stderrBuffer.String(), "\x00")
+		if len(errLog) != 0 {
+			gplog.Warn(fmt.Sprintf("Plugin log: %s", errLog))
+		}
 	}
-
-	// Wait for plugin process that should be already finished.
-	log(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.Process.Pid))
-	if err := r.pluginCmd.Wait(); err != nil {
-		logError(fmt.Sprintf("Plugin process exited with an error: %s", err))
-		return err;
-	}
-
-	// Only finalize once per plugin command.
-	r.pluginCmd.isFinalized = true
-	return nil
 }
 
-// Reap plugin process and log plugin stderr. This should be called on every
-// reader that used a plugin as to not leave any zombies behind.
-func finalizeReaderPlugin(r *RestoreReader) error {
-	if r != nil && r.pluginCmd != nil && !r.pluginCmd.isFinalized {
-		return r.endPluginProcess()
+// Wait for plugin process that should be already finished. This should be
+// called on every reader that used a plugin as to not leave any zombies behind.
+func (r *RestoreReader) waitForPlugin() error {
+	if r.pluginCmd != nil && !r.pluginCmd.isEnded {
+		log(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.Process.Pid))
+		err := r.pluginCmd.Wait();
+		r.pluginCmd.isEnded = true
+		if err != nil {
+			logError(fmt.Sprintf("Plugin process exited with an error: %s", err))
+			return err
+		}
 	}
 	return nil
 }
@@ -176,8 +173,10 @@ func doRestoreAgent() error {
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
 			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
-			defer finalizeReaderPlugin(readers[contentToRestore])
 			if err != nil {
+				if readers[contentToRestore] != nil {
+					readers[contentToRestore].logPlugin()
+				}
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
 			}
@@ -252,6 +251,9 @@ func doRestoreAgent() error {
 					readers[contentToRestore], err = getRestoreDataReader(filename, nil, nil)
 					if err != nil {
 						logError(fmt.Sprintf("Error encountered getting restore data reader: %v", err))
+						if readers[contentToRestore] != nil {
+							readers[contentToRestore].logPlugin()
+						}
 						return err
 					}
 				}
@@ -315,9 +317,11 @@ func doRestoreAgent() error {
 			if *singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
 				log(fmt.Sprintf("Oid %d: Data Reader - Start Byte: %d; End Byte: %d; Last Byte: %d", oid, start[contentToRestore], end[contentToRestore], lastByte[contentToRestore]))
 				err = readers[contentToRestore].positionReader(start[contentToRestore]-lastByte[contentToRestore], oid)
-				defer finalizeReaderPlugin(readers[contentToRestore])
 				if err != nil {
 					logError(fmt.Sprintf("Oid %d: Error reading from pipe: %v", oid, err))
+					if readers[contentToRestore] != nil {
+						readers[contentToRestore].logPlugin()
+					}
 					return err
 				}
 			}
@@ -354,13 +358,10 @@ func doRestoreAgent() error {
 			}
 			log(fmt.Sprintf("Oid %d: Copied %d bytes into the pipe", oid, bytesRead))
 
-			// SDF reads the pipe output by chunks in several iterations, but
-			// Wait() from finalizeReaderPlugin() call will close the pipe
-			// immediately. Let defer close it instead.
 			if !*singleDataFile {
-				if err = finalizeReaderPlugin(readers[contentToRestore]); err != nil {
+				if err = readers[contentToRestore].waitForPlugin(); err != nil {
 					// Error is alredy logged.
-					return err
+					goto LoopEnd
 				}
 			}
 
@@ -403,6 +404,12 @@ func doRestoreAgent() error {
 		log(fmt.Sprintf("Oid %d: Successfully flushed and closed pipe", oid))
 
 	LoopEnd:
+		readers[contentToRestore].logPlugin()
+		if !*singleDataFile {
+			// Try to finalize the plugin for onErrorContinue.
+			readers[contentToRestore].waitForPlugin()
+		}
+
 		log(fmt.Sprintf("Oid %d: Attempt to delete pipe", oid))
 		errPipe := deletePipe(currentPipe)
 		if errPipe != nil {
@@ -546,7 +553,7 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 type pluginCmd struct {
 	*exec.Cmd
 	stderrBuffer *bytes.Buffer
-	isFinalized  bool
+	isEnded  bool
 }
 
 func newPluginCmd(errBuf *bytes.Buffer, name string, arg ...string) *pluginCmd {
