@@ -173,10 +173,15 @@ func doRestoreAgent() error {
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
 			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
-			if err != nil {
-				if readers[contentToRestore] != nil {
+			if readers[contentToRestore] != nil {
+				// There will be only one reader, so we defer the cleanup
+				// instead of doing it every iteration.
+				defer func() {
 					readers[contentToRestore].logPlugin()
-				}
+					readers[contentToRestore].waitForPlugin()
+				}()
+			}
+			if err != nil {
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
 			}
@@ -319,9 +324,7 @@ func doRestoreAgent() error {
 				err = readers[contentToRestore].positionReader(start[contentToRestore]-lastByte[contentToRestore], oid)
 				if err != nil {
 					logError(fmt.Sprintf("Oid %d: Error reading from pipe: %v", oid, err))
-					if readers[contentToRestore] != nil {
-						readers[contentToRestore].logPlugin()
-					}
+					readers[contentToRestore].logPlugin()
 					return err
 				}
 			}
