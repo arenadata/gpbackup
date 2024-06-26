@@ -361,7 +361,8 @@ func doRestoreAgent() error {
 			}
 			log(fmt.Sprintf("Oid %d: Copied %d bytes into the pipe", oid, bytesRead))
 
-			if !*singleDataFile {
+			// On resize restore reader might be nil.
+			if !*singleDataFile && readers[contentToRestore] != nil {
 				if err = readers[contentToRestore].waitForPlugin(); err != nil {
 					// Error is alredy logged.
 					goto LoopEnd
@@ -407,9 +408,9 @@ func doRestoreAgent() error {
 		log(fmt.Sprintf("Oid %d: Successfully flushed and closed pipe", oid))
 
 	LoopEnd:
-		readers[contentToRestore].logPlugin()
-		if !*singleDataFile {
+		if !*singleDataFile && readers[contentToRestore] != nil {
 			// Try to finalize the plugin for onErrorContinue.
+			readers[contentToRestore].logPlugin()
 			readers[contentToRestore].waitForPlugin()
 		}
 
