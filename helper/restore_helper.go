@@ -57,6 +57,8 @@ func (r *RestoreReader) logPlugin() {
 		errLog := strings.Trim(r.pluginCmd.stderrBuffer.String(), "\x00")
 		if len(errLog) != 0 {
 			logWarning(fmt.Sprintf("Plugin log: %s", errLog))
+			// Consume the entire buffer.
+			r.pluginCmd.stderrBuffer.Next(r.pluginCmd.stderrBuffer.Len())
 		}
 	}
 }
