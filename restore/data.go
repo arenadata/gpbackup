@@ -240,6 +240,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					return fmt.Sprintf("! ls %s", helperErrorFileName)
 				})
 				if remoteOutput.NumErrors != 0 {
+					gplog.Error("gpbackup_helper failed to start on some segments")
 					// the delay below is to give the restore helper a chance to close all pipes, if it can...
 					time.Sleep(5 * time.Second)
 					cancel()
