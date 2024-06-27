@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gpbackup/toc"
 	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/klauspost/compress/zstd"
@@ -57,7 +56,7 @@ func (r *RestoreReader) logPlugin() {
 	if r.pluginCmd != nil {
 		errLog := strings.Trim(r.pluginCmd.stderrBuffer.String(), "\x00")
 		if len(errLog) != 0 {
-			gplog.Warn(fmt.Sprintf("Plugin log: %s", errLog))
+			logWarning(fmt.Sprintf("Plugin log: %s", errLog))
 		}
 	}
 }

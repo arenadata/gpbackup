@@ -275,6 +275,11 @@ func log(s string, v ...interface{}) {
 	gplog.Verbose(s, v...)
 }
 
+func logWarning(s string, v ...interface{}) {
+	s = fmt.Sprintf("Segment %d: %s", *content, s)
+	gplog.Warn(s, v...)
+}
+
 func logError(s string, v ...interface{}) {
 	s = fmt.Sprintf("Segment %d: %s", *content, s)
 	gplog.Error(s, v...)
