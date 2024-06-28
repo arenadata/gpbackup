@@ -47,8 +47,29 @@ type RestoreReader struct {
 	fileHandle *os.File
 	bufReader  *bufio.Reader
 	seekReader io.ReadSeeker
+	pluginCmd  *PluginCmd
 	readerType ReaderType
-	errBuf     bytes.Buffer
+}
+
+// Wait for plugin process that should be already finished. This should be
+// called on every reader that used a plugin as to not leave any zombies behind.
+func (r *RestoreReader) waitForPlugin() error {
+	var err error
+	if r.pluginCmd != nil && r.pluginCmd.Process != nil {
+		logVerbose(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.Process.Pid))
+		err = r.pluginCmd.Wait()
+		if err != nil {
+			logError(fmt.Sprintf("Plugin process exited with an error: %s", err))
+		}
+		// Log plugin's stderr as warnings.
+		errLog := strings.Trim(r.pluginCmd.errBuf.String(), "\x00")
+		if len(errLog) != 0 {
+			logWarn(fmt.Sprintf("Plugin log: %s", errLog))
+			// Consume the entire buffer.
+			r.pluginCmd.errBuf.Next(r.pluginCmd.errBuf.Len())
+		}
+	}
+	return err
 }
 
 func (r *RestoreReader) positionReader(pos uint64, oid int) error {
@@ -164,7 +185,20 @@ func doRestoreAgent() error {
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
 			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
-
+			if readers[contentToRestore] != nil {
+				// NOTE: If we reach here with batches > 1, there will be
+				// *origSize / *destSize (N old segments / N new segments)
+				// readers + 1, which is presumably a small number, so we just
+				// defer the cleanup.
+				//
+				// The loops under are constructed in a way that needs to keep
+				// all readers open for the entire duration of restore (oid is
+				// in outer loop -- batches in inner loop, we'll need all
+				// readers for every outer loop iteration), so we can't properly
+				// close any of the readers until we restore every oid yet,
+				// unless The Big Refactoring will arrive.
+				defer readers[contentToRestore].waitForPlugin()
+			}
 			if err != nil {
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
@@ -303,12 +337,7 @@ func doRestoreAgent() error {
 			if *singleDataFile {
 				lastByte[contentToRestore] = start[contentToRestore] + uint64(bytesRead)
 			}
-			errBuf := readers[contentToRestore].errBuf
-			if errBuf.Len() > 0 {
-				err = errors.Wrap(err, strings.Trim(errBuf.String(), "\x00"))
-			} else {
-				err = errors.Wrap(err, "Error copying data")
-			}
+			err = errors.Wrap(err, "Error copying data")
 			goto LoopEnd
 		}
 
@@ -325,6 +354,17 @@ func doRestoreAgent() error {
 		}
 
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
+
+		// On resize restore reader might be nil.
+		if !*singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
+			if errPlugin := readers[contentToRestore].waitForPlugin(); errPlugin != nil {
+				if err != nil {
+					err = errors.Wrap(err, errPlugin.Error())
+				} else {
+					err = errPlugin
+				}
+			}
+		}
 
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: Attempt to delete pipe %s", tableOid, batchNum, currentPipe))
 		errPipe := deletePipe(currentPipe)
@@ -371,10 +411,12 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 	var seekHandle io.ReadSeeker
 	var isSubset bool
 	var err error = nil
+	var pluginCmd *PluginCmd = nil
 	restoreReader := new(RestoreReader)
 
 	if *pluginConfigFile != "" {
-		readHandle, isSubset, err = startRestorePluginCommand(fileToRead, objToc, oidList, &restoreReader.errBuf)
+		pluginCmd, readHandle, isSubset, err = startRestorePluginCommand(fileToRead, objToc, oidList)
+		restoreReader.pluginCmd = pluginCmd
 		if isSubset {
 			// Reader that operates on subset data
 			restoreReader.readerType = SUBSET
@@ -400,6 +442,9 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 		// error logging handled by calling functions
 		return nil, err
 	}
+	if pluginCmd != nil {
+		logVerbose(fmt.Sprintf("Started plugin process (%d)", pluginCmd.Process.Pid))
+	}
 
 	// Set the underlying stream reader in restoreReader
 	if restoreReader.readerType == SEEKABLE {
@@ -420,12 +465,6 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 		restoreReader.bufReader = bufio.NewReader(zstdReader)
 	} else {
 		restoreReader.bufReader = bufio.NewReader(readHandle)
-	}
-
-	// Check that no error has occurred in plugin command
-	errMsg := strings.Trim(restoreReader.errBuf.String(), "\x00")
-	if len(errMsg) != 0 {
-		return nil, errors.New(errMsg)
 	}
 
 	return restoreReader, err
@@ -466,12 +505,19 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 	return true
 }
 
-func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int, errBuffer *bytes.Buffer) (io.Reader, bool, error) {
+// pluginCmd is needed to keep track of readable stderr and whether the command
+// has already been ended.
+type PluginCmd struct {
+	*exec.Cmd
+	errBuf bytes.Buffer
+}
+
+func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*PluginCmd, io.Reader, bool, error) {
 	isSubset := false
 	pluginConfig, err := utils.ReadPluginConfig(*pluginConfigFile)
 	if err != nil {
 		logError(fmt.Sprintf("Error encountered when reading plugin config: %v", err))
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	cmdStr := ""
 	if objToc != nil && getSubsetFlag(fileToRead, pluginConfig) {
@@ -492,14 +538,17 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 		cmdStr = fmt.Sprintf("%s restore_data %s %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath, fileToRead)
 	}
 	logVerbose(cmdStr)
-	cmd := exec.Command("bash", "-c", cmdStr)
 
-	readHandle, err := cmd.StdoutPipe()
+	pluginCmd := &PluginCmd{}
+	pluginCmd.Cmd = exec.Command("bash", "-c", cmdStr)
+	pluginCmd.Stderr = &pluginCmd.errBuf
+
+	readHandle, err := pluginCmd.StdoutPipe()
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
-	cmd.Stderr = errBuffer
 
-	err = cmd.Start()
-	return readHandle, isSubset, err
+	err = pluginCmd.Start()
+
+	return pluginCmd, readHandle, isSubset, err
 }

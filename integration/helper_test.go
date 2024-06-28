@@ -263,6 +263,168 @@ options:
 			Expect(err).ToNot(HaveOccurred())
 			assertNoErrors()
 		})
+		It("gpbackup_helper will not error out when plugin writes something to stderr", func() {
+			setupRestoreFiles("", true)
+
+			err := exec.Command("touch", "/tmp/GPBACKUP_PLUGIN_LOG_TO_STDERR").Run()
+			Expect(err).ToNot(HaveOccurred())
+			defer exec.Command("rm", "/tmp/GPBACKUP_PLUGIN_LOG_TO_STDERR").Run()
+
+			args := []string{
+				"--toc-file", tocFile,
+				"--oid-file", restoreOidFile,
+				"--pipe-file", pipeFile,
+				"--content", "1",
+				"--single-data-file",
+				"--restore-agent",
+				"--data-file", dataFileFullPath,
+				"--plugin-config", examplePluginTestConfig}
+			helperCmd := exec.Command(gpbackupHelperPath, args...)
+
+			var outBuffer bytes.Buffer
+			helperCmd.Stdout = &outBuffer
+			helperCmd.Stderr = &outBuffer
+
+			err = helperCmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+
+			for _, i := range []int{1, 3} {
+				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
+				Expect(string(contents)).To(Equal("here is some data\n"))
+			}
+
+			err = helperCmd.Wait()
+			printHelperLogOnError(err)
+			Expect(err).ToNot(HaveOccurred())
+
+			outputStr := outBuffer.String()
+			Expect(outputStr).To(ContainSubstring("Some plugin warning"))
+
+			assertNoErrors()
+		})
+		It("gpbackup_helper will not error out when plugin writes something to stderr with cluster resize", func() {
+			setupRestoreFiles("", true)
+			for _, i := range []int{1, 3} {
+				f, _ := os.Create(fmt.Sprintf("%s_%d", examplePluginTestDataFile, i))
+				f.WriteString("here is some data\n")
+			}
+
+			err := exec.Command("touch", "/tmp/GPBACKUP_PLUGIN_LOG_TO_STDERR").Run()
+			Expect(err).ToNot(HaveOccurred())
+			defer exec.Command("rm", "/tmp/GPBACKUP_PLUGIN_LOG_TO_STDERR").Run()
+
+			args := []string{
+				"--toc-file", tocFile,
+				"--oid-file", restoreOidFile,
+				"--pipe-file", pipeFile,
+				"--content", "1",
+				"--resize-cluster",
+				"--orig-seg-count", "6",
+				"--dest-seg-count", "3",
+				"--restore-agent",
+				"--data-file", examplePluginTestDataFile,
+				"--plugin-config", examplePluginTestConfig}
+			helperCmd := exec.Command(gpbackupHelperPath, args...)
+
+			var outBuffer bytes.Buffer
+			helperCmd.Stdout = &outBuffer
+			helperCmd.Stderr = &outBuffer
+
+			err = helperCmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+
+			for _, i := range []int{1, 3} {
+				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
+				Expect(string(contents)).To(Equal("here is some data\n"))
+			}
+
+			err = helperCmd.Wait()
+			printHelperLogOnError(err)
+			Expect(err).ToNot(HaveOccurred())
+
+			outputStr := outBuffer.String()
+			Expect(outputStr).To(ContainSubstring("Some plugin warning"))
+
+			assertNoErrors()
+		})
+		It("gpbackup_helper will error out if plugin exits early", func(ctx SpecContext) {
+			setupRestoreFiles("", true)
+
+			err := exec.Command("touch", "/tmp/GPBACKUP_PLUGIN_DIE").Run()
+			Expect(err).ToNot(HaveOccurred())
+			defer exec.Command("rm", "/tmp/GPBACKUP_PLUGIN_DIE").Run()
+
+			args := []string{
+				"--toc-file", tocFile,
+				"--oid-file", restoreOidFile,
+				"--pipe-file", pipeFile,
+				"--content", "1",
+				"--single-data-file",
+				"--restore-agent",
+				"--data-file", dataFileFullPath,
+				"--plugin-config", examplePluginTestConfig}
+			helperCmd := exec.Command(gpbackupHelperPath, args...)
+
+			var outBuffer bytes.Buffer
+			helperCmd.Stdout = &outBuffer
+			helperCmd.Stderr = &outBuffer
+
+			err = helperCmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+
+			for _, i := range []int{1, 3} {
+				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
+				// Empty output
+				Expect(contents).To(Equal([]byte{}))
+			}
+
+			err = helperCmd.Wait()
+			Expect(err).To(HaveOccurred())
+
+			outputStr := outBuffer.String()
+			Expect(outputStr).To(ContainSubstring("Plugin process exited with an error"))
+
+			assertErrorsHandled()
+		}, SpecTimeout(time.Second*10))
+		It("gpbackup_helper will error out if plugin exits early with cluster resize", func(ctx SpecContext) {
+			setupRestoreFiles("", true)
+
+			err := exec.Command("touch", "/tmp/GPBACKUP_PLUGIN_DIE").Run()
+			Expect(err).ToNot(HaveOccurred())
+			defer exec.Command("rm", "/tmp/GPBACKUP_PLUGIN_DIE").Run()
+
+			args := []string{
+				"--toc-file", tocFile,
+				"--oid-file", restoreOidFile,
+				"--pipe-file", pipeFile,
+				"--content", "1",
+				"--resize-cluster",
+				"--orig-seg-count", "6",
+				"--dest-seg-count", "3",
+				"--restore-agent",
+				"--data-file", examplePluginTestDataFile,
+				"--plugin-config", examplePluginTestConfig}
+			helperCmd := exec.Command(gpbackupHelperPath, args...)
+
+			var outBuffer bytes.Buffer
+			helperCmd.Stdout = &outBuffer
+			helperCmd.Stderr = &outBuffer
+
+			err = helperCmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+
+			contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, 1))
+			// Empty output
+			Expect(contents).To(Equal([]byte{}))
+
+			err = helperCmd.Wait()
+			Expect(err).To(HaveOccurred())
+
+			outputStr := outBuffer.String()
+			Expect(outputStr).To(ContainSubstring("Plugin process exited with an error"))
+
+			assertErrorsHandled()
+		}, SpecTimeout(time.Second*10))
 		It("Generates error file when restore agent interrupted", FlakeAttempts(5), func() {
 			setupRestoreFiles("gzip", false)
 			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath+".gz", "--single-data-file")
