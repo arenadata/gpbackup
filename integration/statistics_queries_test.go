@@ -83,6 +83,145 @@ var _ = Describe("backup integration tests", func() {
 				structmatcher.ExpectStructsToMatchExcluding(&expectedStats5K, &tableAttStatsK, "Numbers2")
 			}
 		})
+		It("returns attribute statistics for a table with first column dropped", func() {
+			if connectionPool.Version.Before("6") {
+				Skip("This test is skipped for GPDB versions before 6X")
+			}
+
+			testhelper.AssertQueryRuns(connectionPool, "ALTER TABLE public.foo DROP COLUMN i")
+
+			attStats := make(map[uint32][]backup.AttributeStatistic)
+			backup.GetAttributeStatistics(connectionPool, tables, func(attStat *backup.AttributeStatistic) {
+				attStats[attStat.Oid] = append(attStats[attStat.Oid], *attStat)
+			})
+			Expect(attStats).To(HaveLen(1))
+			Expect(attStats[tableOid]).To(HaveLen(2))
+			tableAttStatsJ := attStats[tableOid][0]
+			tableAttStatsK := attStats[tableOid][1]
+
+			/*
+			 * Attribute statistics will vary by GPDB version, but statistics for a
+			 * certain table should always be the same in a particular version given
+			 * the same schema and data.
+			 */
+			expectedStatsJ := backup.AttributeStatistic{Oid: tableOid, Schema: "public", Table: "foo", AttName: "j",
+				Type: "text", Relid: tableOid, AttNumber: 1, Inherit: false, Width: 2, Distinct: -1, Kind1: 2, Kind2: 3, Operator1: 664,
+				Operator2: 664, Numbers2: []string{"1"}, Values1: []string{"a", "b", "c", "d"}}
+			expectedStatsK := backup.AttributeStatistic{Oid: tableOid, Schema: "public", Table: "foo", AttName: "k",
+				Type: "bool", Relid: tableOid, AttNumber: 2, Inherit: false, Width: 1, Distinct: -0.5, Kind1: 1, Kind2: 3, Operator1: 91,
+				Operator2: 58, Numbers1: []string{"0.5", "0.5"}, Numbers2: []string{"0.5"}, Values1: []string{"f", "t"}}
+			if connectionPool.Version.AtLeast("7") {
+				expectedStatsJ.Collation1 = 100
+				expectedStatsJ.Collation2 = 100
+			}
+
+			// The order in which the stavalues1 values is returned is not guaranteed to be deterministic
+			sort.Strings(tableAttStatsJ.Values1)
+			sort.Strings(tableAttStatsK.Values1)
+			structmatcher.ExpectStructsToMatchExcluding(&expectedStatsJ, &tableAttStatsJ, "Numbers2")
+			structmatcher.ExpectStructsToMatchExcluding(&expectedStatsK, &tableAttStatsK, "Numbers2")
+		})
+		It("returns attribute statistics for a table with 2 columns dropped", func() {
+			if connectionPool.Version.Before("6") {
+				Skip("This test is skipped for GPDB versions before 6X")
+			}
+
+			testhelper.AssertQueryRuns(connectionPool, "ALTER TABLE public.foo DROP COLUMN i")
+			testhelper.AssertQueryRuns(connectionPool, "ALTER TABLE public.foo DROP COLUMN j")
+
+			attStats := make(map[uint32][]backup.AttributeStatistic)
+			backup.GetAttributeStatistics(connectionPool, tables, func(attStat *backup.AttributeStatistic) {
+				attStats[attStat.Oid] = append(attStats[attStat.Oid], *attStat)
+			})
+			Expect(attStats).To(HaveLen(1))
+			Expect(attStats[tableOid]).To(HaveLen(1))
+			tableAttStatsK := attStats[tableOid][0]
+
+			/*
+			 * Attribute statistics will vary by GPDB version, but statistics for a
+			 * certain table should always be the same in a particular version given
+			 * the same schema and data.
+			 */
+			expectedStatsK := backup.AttributeStatistic{Oid: tableOid, Schema: "public", Table: "foo", AttName: "k",
+				Type: "bool", Relid: tableOid, AttNumber: 1, Inherit: false, Width: 1, Distinct: -0.5, Kind1: 1, Kind2: 3, Operator1: 91,
+				Operator2: 58, Numbers1: []string{"0.5", "0.5"}, Numbers2: []string{"0.5"}, Values1: []string{"f", "t"}}
+
+			// The order in which the stavalues1 values is returned is not guaranteed to be deterministic
+			sort.Strings(tableAttStatsK.Values1)
+			structmatcher.ExpectStructsToMatchExcluding(&expectedStatsK, &tableAttStatsK, "Numbers2")
+		})
+		It("returns attribute statistics for a table with middle column dropped", func() {
+			if connectionPool.Version.Before("6") {
+				Skip("This test is skipped for GPDB versions before 6X")
+			}
+
+			testhelper.AssertQueryRuns(connectionPool, "ALTER TABLE public.foo DROP COLUMN j")
+
+			attStats := make(map[uint32][]backup.AttributeStatistic)
+			backup.GetAttributeStatistics(connectionPool, tables, func(attStat *backup.AttributeStatistic) {
+				attStats[attStat.Oid] = append(attStats[attStat.Oid], *attStat)
+			})
+			Expect(attStats).To(HaveLen(1))
+			Expect(attStats[tableOid]).To(HaveLen(2))
+			tableAttStatsI := attStats[tableOid][0]
+			tableAttStatsK := attStats[tableOid][1]
+
+			/*
+			 * Attribute statistics will vary by GPDB version, but statistics for a
+			 * certain table should always be the same in a particular version given
+			 * the same schema and data.
+			 */
+			expectedStatsI := backup.AttributeStatistic{Oid: tableOid, Schema: "public", Table: "foo", AttName: "i",
+				Type: "int4", Relid: tableOid, AttNumber: 1, Inherit: false, Width: 4, Distinct: -1, Kind1: 2, Kind2: 3, Operator1: 97,
+				Operator2: 97, Numbers2: []string{"1"}, Values1: []string{"1", "2", "3", "4"}}
+			expectedStatsK := backup.AttributeStatistic{Oid: tableOid, Schema: "public", Table: "foo", AttName: "k",
+				Type: "bool", Relid: tableOid, AttNumber: 2, Inherit: false, Width: 1, Distinct: -0.5, Kind1: 1, Kind2: 3, Operator1: 91,
+				Operator2: 58, Numbers1: []string{"0.5", "0.5"}, Numbers2: []string{"0.5"}, Values1: []string{"f", "t"}}
+
+			// The order in which the stavalues1 values is returned is not guaranteed to be deterministic
+			sort.Strings(tableAttStatsI.Values1)
+			sort.Strings(tableAttStatsK.Values1)
+			structmatcher.ExpectStructsToMatchExcluding(&expectedStatsI, &tableAttStatsI, "Numbers2")
+			structmatcher.ExpectStructsToMatchExcluding(&expectedStatsK, &tableAttStatsK, "Numbers2")
+		})
+		It("returns attribute statistics for a table with last column dropped", func() {
+			if connectionPool.Version.Before("6") {
+				Skip("This test is skipped for GPDB versions before 6X")
+			}
+
+			testhelper.AssertQueryRuns(connectionPool, "ALTER TABLE public.foo DROP COLUMN k")
+
+			attStats := make(map[uint32][]backup.AttributeStatistic)
+			backup.GetAttributeStatistics(connectionPool, tables, func(attStat *backup.AttributeStatistic) {
+				attStats[attStat.Oid] = append(attStats[attStat.Oid], *attStat)
+			})
+			Expect(attStats).To(HaveLen(1))
+			Expect(attStats[tableOid]).To(HaveLen(2))
+			tableAttStatsI := attStats[tableOid][0]
+			tableAttStatsJ := attStats[tableOid][1]
+
+			/*
+			 * Attribute statistics will vary by GPDB version, but statistics for a
+			 * certain table should always be the same in a particular version given
+			 * the same schema and data.
+			 */
+			expectedStatsI := backup.AttributeStatistic{Oid: tableOid, Schema: "public", Table: "foo", AttName: "i",
+				Type: "int4", Relid: tableOid, AttNumber: 1, Inherit: false, Width: 4, Distinct: -1, Kind1: 2, Kind2: 3, Operator1: 97,
+				Operator2: 97, Numbers2: []string{"1"}, Values1: []string{"1", "2", "3", "4"}}
+			expectedStatsJ := backup.AttributeStatistic{Oid: tableOid, Schema: "public", Table: "foo", AttName: "j",
+				Type: "text", Relid: tableOid, AttNumber: 2, Inherit: false, Width: 2, Distinct: -1, Kind1: 2, Kind2: 3, Operator1: 664,
+				Operator2: 664, Numbers2: []string{"1"}, Values1: []string{"a", "b", "c", "d"}}
+			if connectionPool.Version.AtLeast("7") {
+				expectedStatsJ.Collation1 = 100
+				expectedStatsJ.Collation2 = 100
+			}
+
+			// The order in which the stavalues1 values is returned is not guaranteed to be deterministic
+			sort.Strings(tableAttStatsI.Values1)
+			sort.Strings(tableAttStatsJ.Values1)
+			structmatcher.ExpectStructsToMatchExcluding(&expectedStatsI, &tableAttStatsI, "Numbers2")
+			structmatcher.ExpectStructsToMatchExcluding(&expectedStatsJ, &tableAttStatsJ, "Numbers2")
+		})
 	})
 	Describe("GetTupleStatistics", func() {
 		It("returns tuple statistics for a table", func() {
