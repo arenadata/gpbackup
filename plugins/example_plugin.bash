@@ -81,6 +81,11 @@ restore_data() {
 	echo 'error' >&2
   fi
   timestamp_day_dir=${timestamp_dir%??????}
+  if [ -e "/tmp/GPBACKUP_PLUGIN_LOG_TO_STDERR" ] ; then
+    echo 'Some plugin warning' >&2
+  elif [ -e "/tmp/GPBACKUP_PLUGIN_DIE" ] ; then
+    exit 1
+  fi
 	cat /tmp/plugin_dest/$timestamp_day_dir/$timestamp_dir/$filename
 }
 

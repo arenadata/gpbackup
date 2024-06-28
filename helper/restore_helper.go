@@ -2,6 +2,7 @@ package helper
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -46,7 +47,35 @@ var (
 type RestoreReader struct {
 	bufReader  *bufio.Reader
 	seekReader io.ReadSeeker
+	pluginCmd  *pluginCmd
 	readerType ReaderType
+}
+
+// Log plugin's stderr as warnings.
+func (r *RestoreReader) logPlugin() {
+	if r.pluginCmd != nil {
+		errLog := strings.Trim(r.pluginCmd.stderrBuffer.String(), "\x00")
+		if len(errLog) != 0 {
+			logWarning(fmt.Sprintf("Plugin log: %s", errLog))
+			// Consume the entire buffer.
+			r.pluginCmd.stderrBuffer.Next(r.pluginCmd.stderrBuffer.Len())
+		}
+	}
+}
+
+// Wait for plugin process that should be already finished. This should be
+// called on every reader that used a plugin as to not leave any zombies behind.
+func (r *RestoreReader) waitForPlugin() error {
+	if r.pluginCmd != nil && !r.pluginCmd.isEnded {
+		log(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.Process.Pid))
+		err := r.pluginCmd.Wait()
+		r.pluginCmd.isEnded = true
+		if err != nil {
+			logError(fmt.Sprintf("Plugin process exited with an error: %s", err))
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *RestoreReader) positionReader(pos uint64, oid int) error {
@@ -147,7 +176,23 @@ func doRestoreAgent() error {
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
 			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
-
+			if readers[contentToRestore] != nil {
+				// NOTE: If we reach here with batches > 1, there will be
+				// *origSize / *destSize (N old segments / N new segments)
+				// readers + 1, which is presumably a small number, so we just
+				// defer the cleanup.
+				//
+				// The loops under are constructed in a way that needs to keep
+				// all readers open for the entire duration of restore (oid is
+				// in outer loop -- batches in inner loop, we'll need all
+				// readers for every outer loop iteration), so we can't properly
+				// close any of the readers until we restore every oid yet,
+				// unless The Big Refactoring will arrive.
+				defer func() {
+					readers[contentToRestore].waitForPlugin()
+					readers[contentToRestore].logPlugin()
+				}()
+			}
 			if err != nil {
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
@@ -221,6 +266,9 @@ func doRestoreAgent() error {
 					readers[contentToRestore], err = getRestoreDataReader(filename, nil, nil)
 					if err != nil {
 						logError(fmt.Sprintf("Error encountered getting restore data reader: %v", err))
+						if readers[contentToRestore] != nil {
+							readers[contentToRestore].logPlugin()
+						}
 						return err
 					}
 				}
@@ -286,6 +334,7 @@ func doRestoreAgent() error {
 				err = readers[contentToRestore].positionReader(start[contentToRestore]-lastByte[contentToRestore], oid)
 				if err != nil {
 					logError(fmt.Sprintf("Oid %d: Error reading from pipe: %v", oid, err))
+					readers[contentToRestore].logPlugin()
 					return err
 				}
 			}
@@ -313,11 +362,7 @@ func doRestoreAgent() error {
 				if *singleDataFile {
 					lastByte[contentToRestore] += uint64(bytesRead)
 				}
-				if errBuf.Len() > 0 {
-					err = errors.Wrap(err, strings.Trim(errBuf.String(), "\x00"))
-				} else {
-					err = errors.Wrap(err, "Error copying data")
-				}
+				err = errors.Wrap(err, "Error copying data")
 				goto LoopEnd
 			}
 
@@ -325,6 +370,15 @@ func doRestoreAgent() error {
 				lastByte[contentToRestore] = end[contentToRestore]
 			}
 			log(fmt.Sprintf("Oid %d: Copied %d bytes into the pipe", oid, bytesRead))
+
+			// On resize restore reader might be nil.
+			if !*singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
+				err = readers[contentToRestore].waitForPlugin()
+				readers[contentToRestore].logPlugin()
+				if err != nil {
+					goto LoopEnd
+				}
+			}
 
 			log(fmt.Sprintf("Closing pipe for oid %d: %s", oid, currentPipe))
 
@@ -365,6 +419,12 @@ func doRestoreAgent() error {
 		log(fmt.Sprintf("Oid %d: Successfully flushed and closed pipe", oid))
 
 	LoopEnd:
+		if !*singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
+			// Try to finalize the plugin for onErrorContinue.
+			readers[contentToRestore].waitForPlugin()
+			readers[contentToRestore].logPlugin()
+		}
+
 		log(fmt.Sprintf("Oid %d: Attempt to delete pipe", oid))
 		errPipe := deletePipe(currentPipe)
 		if errPipe != nil {
@@ -412,10 +472,12 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 	var seekHandle io.ReadSeeker
 	var isSubset bool
 	var err error = nil
+	var pluginCmd *pluginCmd = nil
 	restoreReader := new(RestoreReader)
 
 	if *pluginConfigFile != "" {
-		readHandle, isSubset, err = startRestorePluginCommand(fileToRead, objToc, oidList)
+		pluginCmd, readHandle, isSubset, err = startRestorePluginCommand(fileToRead, objToc, oidList)
+		restoreReader.pluginCmd = pluginCmd
 		if isSubset {
 			// Reader that operates on subset data
 			restoreReader.readerType = SUBSET
@@ -438,6 +500,9 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 		// error logging handled by calling functions
 		return nil, err
 	}
+	if pluginCmd != nil {
+		log(fmt.Sprintf("Started plugin process (%d)", pluginCmd.Process.Pid))
+	}
 
 	// Set the underlying stream reader in restoreReader
 	if restoreReader.readerType == SEEKABLE {
@@ -458,12 +523,6 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 		restoreReader.bufReader = bufio.NewReader(zstdReader)
 	} else {
 		restoreReader.bufReader = bufio.NewReader(readHandle)
-	}
-
-	// Check that no error has occurred in plugin command
-	errMsg := strings.Trim(errBuf.String(), "\x00")
-	if len(errMsg) != 0 {
-		return nil, errors.New(errMsg)
 	}
 
 	return restoreReader, err
@@ -493,7 +552,7 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 		return false
 	}
 	// Helper's option does not allow to use subset
-	if !*isFiltered  || *onErrorContinue {
+	if !*isFiltered || *onErrorContinue {
 		return false
 	}
 	// Restore subset and compression does not allow together
@@ -504,12 +563,27 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 	return true
 }
 
-func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (io.Reader, bool, error) {
+// pluginCmd is needed to keep track of readable stderr and whether the command
+// has already been ended.
+type pluginCmd struct {
+	*exec.Cmd
+	stderrBuffer *bytes.Buffer
+	isEnded      bool
+}
+
+func newPluginCmd(name string, arg ...string) *pluginCmd {
+	var errBuf bytes.Buffer
+	cmd := exec.Command(name, arg...)
+	cmd.Stderr = &errBuf
+	return &pluginCmd{cmd, &errBuf, false}
+}
+
+func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*pluginCmd, io.Reader, bool, error) {
 	isSubset := false
 	pluginConfig, err := utils.ReadPluginConfig(*pluginConfigFile)
 	if err != nil {
 		logError(fmt.Sprintf("Error encountered when reading plugin config: %v", err))
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	cmdStr := ""
 	if objToc != nil && getSubsetFlag(fileToRead, pluginConfig) {
@@ -529,15 +603,16 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 	} else {
 		cmdStr = fmt.Sprintf("%s restore_data %s %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath, fileToRead)
 	}
+
 	log(cmdStr)
-	cmd := exec.Command("bash", "-c", cmdStr)
+	pluginCmd := newPluginCmd("bash", "-c", cmdStr)
 
-	readHandle, err := cmd.StdoutPipe()
+	readHandle, err := pluginCmd.StdoutPipe()
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
-	cmd.Stderr = &errBuf
 
-	err = cmd.Start()
-	return readHandle, isSubset, err
+	err = pluginCmd.Start()
+
+	return pluginCmd, readHandle, isSubset, err
 }

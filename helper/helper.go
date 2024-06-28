@@ -2,7 +2,6 @@ package helper
 
 import (
 	"bufio"
-	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -25,7 +24,6 @@ import (
 
 var (
 	CleanupGroup  *sync.WaitGroup
-	errBuf        bytes.Buffer
 	version       string
 	wasTerminated bool
 	writeHandle   *os.File
@@ -302,6 +300,11 @@ func DoCleanup() {
 func log(s string, v ...interface{}) {
 	s = fmt.Sprintf("Segment %d: %s", *content, s)
 	gplog.Verbose(s, v...)
+}
+
+func logWarning(s string, v ...interface{}) {
+	s = fmt.Sprintf("Segment %d: %s", *content, s)
+	gplog.Warn(s, v...)
 }
 
 func logError(s string, v ...interface{}) {
