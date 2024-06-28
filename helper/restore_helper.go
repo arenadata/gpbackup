@@ -178,8 +178,8 @@ func doRestoreAgent() error {
 				// There will be only one reader, so we defer the cleanup
 				// instead of doing it every iteration.
 				defer func() {
-					readers[contentToRestore].logPlugin()
 					readers[contentToRestore].waitForPlugin()
+					readers[contentToRestore].logPlugin()
 				}()
 			}
 			if err != nil {
@@ -364,8 +364,9 @@ func doRestoreAgent() error {
 
 			// On resize restore reader might be nil.
 			if !*singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
-				if err = readers[contentToRestore].waitForPlugin(); err != nil {
-					// Error is already logged.
+				err = readers[contentToRestore].waitForPlugin()
+				readers[contentToRestore].logPlugin()
+				if err != nil {
 					goto LoopEnd
 				}
 			}
@@ -411,8 +412,8 @@ func doRestoreAgent() error {
 	LoopEnd:
 		if !*singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
 			// Try to finalize the plugin for onErrorContinue.
-			readers[contentToRestore].logPlugin()
 			readers[contentToRestore].waitForPlugin()
+			readers[contentToRestore].logPlugin()
 		}
 
 		log(fmt.Sprintf("Oid %d: Attempt to delete pipe", oid))
