@@ -554,22 +554,21 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 }
 
 // pluginCmd is needed to keep track of readable stderr and whether the command
-// has already been finalized.
+// has already been ended.
 type pluginCmd struct {
 	*exec.Cmd
 	stderrBuffer *bytes.Buffer
 	isEnded      bool
 }
 
-func newPluginCmd(errBuf *bytes.Buffer, name string, arg ...string) *pluginCmd {
+func newPluginCmd(name string, arg ...string) *pluginCmd {
+	var errBuf bytes.Buffer
 	cmd := exec.Command(name, arg...)
-	cmd.Stderr = errBuf
-	return &pluginCmd{cmd, errBuf, false}
+	cmd.Stderr = &errBuf
+	return &pluginCmd{cmd, &errBuf, false}
 }
 
 func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*pluginCmd, io.Reader, bool, error) {
-	var errBuf bytes.Buffer
-
 	isSubset := false
 	pluginConfig, err := utils.ReadPluginConfig(*pluginConfigFile)
 	if err != nil {
@@ -596,7 +595,7 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 	}
 
 	log(cmdStr)
-	pluginCmd := newPluginCmd(&errBuf, "bash", "-c", cmdStr)
+	pluginCmd := newPluginCmd("bash", "-c", cmdStr)
 
 	readHandle, err := pluginCmd.StdoutPipe()
 	if err != nil {
