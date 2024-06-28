@@ -175,8 +175,17 @@ func doRestoreAgent() error {
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
 			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
 			if readers[contentToRestore] != nil {
-				// There will be only one reader, so we defer the cleanup
-				// instead of doing it every iteration.
+				// NOTE: If we reach here with batches > 1, there will be
+				// *origSize / *destSize (N old segments / N new segments)
+				// readers + 1, which is presumably a small number, so we just
+				// defer the cleanup.
+				//
+				// The loops under are constructed in a way that needs to keep
+				// all readers open for the entire duration of restore (oid is
+				// in outer loop -- batches in inner loop, we'll need all
+				// readers for every outer loop iteration), so we can't properly
+				// close any of the readers until we restore every oid yet,
+				// unless The Big Refactoring will arrive.
 				defer func() {
 					readers[contentToRestore].waitForPlugin()
 					readers[contentToRestore].logPlugin()
