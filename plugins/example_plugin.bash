@@ -76,13 +76,12 @@ restore_data() {
   echo "restore_data $1 $2" >> /tmp/plugin_out.txt
   filename=`basename "$2"`
   timestamp_dir=`basename $(dirname "$2")`
-  if [ -e "/tmp/GPBACKUP_PLUGIN_FAIL" ] ; then
-	sleep 3
-	echo 'error' >&2
-  fi
   timestamp_day_dir=${timestamp_dir%??????}
   if [ -e "/tmp/GPBACKUP_PLUGIN_LOG_TO_STDERR" ] ; then
     echo 'Some plugin warning' >&2
+  elif [ -e "/tmp/GPBACKUP_PLUGIN_FAIL" ] ; then
+  	pkill "restore-agent"
+	exit 1
   elif [ -e "/tmp/GPBACKUP_PLUGIN_DIE" ] ; then
     exit 1
   fi
