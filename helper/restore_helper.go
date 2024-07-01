@@ -155,6 +155,8 @@ func doRestoreAgent() error {
 		}
 	}
 
+	preloadCreatedPipes(oidList, *copyQueue)
+
 	if *singleDataFile {
 		contentToRestore := *content
 		segmentTOC = make(map[int]*toc.SegmentTOC)
@@ -217,8 +219,6 @@ func doRestoreAgent() error {
 			replicatedTables[oid] = true
 		}
 	}
-
-	preloadCreatedPipes(oidList, *copyQueue)
 
 	var currentPipe string
 	for i, oid := range oidList {

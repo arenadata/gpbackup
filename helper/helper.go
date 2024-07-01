@@ -254,6 +254,33 @@ func DoCleanup() {
 
 	for pipeName, _ := range pipesMap {
 		log("Removing pipe %s", pipeName)
+
+		/*
+		 * In case restore helper encountered an error, it is possible that the pipe file has been already opened for
+		 * reading by another process, but nothing has been written to the pipe yet. In this case, the reader process
+		 * may hang forever after the pipe is removed. To fix this problem, the pipe file is opened and closed
+		 * to generate an EOF before it is deleted.
+		 *
+		 * Also, it is possible, that after EOF is issued (releasing the current reader process), but before the pipe is
+		 * removed, a new reader process can start reading the pipe. To avoid such situation, we close the file handle
+		 * after we have removed the file.
+		 *
+		 * Similar problem can happen with backup helper. If it finishes its work right after start, before opening the
+		 * pipe for reading, the writing side will stay hanging on the other pipe's end. So, we also open and close the
+		 * pipe to release the writing side.
+		 */
+		if *restoreAgent {
+			fileHandlePipe, err := os.OpenFile(pipeName, os.O_WRONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
+			if err == nil {
+				defer fileHandlePipe.Close()
+			}
+		} else if *backupAgent {
+			fileHandlePipe, err := os.OpenFile(pipeName, os.O_RDONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
+			if err == nil {
+				defer fileHandlePipe.Close()
+			}
+		}
+
 		err = deletePipe(pipeName)
 		if err != nil {
 			log("Encountered error removing pipe %s: %v", pipeName, err)
