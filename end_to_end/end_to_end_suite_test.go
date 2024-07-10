@@ -2306,6 +2306,28 @@ LANGUAGE plpgsql NO SQL;`)
 			assertArtifactsCleaned(restoreConn, "20240502095933")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
 		})
+		It("Will not hang after error during single data file restore", func() {
+			command := exec.Command("tar", "-xzf", "resources/3-segment-db-single-data-file.tar.gz", "-C", backupDir)
+			mustRunCommand(command)
+			gprestoreCmd := exec.Command(gprestorePath,
+				"--timestamp", "20240710143553",
+				"--redirect-db", "restoredb",
+				"--backup-dir", path.Join(backupDir, "3-segment-db-single-data-file"),
+				"--resize-cluster", "--on-error-continue", "--metadata-only")
+			_, err := gprestoreCmd.CombinedOutput()
+			Expect(err).To(Not(HaveOccurred()))
+			testhelper.AssertQueryRuns(restoreConn, "ALTER TABLE c ADD COLUMN c text NOT NULL; ALTER TABLE d ADD COLUMN c text NOT NULL; ALTER TABLE e ADD COLUMN c text NOT NULL;")
+			gprestoreCmd = exec.Command(gprestorePath,
+				"--timestamp", "20240710143553",
+				"--redirect-db", "restoredb",
+				"--backup-dir", path.Join(backupDir, "3-segment-db-single-data-file"),
+				"--resize-cluster", "--on-error-continue", "--data-only")
+			output, err := gprestoreCmd.CombinedOutput()
+			Expect(err).To(HaveOccurred())
+			Expect(string(output)).To(ContainSubstring(`null value in column "c" violates not-null constraint`))
+			assertArtifactsCleaned(restoreConn, "20240710143553")
+			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d; DROP TABLE e; DROP TABLE f; DROP TABLE g; DROP TABLE h;")
+		})
 	})
 	Describe("Restore indexes and constraints on exchanged partition tables", func() {
 		BeforeEach(func() {
