@@ -360,7 +360,7 @@ func doRestoreAgent() error {
 				// need to update the lastByte with the amount of bytes that was
 				// copied before it errored out
 				if *singleDataFile {
-					lastByte[contentToRestore] += uint64(bytesRead)
+					lastByte[contentToRestore] = start[contentToRestore] + uint64(bytesRead)
 				}
 				err = errors.Wrap(err, "Error copying data")
 				goto LoopEnd
