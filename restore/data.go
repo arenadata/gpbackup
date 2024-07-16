@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
@@ -18,14 +19,13 @@ import (
 	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/jackc/pgconn"
 	"github.com/pkg/errors"
-	"gopkg.in/cheggaaa/pb.v1"
 )
 
 var (
 	tableDelim = ","
 )
 
-func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
+func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, entry toc.CoordinatorDataEntry, destinationToRead string, singleDataFile bool, whichConn int, dataProgressBar *utils.MultiProgressBar) (int64, error) {
 	whichConn = connectionPool.ValidateConnNum(whichConn)
 	copyCommand := ""
 	readFromDestinationCommand := "cat"
@@ -41,7 +41,22 @@ func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttribute
 
 	copyCommand = fmt.Sprintf("PROGRAM '%s %s | %s'", readFromDestinationCommand, destinationToRead, customPipeThroughCommand)
 
-	query := fmt.Sprintf("COPY %s%s FROM %s WITH CSV DELIMITER '%s' ON SEGMENT;", tableName, tableAttributes, copyCommand, tableDelim)
+	query := fmt.Sprintf("COPY %s%s FROM %s WITH CSV DELIMITER '%s' ON SEGMENT;", tableName, entry.AttributeString, copyCommand, tableDelim)
+
+	var done chan bool
+	var trackerTimer *time.Timer
+	var endTime time.Time
+	shouldTrackProgress := connectionPool.Version.AtLeast("7") && dataProgressBar != nil
+
+	if shouldTrackProgress {
+		done = make(chan bool, 1)
+		defer close(done)
+		trackerDelay := 5 * time.Second
+		trackerTimer = time.AfterFunc(trackerDelay, func() {
+			dataProgressBar.TrackCopyProgress(tableName, 0, int(entry.RowsCopied), connectionPool, 0, whichConn-1, done)
+		})
+		endTime = time.Now().Add(trackerDelay)
+	}
 
 	var numRows int64
 	var err error
@@ -76,10 +91,23 @@ func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttribute
 		numRows += rowsLoaded
 	}
 
+	if shouldTrackProgress {
+		if time.Now().Before(endTime) {
+			trackerTimer.Stop()
+		}
+		// send signal to channel whether tracking or not, just to avoid race condition weirdness
+		done <- true
+
+		// Manually set the progress to maximum if COPY succeeded, as we won't be able to get the last few tuples
+		// from the view (or any tuples, for especially small tables) and we don't want users to worry that any
+		// tuples were missed.
+		progressBar := dataProgressBar.TuplesBars[whichConn-1]
+		progressBar.Set(dataProgressBar.TuplesCounts[whichConn-1])
+	}
 	return numRows, err
 }
 
-func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.CoordinatorDataEntry, tableName string, whichConn int, origSize int, destSize int) error {
+func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.CoordinatorDataEntry, tableName string, whichConn int, origSize int, destSize int, dataProgressBar *utils.MultiProgressBar) error {
 	resizeCluster := MustGetFlagBool(options.RESIZE_CLUSTER)
 	destinationToRead := ""
 	if backupConfig.SingleDataFile || resizeCluster {
@@ -88,7 +116,7 @@ func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.Coordinator
 		destinationToRead = fpInfo.GetTableBackupFilePathForCopyCommand(entry.Oid, utils.GetPipeThroughProgram().Extension, backupConfig.SingleDataFile)
 	}
 	gplog.Debug("Reading from %s", destinationToRead)
-	numRowsRestored, err := CopyTableIn(connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
+	numRowsRestored, err := CopyTableIn(connectionPool, tableName, entry, destinationToRead, backupConfig.SingleDataFile, whichConn, dataProgressBar)
 	if err != nil {
 		return err
 	}
@@ -158,7 +186,7 @@ func RedistributeTableData(tableName string, whichConn int) error {
 }
 
 func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.CoordinatorDataEntry,
-	gucStatements []toc.StatementWithType, dataProgressBar utils.ProgressBar) int32 {
+	gucStatements []toc.StatementWithType, dataProgressBar *utils.MultiProgressBar) int32 {
 	totalTables := len(dataEntries)
 	if totalTables == 0 {
 		gplog.Verbose("No data to restore for timestamp = %s", fpInfo.Timestamp)
@@ -215,7 +243,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	var mutex = &sync.Mutex{}
 	panicChan := make(chan error)
 
-	for i := 0; i < connectionPool.NumConns; i++ {
+	for i := 1; i < connectionPool.NumConns; i++ {
 		workerPool.Add(1)
 		go func(whichConn int) {
 			defer func() {
@@ -228,7 +256,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 			setGUCsForConnection(gucStatements, whichConn)
 			for entry := range tasks {
 				if wasTerminated {
-					dataProgressBar.(*pb.ProgressBar).NotPrint = true
+					dataProgressBar.TablesBar.GetBar().NotPrint = true
 					return
 				}
 				tableName := utils.MakeFQN(entry.Schema, entry.Name)
@@ -241,7 +269,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					err = TruncateTable(tableName, whichConn)
 				}
 				if err == nil {
-					err = restoreSingleTableData(&fpInfo, entry, tableName, whichConn, origSize, destSize)
+					err = restoreSingleTableData(&fpInfo, entry, tableName, whichConn, origSize, destSize, dataProgressBar)
 
 					if gplog.GetVerbosity() > gplog.LOGINFO {
 						// No progress bar at this log level, so we note table count here
@@ -255,7 +283,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					gplog.Error(err.Error())
 					atomic.AddInt32(&numErrors, 1)
 					if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
-						dataProgressBar.(*pb.ProgressBar).NotPrint = true
+						dataProgressBar.TablesBar.GetBar().NotPrint = true
 						return
 					} else if connectionPool.Version.AtLeast("6") && backupConfig.SingleDataFile {
 						// inform segment helpers to skip this entry
@@ -274,7 +302,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					}
 				}
 
-				dataProgressBar.Increment()
+				dataProgressBar.TablesBar.Increment()
 			}
 		}(i)
 	}
