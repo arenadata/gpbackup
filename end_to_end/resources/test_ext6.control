@@ -1,0 +1,3 @@
+comment = 'Test extension 6'
+default_version = '1.0'
+relocatable = true

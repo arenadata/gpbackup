@@ -53,7 +53,7 @@ type AttributeStatistic struct {
 	Values5      pq.StringArray `db:"stavalues5"`
 }
 
-func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint32][]AttributeStatistic {
+func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table, processRow func(attStat *AttributeStatistic)) {
 	inheritClause := ""
 	statSlotClause := ""
 	if connectionPool.Version.AtLeast("6") {
@@ -119,14 +119,15 @@ func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table) map[u
 		inheritClause, statSlotClause, statCollationClause,
 		SchemaFilterClause("n"), utils.SliceToQuotedString(tablenames))
 
-	results := make([]AttributeStatistic, 0)
-	err := connectionPool.Select(&results, query)
+	rows, err := connectionPool.Query(query)
 	gplog.FatalOnError(err)
-	stats := make(map[uint32][]AttributeStatistic)
-	for _, stat := range results {
-		stats[stat.Oid] = append(stats[stat.Oid], stat)
+	for rows.Next() {
+		var attStat AttributeStatistic
+		err = rows.StructScan(&attStat)
+		gplog.FatalOnError(err)
+		processRow(&attStat)
 	}
-	return stats
+	gplog.FatalOnError(rows.Err())
 }
 
 type TupleStatistic struct {
@@ -137,7 +138,7 @@ type TupleStatistic struct {
 	RelTuples float64
 }
 
-func GetTupleStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint32]TupleStatistic {
+func GetTupleStatistics(connectionPool *dbconn.DBConn, tables []Table, processRow func(tupleStat *TupleStatistic)) {
 	tablenames := make([]string, 0)
 	for _, table := range tables {
 		tablenames = append(tablenames, table.FQN())
@@ -155,12 +156,13 @@ func GetTupleStatistics(connectionPool *dbconn.DBConn, tables []Table) map[uint3
 	ORDER BY n.nspname, c.relname`,
 		SchemaFilterClause("n"), utils.SliceToQuotedString(tablenames))
 
-	results := make([]TupleStatistic, 0)
-	err := connectionPool.Select(&results, query)
+	rows, err := connectionPool.Query(query)
 	gplog.FatalOnError(err)
-	stats := make(map[uint32]TupleStatistic)
-	for _, stat := range results {
-		stats[stat.Oid] = stat
+	for rows.Next() {
+		var tupleStat TupleStatistic
+		err = rows.StructScan(&tupleStat)
+		gplog.FatalOnError(err)
+		processRow(&tupleStat)
 	}
-	return stats
+	gplog.FatalOnError(rows.Err())
 }

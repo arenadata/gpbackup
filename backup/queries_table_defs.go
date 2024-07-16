@@ -152,22 +152,32 @@ type PartitionLevelInfo struct {
 	Oid      uint32
 	Level    string
 	RootName string
+	RootOid             uint32
+	Name                string
+	IsParentInExtension bool
 }
 
 func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLevelInfo {
 	before7Query := `
 		SELECT pc.oid AS oid,
 			'p' AS level,
-			'' AS rootname
+			'' AS rootname,
+			0 AS rootoid,
+			quote_ident(pc.relname) AS name,
+			false AS isparentinextension
 		FROM pg_partition p
 			JOIN pg_class pc ON p.parrelid = pc.oid
 		UNION ALL
 		SELECT r.parchildrelid AS oid,
 			CASE WHEN p.parlevel = levels.pl THEN 'l' ELSE 'i' END AS level,
-			quote_ident(cparent.relname) AS rootname
+			quote_ident(cparent.relname) AS rootname,
+			cparent.oid AS rootoid,
+			quote_ident(c.relname) AS name,
+			false AS isparentinextension
 		FROM pg_partition p
 			JOIN pg_partition_rule r ON p.oid = r.paroid
 			JOIN pg_class cparent ON cparent.oid = p.parrelid
+			JOIN pg_class c ON c.oid = r.parchildrelid
 			JOIN (SELECT parrelid AS relid, max(parlevel) AS pl
 				FROM pg_partition GROUP BY parrelid) AS levels ON p.parrelid = levels.relid
 		WHERE r.parchildrelid != 0`
@@ -180,10 +190,17 @@ func GetPartitionTableMap(connectionPool *dbconn.DBConn) map[uint32]PartitionLev
 			CASE WHEN p.partrelid IS NOT NULL AND c.relispartition = false THEN 'p'
 				WHEN p.partrelid IS NOT NULL AND c.relispartition = true THEN 'i'
 				ELSE 'l'
-			END AS level
+			END AS level,
+			CASE WHEN p.partrelid IS NOT NULL AND c.relispartition = false THEN 0
+				ELSE rc.oid
+			END AS rootoid,
+			quote_ident(c.relname) AS name,
+			pd.objid is not NULL as isparentinextension
 		FROM pg_class c
 			LEFT JOIN pg_partitioned_table p ON c.oid = p.partrelid
 			LEFT JOIN pg_class rc ON pg_partition_root(c.oid) = rc.oid
+			LEFT JOIN pg_inherits pi ON c.oid = pi.inhrelid
+			LEFT JOIN pg_depend pd ON objid = pi.inhparent AND deptype = 'e'
 		WHERE c.relispartition = true OR c.relkind = 'p'`
 
 	query := ""
@@ -706,8 +723,22 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 		}
 		// If we are filtering on tables, we only want to record dependencies on other tables in the list
 		if len(tableOidList) > 0 {
-			tableFilterStr = fmt.Sprintf("\nAND i.inhrelid IN (%s)", strings.Join(tableOidList, ","))
+			tableFilterStr = fmt.Sprintf("\nWHERE i.inhrelid IN (%s)", strings.Join(tableOidList, ","))
 		}
+	}
+
+	// In 7X and later, tables in extensions should not be filtered out, since the parent name is
+	// later used for creating DDL for partitioned tables whose parent tables may be in the extension.
+	// Filtering can also lead to a loss of inheritance if the parent table is in an extension.
+	// For 6X and earlier, we don't want to change the behavior, so we filter out the tables from the extension.
+	extensionFilter := ""
+	if connectionPool.Version.Before("7") {
+		if tableFilterStr == "" {
+			extensionFilter += "\nWHERE "
+		} else {
+			extensionFilter += " AND "
+		}
+		extensionFilter += ExtensionFilterClause("p")
 	}
 
 	query := fmt.Sprintf(`
@@ -716,9 +747,8 @@ func GetTableInheritance(connectionPool *dbconn.DBConn, tables []Relation) map[u
 	FROM pg_inherits i
 		JOIN pg_class p ON i.inhparent = p.oid
 		JOIN pg_namespace n ON p.relnamespace = n.oid
-	WHERE %s%s
-	ORDER BY i.inhrelid, i.inhseqno`,
-		ExtensionFilterClause("p"), tableFilterStr)
+	%s%s
+	ORDER BY i.inhrelid, i.inhseqno`, tableFilterStr, extensionFilter)
 
 	results := make([]Dependency, 0)
 	resultMap := make(map[uint32][]string)
