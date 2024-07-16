@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/greenplum-db/gp-common-go-libs/structmatcher"
@@ -8,7 +9,6 @@ import (
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/options"
 	"github.com/greenplum-db/gpbackup/testutils"
-	"github.com/lib/pq"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -69,22 +69,17 @@ PARTITION BY RANGE (year)
 			testhelper.AssertQueryRuns(connectionPool, "ALTER TABLE public.atttable DROP COLUMN b")
 			testhelper.AssertQueryRuns(connectionPool, "ALTER TABLE public.atttable ALTER COLUMN e SET STORAGE PLAIN")
 			oid := testutils.OidFromObjectName(connectionPool, "public", "atttable", backup.TYPE_RELATION)
-			privileges := make(pq.StringArray, 0)
-			privilegesMulti := make(pq.StringArray, 0)
+			privileges := sql.NullString{String: "", Valid: false}
 			if connectionPool.Version.AtLeast("6") {
 				testhelper.AssertQueryRuns(connectionPool, "GRANT SELECT (c, d) ON TABLE public.atttable TO testrole")
-				privileges = append(privileges, "testrole=r/testrole")
-				testhelper.AssertQueryRuns(connectionPool, "GRANT SELECT (e) ON TABLE public.atttable TO testrole")
-				testhelper.AssertQueryRuns(connectionPool, "GRANT SELECT (e) ON TABLE public.atttable TO anothertestrole")
-				privilegesMulti = append(privilegesMulti, "testrole=r/testrole")
-				privilegesMulti = append(privilegesMulti, "anothertestrole=r/testrole")
+				privileges = sql.NullString{String: "testrole=r/testrole", Valid: true}
 			}
 			tableAtts := backup.GetColumnDefinitions(connectionPool)[oid]
 
 			columnA := backup.ColumnDefinition{Oid: 0, Num: 1, Name: "a", NotNull: false, HasDefault: false, Type: "double precision", Encoding: "", StatTarget: -1, StorageType: "", DefaultVal: "", Comment: "att comment"}
 			columnC := backup.ColumnDefinition{Oid: 0, Num: 3, Name: "c", NotNull: true, HasDefault: false, Type: "text", Encoding: "", StatTarget: -1, StorageType: "", DefaultVal: "", Comment: "", Privileges: privileges}
 			columnD := backup.ColumnDefinition{Oid: 0, Num: 4, Name: "d", NotNull: false, HasDefault: true, Type: "integer", Encoding: "", StatTarget: -1, StorageType: "", DefaultVal: "(5)", Comment: "", Privileges: privileges}
-			columnE := backup.ColumnDefinition{Oid: 0, Num: 5, Name: "e", NotNull: false, HasDefault: false, Type: "text", Encoding: "", StatTarget: -1, StorageType: "PLAIN", DefaultVal: "", Comment: "", Privileges: privilegesMulti}
+			columnE := backup.ColumnDefinition{Oid: 0, Num: 5, Name: "e", NotNull: false, HasDefault: false, Type: "text", Encoding: "", StatTarget: -1, StorageType: "PLAIN", DefaultVal: "", Comment: ""}
 
 			Expect(tableAtts).To(HaveLen(4))
 
