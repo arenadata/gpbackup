@@ -37,7 +37,6 @@ const (
 	NO_HISTORY            = "no-history"
 	PLUGIN_CONFIG         = "plugin-config"
 	QUIET                 = "quiet"
-	SINGLE_BACKUP_DIR     = "single-backup-dir"
 	SINGLE_DATA_FILE      = "single-data-file"
 	COPY_QUEUE_SIZE       = "copy-queue-size"
 	VERBOSE               = "verbose"
@@ -57,7 +56,6 @@ const (
 )
 
 func SetBackupFlagDefaults(flagSet *pflag.FlagSet) {
-	flagSet.Bool(SINGLE_BACKUP_DIR, false, "Back up all data to a single directory instead of split by segment")
 	flagSet.String(BACKUP_DIR, "", "The absolute path of the directory to which all backup files will be written")
 	flagSet.String(COMPRESSION_TYPE, "gzip", "Type of compression to use during data backup. Valid values are 'gzip', 'zstd'")
 	flagSet.Int(COMPRESSION_LEVEL, 1, "Level of compression to use during data backup. Range of valid values depends on compression type")
