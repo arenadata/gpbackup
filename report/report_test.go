@@ -498,7 +498,7 @@ Timestamp Key: 20170101010101`)
 		BeforeEach(func() {
 			r, w, _ = os.Pipe()
 			testCluster = testutils.SetDefaultSegmentConfiguration()
-			testFPInfo = filepath.NewFilePathInfo(testCluster, "", "20170101010101", "gpseg", false)
+			testFPInfo = filepath.NewFilePathInfo(testCluster, "", "20170101010101", "gpseg")
 			operating.System.OpenFileRead = func(name string, flag int, perm os.FileMode) (operating.ReadCloserAt, error) { return r, nil }
 			operating.System.ReadFile = func(filename string) ([]byte, error) { return ioutil.ReadAll(r) }
 			operating.System.Hostname = func() (string, error) { return "localhost", nil }
