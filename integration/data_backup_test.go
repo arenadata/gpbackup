@@ -32,7 +32,7 @@ var _ = Describe("backup integration tests", func() {
 				Skip(fmt.Sprintf("Test does not apply to gpbackup gpbackup %s", oldBackupSemVer))
 			}
 
-			fpInfo = filepath.NewFilePathInfo(testCluster, "", "20170101010101", "gpseg", false)
+			fpInfo = filepath.NewFilePathInfo(testCluster, "", "20170101010101", "gpseg")
 			fpInfo.BaseDataDir = "/tmp/backup_data_test"
 			os.MkdirAll(path.Join(fpInfo.BaseDataDir, "backups", "20170101", "20170101010101"), 0777)
 

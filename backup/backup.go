@@ -66,13 +66,9 @@ func DoSetup() {
 
 	segConfig := cluster.MustGetSegmentConfiguration(clusterConfigConn)
 	globalCluster = cluster.NewCluster(segConfig)
-	segPrefix := ""
-	if !MustGetFlagBool(options.SINGLE_BACKUP_DIR) {
-		segPrefix = filepath.GetSegPrefix(clusterConfigConn)
-	}
 	clusterConfigConn.Close()
 
-	globalFPInfo = filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), timestamp, segPrefix, MustGetFlagBool(options.SINGLE_BACKUP_DIR))
+	globalFPInfo = filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), timestamp, "")
 	if MustGetFlagBool(options.METADATA_ONLY) {
 		_, err = globalCluster.ExecuteLocalCommand(fmt.Sprintf("mkdir -p %s", globalFPInfo.GetDirForContent(-1)))
 		gplog.FatalOnError(err)
@@ -115,9 +111,7 @@ func DoBackup() {
 	var targetBackupFPInfo filepath.FilePathInfo
 	if MustGetFlagBool(options.INCREMENTAL) {
 		targetBackupTimestamp = GetTargetBackupTimestamp()
-
-		targetBackupFPInfo = filepath.NewFilePathInfo(globalCluster, globalFPInfo.UserSpecifiedBackupDir,
-			targetBackupTimestamp, globalFPInfo.UserSpecifiedSegPrefix, globalFPInfo.SingleBackupDir)
+		targetBackupFPInfo = filepath.NewFilePathInfo(globalCluster, globalFPInfo.UserSpecifiedBackupDir, targetBackupTimestamp, "")
 
 		if pluginConfigFlag != "" {
 			// These files need to be downloaded from the remote system into the local filesystem
