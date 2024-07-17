@@ -1192,12 +1192,13 @@ var _ = Describe("backup and restore end to end tests", func() {
 				DROP EXTENSION test_ext3;
 			`)
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--metadata-only")
+			timestamp := getBackupTimestamp(string(output))
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb")
 
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 	})
 	Describe("Restore with truncate-table", func() {
@@ -2823,7 +2824,8 @@ LANGUAGE plpgsql NO SQL;`)
 					INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 30)a;
 					INSERT INTO test2_part SELECT a, 35, a, 'test' FROM generate_series(1, 40)a;`)
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
+			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
+			timestamp := getBackupTimestamp(string(output))
 			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
 			Expect(metadataFileContents).To(ContainSubstring("test_part"))
 			Expect(metadataFileContents).To(ContainSubstring("part_a"))
@@ -2841,7 +2843,7 @@ LANGUAGE plpgsql NO SQL;`)
 				"public.test2_part": 40,
 			})
 
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 
 		It("backup the partition whose parent is in the extension with '--leaf-partition-data' flag", func() {
@@ -2859,7 +2861,8 @@ LANGUAGE plpgsql NO SQL;`)
 					INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 30)a;
 					INSERT INTO test2_part SELECT a, 35, a, 'test' FROM generate_series(1, 40)a;`)
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
+			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
+			timestamp := getBackupTimestamp(string(output))
 			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
 			Expect(metadataFileContents).To(ContainSubstring("test_part"))
 			Expect(metadataFileContents).To(ContainSubstring("part_a"))
@@ -2877,7 +2880,7 @@ LANGUAGE plpgsql NO SQL;`)
 				"public.test2_part": 40,
 			})
 
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 
 		It("ignore partitions specified in exclude-table during backup", func() {
@@ -2888,8 +2891,9 @@ LANGUAGE plpgsql NO SQL;`)
 					INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 10)a;
 					INSERT INTO part_d SELECT a, 0, a, 'd' FROM generate_series(1, 20)a;`)
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data",
+			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data",
 				"--exclude-table", "public.part_d")
+			timestamp := getBackupTimestamp(string(output))
 
 			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
 			Expect(metadataFileContents).To(ContainSubstring("part_c"))
@@ -2903,7 +2907,7 @@ LANGUAGE plpgsql NO SQL;`)
 
 			assertTablesNotRestored(restoreConn, []string{"part_d"})
 
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 
 		It("ignore partitions specified in include-table during backup", func() {
@@ -2914,8 +2918,9 @@ LANGUAGE plpgsql NO SQL;`)
 					INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 10)a;
 					INSERT INTO part_d SELECT a, 0, a, 'd' FROM generate_series(1, 20)a;`)
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data",
+			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data",
 				"--include-table", "public.part_d")
+			timestamp := getBackupTimestamp(string(output))
 
 			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
 			Expect(metadataFileContents).ToNot(ContainSubstring("part_c"))
@@ -2930,7 +2935,7 @@ LANGUAGE plpgsql NO SQL;`)
 
 			assertTablesNotRestored(restoreConn, []string{"part_c"})
 
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 
 		It("ignore partitions specified in exclude-table during restore", func() {
@@ -2941,14 +2946,15 @@ LANGUAGE plpgsql NO SQL;`)
 					INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 10)a;
 					INSERT INTO part_d SELECT a, 0, a, 'd' FROM generate_series(1, 20)a;`)
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
+			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
+			timestamp := getBackupTimestamp(string(output))
 
 			//to prevent new partitions from being created during restoration, we need to exclude the root.
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb",
 				"--exclude-table", "public.t_part")
 			assertTablesNotRestored(restoreConn, []string{"part_c", "part_d"})
 
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 
 		It("allows the user to exclude partitions that hinder restore if the default partition in the extension contains data", func() {
@@ -2958,13 +2964,14 @@ LANGUAGE plpgsql NO SQL;`)
 						INTO (PARTITION new_part, default partition);
 					ALTER EXTENSION test_ext6 ADD TABLE d_part_1_prt_extra;`)
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
+			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
+			timestamp := getBackupTimestamp(string(output))
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb",
 				"--exclude-table", "public.d_part")
 
 			assertTablesNotRestored(restoreConn, []string{"d_part_1_prt_new_part"})
 
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 
 		It("does not lose inheritance during backup if the parent table is in the extension", func() {
@@ -2974,7 +2981,8 @@ LANGUAGE plpgsql NO SQL;`)
 
 			defer testhelper.AssertQueryRuns(backupConn, `DROP TABLE child;`)
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
+			output := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
+			timestamp := getBackupTimestamp(string(output))
 			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
 			Expect(metadataFileContents).To(ContainSubstring("INHERITS (public.parent)"))
 			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
@@ -2986,7 +2994,7 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(err).To(BeNil())
 			Expect(exists[0]).To(BeTrue())
 
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 	})
 })
