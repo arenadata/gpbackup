@@ -82,7 +82,7 @@ func DoSetup() {
 	err = opts.QuoteExcludeRelations(connectionPool)
 	gplog.FatalOnError(err)
 
-	segPrefix, err = filepath.ParseSegPrefix(MustGetFlagString(options.BACKUP_DIR), backupTimestamp)
+	segPrefix, err = filepath.ParseSegPrefix(MustGetFlagString(options.BACKUP_DIR))
 	gplog.FatalOnError(err)
 	globalFPInfo = filepath.NewFilePathInfo(globalCluster, MustGetFlagString(options.BACKUP_DIR), backupTimestamp, segPrefix)
 	if reportDir := MustGetFlagString(options.REPORT_DIR); reportDir != "" {
