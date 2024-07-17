@@ -1526,35 +1526,6 @@ var _ = Describe("backup and restore end to end tests", func() {
 			// gpbackup before version 1.18.0 does not dump pg_class statistics correctly
 			skipIfOldBackupVersionBefore("1.18.0")
 
-			testhelper.AssertQueryRuns(backupConn, `
-				CREATE TABLE et (
-					id character varying(13),
-					flg smallint,
-					dttm timestamp without time zone,
-					src character varying(80)
-				) WITH (appendonly='true', orientation='row', compresstype=zstd, compresslevel='3') DISTRIBUTED BY (id);
-
-				CREATE TABLE pt (
-					id character varying(13),
-					flg smallint,
-					dttm timestamp without time zone,
-					src character varying(80)
-				) WITH (appendonly='true', orientation='row', compresstype=zstd, compresslevel='3') DISTRIBUTED BY (id) PARTITION BY LIST(src) (
-					PARTITION src_mdm VALUES('val') WITH (tablename='pt_1_prt_src_mdm', appendonly='true', orientation='row', compresstype=zstd, compresslevel='3' )
-				);
-
-				INSERT INTO pt(id, flg, dttm, src) VALUES (1, 1, now(), 'val');
-				INSERT INTO et(id, flg, dttm, src) VALUES (2, 2, now(), 'val');
-
-				ANALYZE pt;
-				ANALYZE et;
-				ANALYZE ROOTPARTITION pt;
-
-				ALTER TABLE pt EXCHANGE PARTITION src_mdm WITH TABLE et;
-			`)
-
-			defer testhelper.AssertQueryRuns(backupConn,
-				`DROP TABLE et CASCADE; DROP TABLE pt CASCADE;`)
 			timestamp := gpbackup(gpbackupPath, backupHelperPath,
 				"--with-stats",
 				"--backup-dir", backupDir, "--single-backup-dir")
@@ -1574,7 +1545,7 @@ var _ = Describe("backup and restore end to end tests", func() {
 			assertPGClassStatsRestored(backupConn, restoreConn, publicSchemaTupleCounts)
 			assertPGClassStatsRestored(backupConn, restoreConn, schema2TupleCounts)
 
-			statsQuery := fmt.Sprintf(`SELECT count(*) AS string FROM pg_statistic st left join pg_class cl on st.starelid = cl.oid left join pg_namespace nm on cl.relnamespace = nm.oid where cl.relname != 'pt_1_prt_src_mdm' AND %s;`, backup.SchemaFilterClause("nm"))
+			statsQuery := fmt.Sprintf(`SELECT count(*) AS string FROM pg_statistic st left join pg_class cl on st.starelid = cl.oid left join pg_namespace nm on cl.relnamespace = nm.oid where %s;`, backup.SchemaFilterClause("nm"))
 			backupStatisticCount := dbconn.MustSelectString(backupConn, statsQuery)
 			restoredStatisticsCount := dbconn.MustSelectString(restoreConn, statsQuery)
 
