@@ -276,15 +276,11 @@ func backupPredata(metadataFile *utils.FileWithByteCount, tables []Table, tableO
 
 	retrieveViews(&objects)
 	sequences := retrieveAndBackupSequences(metadataFile, relationMetadata)
-	domainConstraints, nonDomainConstraints, conMetadata := retrieveConstraints(&objects, metadataMap)
+	domainConstraints := retrieveConstraints(&objects, metadataMap)
 
-	viewsDependingOnConstraints := backupDependentObjects(metadataFile, tables, protocols, metadataMap, domainConstraints, objects, sequences, funcInfoMap, tableOnly)
+	backupDependentObjects(metadataFile, tables, protocols, metadataMap, domainConstraints, objects, sequences, funcInfoMap, tableOnly)
 
 	backupConversions(metadataFile)
-
-	// These two are actually in postdata, but we print them here to avoid passing information around too much
-	backupConstraints(metadataFile, nonDomainConstraints, conMetadata)
-	backupViewsDependingOnConstraints(metadataFile, viewsDependingOnConstraints)
 
 	logCompletionMessage("Pre-data metadata metadata backup")
 }
