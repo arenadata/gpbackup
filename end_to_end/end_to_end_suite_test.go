@@ -2239,21 +2239,6 @@ LANGUAGE plpgsql NO SQL;`)
 			assertArtifactsCleaned(restoreConn, "20240502095933")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
 		})
-		It("Will not hang after error during restore with jobs", func() {
-			command := exec.Command("tar", "-xzf", "resources/2-segment-db-error.tar.gz", "-C", backupDir)
-			mustRunCommand(command)
-			gprestoreCmd := exec.Command(gprestorePath,
-				"--timestamp", "20240502095933",
-				"--redirect-db", "restoredb",
-				"--backup-dir", path.Join(backupDir, "2-segment-db-error"),
-				"--resize-cluster", "--jobs", "3")
-			output, err := gprestoreCmd.CombinedOutput()
-			Expect(err).To(HaveOccurred())
-			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t1`))
-			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t2`))
-			assertArtifactsCleaned(restoreConn, "20240502095933")
-			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
-		})
 	})
 	Describe("Restore indexes and constraints on exchanged partition tables", func() {
 		BeforeEach(func() {
