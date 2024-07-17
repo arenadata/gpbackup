@@ -6,11 +6,21 @@ import (
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/testutils"
 	"github.com/greenplum-db/gpbackup/toc"
+	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/lib/pq"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+func PrintStatisticsStatements(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, tables []backup.Table, attStats map[uint32][]backup.AttributeStatistic, tupleStats map[uint32]backup.TupleStatistic) {
+	for _, table := range tables {
+		backup.PrintTupleStatisticsStatementForTable(statisticsFile, tocfile, table, tupleStats[table.Oid])
+		for _, attStat := range attStats[table.Oid] {
+			backup.PrintAttributeStatisticsStatementForTable(statisticsFile, tocfile, table, attStat)
+		}
+	}
+}
 
 var _ = Describe("backup/statistics tests", func() {
 	getStatInsertReplace := func(smallint int, oid int) (string, string, string, string, string) {
@@ -67,7 +77,7 @@ var _ = Describe("backup/statistics tests", func() {
 				456: attStat2,
 			}
 
-			backup.PrintStatisticsStatements(backupfile, tocfile, tables, attStats, tupleStats)
+			PrintStatisticsStatements(backupfile, tocfile, tables, attStats, tupleStats)
 			testutils.ExpectEntry(tocfile.StatisticsEntries, 0, "testschema", "", "testtable1", toc.OBJ_STATISTICS)
 			testutils.ExpectEntry(tocfile.StatisticsEntries, 1, "testschema", "", "testtable2", toc.OBJ_STATISTICS)
 			testutils.ExpectEntry(tocfile.StatisticsEntries, 2, "testschema", "", "testtable2", toc.OBJ_STATISTICS)

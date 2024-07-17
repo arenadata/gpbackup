@@ -259,12 +259,13 @@ func GetDependencies(connectionPool *dbconn.DBConn, backupSet map[UniqueID]bool,
 	query := `SELECT
 	coalesce(id1.refclassid, d.classid) AS classid,
 	coalesce(id1.refobjid, d.objid) AS objid,
-	coalesce(id2.refclassid, d.refclassid) AS refclassid,
-	coalesce(id2.refobjid, d.refobjid) AS refobjid
+	coalesce(id3.refclassid, id2.refclassid, d.refclassid) AS refclassid,
+	coalesce(id3.refobjid, id2.refobjid, d.refobjid) AS refobjid
 FROM pg_depend d
 -- link implicit objects, using objid and refobjid, to the objects that created them
 LEFT JOIN pg_depend id1 ON (d.objid = id1.objid and d.classid = id1.classid and id1.deptype='i')
 LEFT JOIN pg_depend id2 ON (d.refobjid = id2.objid and d.refclassid = id2.classid and id2.deptype='i')
+LEFT JOIN pg_depend id3 ON (id2.refobjid = id3.objid and id2.refclassid = id3.classid and id3.deptype='i')
 WHERE d.classid != 0
 AND d.deptype != 'i'`
 

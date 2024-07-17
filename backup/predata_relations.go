@@ -99,7 +99,9 @@ func SplitTablesByPartitionType(tables []Table, includeList []options.Relation) 
 			// since the COPY will be called on the top-most root partition. It just so
 			// happens that those particular partition types will always have an
 			// AttachPartitionInfo initialized.
-			if table.AttachPartitionInfo == (AttachPartitionInfo{}) {
+			// Or if the IsParentInExtension is set, it means that the parent of this partition is in the extension and
+			// we need to backup it as new root.
+			if table.AttachPartitionInfo == (AttachPartitionInfo{}) || table.PartitionLevelInfo.IsParentInExtension {
 				dataTables = append(dataTables, table)
 			}
 		}
