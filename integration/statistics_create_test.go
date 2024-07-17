@@ -5,10 +5,21 @@ import (
 	"github.com/greenplum-db/gp-common-go-libs/testhelper"
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/testutils"
+	"github.com/greenplum-db/gpbackup/toc"
+	"github.com/greenplum-db/gpbackup/utils"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+func PrintStatisticsStatements(statisticsFile *utils.FileWithByteCount, tocfile *toc.TOC, tables []backup.Table, attStats map[uint32][]backup.AttributeStatistic, tupleStats map[uint32]backup.TupleStatistic) {
+	for _, table := range tables {
+		backup.PrintTupleStatisticsStatementForTable(statisticsFile, tocfile, table, tupleStats[table.Oid])
+		for _, attStat := range attStats[table.Oid] {
+			backup.PrintAttributeStatisticsStatementForTable(statisticsFile, tocfile, table, attStat)
+		}
+	}
+}
 
 var _ = Describe("backup integration tests", func() {
 	BeforeEach(func() {
@@ -30,8 +41,14 @@ var _ = Describe("backup integration tests", func() {
 			oldTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo", backup.TYPE_RELATION)
 			tables[0].Oid = oldTableOid
 
-			beforeAttStats := backup.GetAttributeStatistics(connectionPool, tables)
-			beforeTupleStats := backup.GetTupleStatistics(connectionPool, tables)
+			beforeAttStats := make(map[uint32][]backup.AttributeStatistic)
+			backup.GetAttributeStatistics(connectionPool, tables, func(attStat *backup.AttributeStatistic) {
+				beforeAttStats[attStat.Oid] = append(beforeAttStats[attStat.Oid], *attStat)
+			})
+			beforeTupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				beforeTupleStats[tupleStat.Oid] = *tupleStat
+			})
 			beforeTupleStat := beforeTupleStats[oldTableOid]
 
 			// Drop and recreate the table to clear the statistics
@@ -39,13 +56,19 @@ var _ = Describe("backup integration tests", func() {
 			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.foo(i int, j text, k bool)")
 
 			// Reload the retrieved statistics into the new table
-			backup.PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
+			PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
 			newTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo", backup.TYPE_RELATION)
 			tables[0].Oid = newTableOid
-			afterAttStats := backup.GetAttributeStatistics(connectionPool, tables)
-			afterTupleStats := backup.GetTupleStatistics(connectionPool, tables)
+			afterAttStats := make(map[uint32][]backup.AttributeStatistic)
+			backup.GetAttributeStatistics(connectionPool, tables, func(attStat *backup.AttributeStatistic) {
+				afterAttStats[attStat.Oid] = append(afterAttStats[attStat.Oid], *attStat)
+			})
+			afterTupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				afterTupleStats[tupleStat.Oid] = *tupleStat
+			})
 			afterTupleStat := afterTupleStats[newTableOid]
 
 			oldAtts := beforeAttStats[oldTableOid]
@@ -74,8 +97,14 @@ var _ = Describe("backup integration tests", func() {
 			oldTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo''\"''''bar", backup.TYPE_RELATION)
 			tables[0].Oid = oldTableOid
 
-			beforeAttStats := backup.GetAttributeStatistics(connectionPool, tables)
-			beforeTupleStats := backup.GetTupleStatistics(connectionPool, tables)
+			beforeAttStats := make(map[uint32][]backup.AttributeStatistic)
+			backup.GetAttributeStatistics(connectionPool, tables, func(attStat *backup.AttributeStatistic) {
+				beforeAttStats[attStat.Oid] = append(beforeAttStats[attStat.Oid], *attStat)
+			})
+			beforeTupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				beforeTupleStats[tupleStat.Oid] = *tupleStat
+			})
 			beforeTupleStat := beforeTupleStats[oldTableOid]
 
 			// Drop and recreate the table to clear the statistics
@@ -83,13 +112,19 @@ var _ = Describe("backup integration tests", func() {
 			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.\"foo'\"\"''bar\"(i int, j text, k bool)")
 
 			// Reload the retrieved statistics into the new table
-			backup.PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
+			PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
 			testhelper.AssertQueryRuns(connectionPool, buffer.String())
 
 			newTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo''\"''''bar", backup.TYPE_RELATION)
 			tables[0].Oid = newTableOid
-			afterAttStats := backup.GetAttributeStatistics(connectionPool, tables)
-			afterTupleStats := backup.GetTupleStatistics(connectionPool, tables)
+			afterAttStats := make(map[uint32][]backup.AttributeStatistic)
+			backup.GetAttributeStatistics(connectionPool, tables, func(attStat *backup.AttributeStatistic) {
+				afterAttStats[attStat.Oid] = append(afterAttStats[attStat.Oid], *attStat)
+			})
+			afterTupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				afterTupleStats[tupleStat.Oid] = *tupleStat
+			})
 			afterTupleStat := afterTupleStats[newTableOid]
 
 			oldAtts := beforeAttStats[oldTableOid]
