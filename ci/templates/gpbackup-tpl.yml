@@ -1627,7 +1627,6 @@ jobs:
       passed: [build_gppkgs]
   - in_parallel:
     - task: run-tests-locally-centos7
-      attempts: 3
       image: centos7-gpdb6-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
       params:
@@ -1637,7 +1636,6 @@ jobs:
       input_mapping:
         bin_gpdb: bin_gpdb_6x_centos7
     - task: run-tests-locally-rocky8
-      attempts: 3
       image: rocky8-gpdb6-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
       params:
@@ -1647,7 +1645,6 @@ jobs:
       input_mapping:
         bin_gpdb: bin_gpdb_6x_rhel8
     - task: run-tests-locally-rocky9
-      attempts: 3
       image: rocky9-gpdb6-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
       params:
@@ -1658,7 +1655,6 @@ jobs:
         bin_gpdb: bin_gpdb_6x_rhel9
 {% if is_prod or "gpbackup-release" == pipeline_name %}
     - task: run-tests-locally-ubuntu20.04
-      attempts: 3
       image: ubuntu20.04-gpdb6-image
       file: gpbackup/ci/tasks/test-on-local-cluster.yml
       params:
