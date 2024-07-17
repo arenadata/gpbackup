@@ -214,7 +214,6 @@ func RetrieveAndProcessTables() ([]Table, []Table, []Table) {
 	if connectionPool.Version.AtLeast("6") {
 		tableRelations = append(tableRelations, GetForeignTableRelations(connectionPool)...)
 	}
-	tableRelations = append(tableRelations, GetExtensionTableRelations(connectionPool)...)
 
 	allTables := ConstructDefinitionsForTables(connectionPool, tableRelations)
 
