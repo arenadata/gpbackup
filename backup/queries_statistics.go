@@ -77,8 +77,6 @@ func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table, proce
 	for _, table := range tables {
 		tablenames = append(tablenames, table.FQN())
 	}
-	// In the query below we need to adjust the `staattnum` as some columns could have been dropped, but during database
-	// restore the tables will be restored from scratch, and their columns will have different attnums.
 	query := fmt.Sprintf(`
 	SELECT c.oid,
 		quote_ident(n.nspname) AS schema,
@@ -86,7 +84,7 @@ func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table, proce
 		quote_ident(a.attname) AS attname,
 		quote_ident(t.typname) AS type,
 		s.starelid,
-		s.staattnum - (SELECT COUNT(1) FROM pg_attribute WHERE attrelid = c.oid AND attnum < s.staattnum AND attisdropped = TRUE) AS staattnum,
+		s.staattnum,
 		%s
 		s.stanullfrac,
 		s.stawidth,
