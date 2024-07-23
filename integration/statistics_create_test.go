@@ -89,10 +89,10 @@ var _ = Describe("backup integration tests", func() {
 			}
 
 			// Create and ANALYZE a table to generate statistics
-			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.foo(i int, j text, k bool)")
+			testhelper.AssertQueryRuns(connectionPool, `CREATE TABLE public.foo(i int, j text, k bool, "i'2 3" int)`)
 			defer testhelper.AssertQueryRuns(connectionPool, "DROP TABLE public.foo")
-			testhelper.AssertQueryRuns(connectionPool, "INSERT INTO public.foo VALUES (1, 'a', 't')")
-			testhelper.AssertQueryRuns(connectionPool, "INSERT INTO public.foo VALUES (2, 'b', 'f')")
+			testhelper.AssertQueryRuns(connectionPool, "INSERT INTO public.foo VALUES (1, 'a', 't', 1)")
+			testhelper.AssertQueryRuns(connectionPool, "INSERT INTO public.foo VALUES (2, 'b', 'f', 2)")
 			testhelper.AssertQueryRuns(connectionPool, "ANALYZE public.foo")
 			testhelper.AssertQueryRuns(connectionPool, "ALTER TABLE public.foo DROP COLUMN j")
 
@@ -111,7 +111,7 @@ var _ = Describe("backup integration tests", func() {
 
 			// Drop and recreate the table to clear the statistics
 			testhelper.AssertQueryRuns(connectionPool, "DROP TABLE public.foo")
-			testhelper.AssertQueryRuns(connectionPool, "CREATE TABLE public.foo(i int, k bool)")
+			testhelper.AssertQueryRuns(connectionPool, `CREATE TABLE public.foo(i int, k bool, "i'2 3" int)`)
 
 			// Reload the retrieved statistics into the new table
 			PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
@@ -135,8 +135,8 @@ var _ = Describe("backup integration tests", func() {
 			// Ensure the statistics match
 			Expect(afterTupleStats).To(HaveLen(len(beforeTupleStats)))
 			structmatcher.ExpectStructsToMatchExcluding(&beforeTupleStat, &afterTupleStat, "Oid")
-			Expect(oldAtts).To(HaveLen(2))
-			Expect(newAtts).To(HaveLen(2))
+			Expect(oldAtts).To(HaveLen(3))
+			Expect(newAtts).To(HaveLen(3))
 			for i := range oldAtts {
 				structmatcher.ExpectStructsToMatchExcluding(&oldAtts[i], &newAtts[i], "Oid", "Relid")
 			}
