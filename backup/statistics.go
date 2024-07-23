@@ -70,7 +70,7 @@ func GenerateAttributeStatisticsQueries(table Table, attStat AttributeStatistic)
 	}
 
 	attributeQueries = append(attributeQueries, fmt.Sprintf(`DELETE FROM pg_statistic
-WHERE starelid = %s AND staattnum = (SELECT attnum FROM pg_attribute WHERE attrelid = %s AND attname = '%s');`, starelidStr, starelidStr, attStat.AttName))
+WHERE starelid = %s AND staattnum = (SELECT attnum FROM pg_attribute WHERE attrelid = %s AND attname = '%s');`, starelidStr, starelidStr, utils.EscapeSingleQuotes(attStat.AttName)))
 	attributeQueries = append(attributeQueries, fmt.Sprintf(`INSERT INTO pg_statistic SELECT
 	%s,
 	attnum,%s
@@ -78,7 +78,7 @@ WHERE starelid = %s AND staattnum = (SELECT attnum FROM pg_attribute WHERE attre
 	%d::integer,
 	%f::real,
 	%s
-FROM pg_attribute WHERE attrelid = %s AND attname = '%s';`, starelidStr, inheritStr, attStat.NullFraction, attStat.Width, attStat.Distinct, attributeSlotsQueryStr, starelidStr, attStat.AttName))
+FROM pg_attribute WHERE attrelid = %s AND attname = '%s';`, starelidStr, inheritStr, attStat.NullFraction, attStat.Width, attStat.Distinct, attributeSlotsQueryStr, starelidStr, utils.EscapeSingleQuotes(attStat.AttName)))
 
 	/*
 	 * If a type name starts with exactly one underscore, it describes an array
