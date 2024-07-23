@@ -2,13 +2,11 @@ package helper
 
 import (
 	"bufio"
-	"bytes"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,7 +24,6 @@ import (
 
 var (
 	CleanupGroup  *sync.WaitGroup
-	errBuf        bytes.Buffer
 	version       string
 	wasTerminated bool
 	writeHandle   *os.File
@@ -245,7 +242,6 @@ func getOidListFromFile(oidFileName string) ([]int, error) {
 		num, _ := strconv.Atoi(oid)
 		oidList[i] = num
 	}
-	sort.Ints(oidList)
 	return oidList, nil
 }
 

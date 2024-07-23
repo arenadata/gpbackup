@@ -1170,6 +1170,36 @@ var _ = Describe("backup and restore end to end tests", func() {
 			assertArtifactsCleaned(timestamp)
 		})
 	})
+	Describe("Extensions dependency", func() {
+		It("runs gpbackup and gprestores with dependent extensions", func() {
+			_ = os.Chdir("resources")
+			command := exec.Command("make", "USE_PGXS=1", "install")
+			mustRunCommand(command)
+			_ = os.Chdir("..")
+
+			testhelper.AssertQueryRuns(backupConn, `
+				CREATE EXTENSION test_ext3;
+				CREATE EXTENSION test_ext5;
+				CREATE EXTENSION test_ext2;
+				CREATE EXTENSION test_ext4;
+				CREATE EXTENSION test_ext1;
+			`)
+			defer testhelper.AssertQueryRuns(backupConn, `
+				DROP EXTENSION test_ext1;
+				DROP EXTENSION test_ext4;
+				DROP EXTENSION test_ext2;
+				DROP EXTENSION test_ext5;
+				DROP EXTENSION test_ext3;
+			`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				"--metadata-only")
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
+				"--redirect-db", "restoredb")
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+	})
 	Describe("Restore with truncate-table", func() {
 		It("runs gpbackup and gprestore with truncate-table and include-table flags", func() {
 			output := gpbackup(gpbackupPath, backupHelperPath)
@@ -2757,6 +2787,206 @@ LANGUAGE plpgsql NO SQL;`)
 			output, err := exec.Command(gprestorePath, "--verbose", "--backup-dir", "/tmp/no-timestamp-tests").CombinedOutput()
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring("Multiple timestamp directories found"))
+		})
+	})
+
+	Describe("Backup partition whose parent is in extension [7X]", func() {
+		BeforeEach(func() {
+			if backupConn.Version.Before("7") {
+				Skip("not relevant for 6X and earlier")
+			}
+			_ = os.Chdir("resources")
+			command := exec.Command("make", "USE_PGXS=1", "install")
+			mustRunCommand(command)
+			_ = os.Chdir("..")
+
+			testhelper.AssertQueryRuns(backupConn, `CREATE EXTENSION test_ext6;`)
+		})
+
+		AfterEach(func() {
+			testhelper.AssertQueryRuns(backupConn, "DROP EXTENSION IF EXISTS test_ext6 CASCADE;")
+			testhelper.AssertQueryRuns(restoreConn, "DROP EXTENSION IF EXISTS test_ext6 CASCADE;")
+		})
+
+		It("backup the partition whose parent is in the extension", func() {
+			testhelper.AssertQueryRuns(backupConn, `
+					CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20) PARTITION BY LIST(c);
+					CREATE TABLE part_a PARTITION OF test_part FOR VALUES IN ('a');
+					CREATE TABLE part_b PARTITION OF test_part FOR VALUES IN ('b');
+
+					CREATE TABLE part_c PARTITION OF t_part_1_prt_1 FOR VALUES IN ('c');
+
+					CREATE TABLE test2_part PARTITION OF t_part FOR VALUES FROM (30) TO (40);
+
+					INSERT INTO part_a SELECT a, 15, a, 'a' FROM generate_series(1, 10)a;
+					INSERT INTO part_b SELECT a, 16, a, 'b' FROM generate_series(1, 20)a;
+					INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 30)a;
+					INSERT INTO test2_part SELECT a, 35, a, 'test' FROM generate_series(1, 40)a;`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
+			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
+			Expect(metadataFileContents).To(ContainSubstring("test_part"))
+			Expect(metadataFileContents).To(ContainSubstring("part_a"))
+			Expect(metadataFileContents).To(ContainSubstring("part_b"))
+			Expect(metadataFileContents).To(ContainSubstring("part_c"))
+			Expect(metadataFileContents).To(ContainSubstring("test2_part"))
+
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
+
+			assertDataRestored(restoreConn, map[string]int{
+				"public.test_part":  30,
+				"public.part_a":     10,
+				"public.part_b":     20,
+				"public.part_c":     30,
+				"public.test2_part": 40,
+			})
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+
+		It("backup the partition whose parent is in the extension with '--leaf-partition-data' flag", func() {
+			testhelper.AssertQueryRuns(backupConn, `
+					CREATE TABLE test_part PARTITION OF t_part FOR VALUES FROM (10) TO (20) PARTITION BY LIST(c);
+					CREATE TABLE part_a PARTITION OF test_part FOR VALUES IN ('a');
+					CREATE TABLE part_b PARTITION OF test_part FOR VALUES IN ('b');
+
+					CREATE TABLE part_c PARTITION OF t_part_1_prt_1 FOR VALUES IN ('c');
+
+					CREATE TABLE test2_part PARTITION OF t_part FOR VALUES FROM (30) TO (40);
+
+					INSERT INTO part_a SELECT a, 15, a, 'a' FROM generate_series(1, 10)a;
+					INSERT INTO part_b SELECT a, 16, a, 'b' FROM generate_series(1, 20)a;
+					INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 30)a;
+					INSERT INTO test2_part SELECT a, 35, a, 'test' FROM generate_series(1, 40)a;`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
+			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
+			Expect(metadataFileContents).To(ContainSubstring("test_part"))
+			Expect(metadataFileContents).To(ContainSubstring("part_a"))
+			Expect(metadataFileContents).To(ContainSubstring("part_b"))
+			Expect(metadataFileContents).To(ContainSubstring("part_c"))
+			Expect(metadataFileContents).To(ContainSubstring("test2_part"))
+
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
+
+			assertDataRestored(restoreConn, map[string]int{
+				"public.test_part":  30,
+				"public.part_a":     10,
+				"public.part_b":     20,
+				"public.part_c":     30,
+				"public.test2_part": 40,
+			})
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+
+		It("ignore partitions specified in exclude-table during backup", func() {
+			testhelper.AssertQueryRuns(backupConn, `
+					CREATE TABLE part_c PARTITION OF t_part_1_prt_1 FOR VALUES IN ('c');
+					CREATE TABLE part_d PARTITION OF t_part_1_prt_1 FOR VALUES IN ('d');
+
+					INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 10)a;
+					INSERT INTO part_d SELECT a, 0, a, 'd' FROM generate_series(1, 20)a;`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data",
+				"--exclude-table", "public.part_d")
+
+			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
+			Expect(metadataFileContents).To(ContainSubstring("part_c"))
+			Expect(metadataFileContents).ToNot(ContainSubstring("part_d"))
+
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
+
+			assertDataRestored(restoreConn, map[string]int{
+				"public.part_c": 10,
+			})
+
+			assertTablesNotRestored(restoreConn, []string{"part_d"})
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+
+		It("ignore partitions specified in include-table during backup", func() {
+			testhelper.AssertQueryRuns(backupConn, `
+					CREATE TABLE part_c PARTITION OF t_part_1_prt_1 FOR VALUES IN ('c');
+					CREATE TABLE part_d PARTITION OF t_part_1_prt_1 FOR VALUES IN ('d');
+
+					INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 10)a;
+					INSERT INTO part_d SELECT a, 0, a, 'd' FROM generate_series(1, 20)a;`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data",
+				"--include-table", "public.part_d")
+
+			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
+			Expect(metadataFileContents).ToNot(ContainSubstring("part_c"))
+			Expect(metadataFileContents).To(ContainSubstring("part_d"))
+
+			testhelper.AssertQueryRuns(restoreConn, "CREATE EXTENSION test_ext6;")
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
+
+			assertDataRestored(restoreConn, map[string]int{
+				"public.part_d": 20,
+			})
+
+			assertTablesNotRestored(restoreConn, []string{"part_c"})
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+
+		It("ignore partitions specified in exclude-table during restore", func() {
+			testhelper.AssertQueryRuns(backupConn, `
+					CREATE TABLE part_c PARTITION OF t_part_1_prt_1 FOR VALUES IN ('c');
+					CREATE TABLE part_d PARTITION OF t_part_1_prt_1 FOR VALUES IN ('d');
+
+					INSERT INTO part_c SELECT a, 0, a, 'c' FROM generate_series(1, 10)a;
+					INSERT INTO part_d SELECT a, 0, a, 'd' FROM generate_series(1, 20)a;`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
+
+			//to prevent new partitions from being created during restoration, we need to exclude the root.
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb",
+				"--exclude-table", "public.t_part")
+			assertTablesNotRestored(restoreConn, []string{"part_c", "part_d"})
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+
+		It("allows the user to exclude partitions that hinder restore if the default partition in the extension contains data", func() {
+			testhelper.AssertQueryRuns(backupConn, `
+					ALTER EXTENSION test_ext6 DROP TABLE d_part_1_prt_extra;
+					ALTER TABLE d_part SPLIT DEFAULT PARTITION START (10) END (20)
+						INTO (PARTITION new_part, default partition);
+					ALTER EXTENSION test_ext6 ADD TABLE d_part_1_prt_extra;`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir, "--leaf-partition-data")
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb",
+				"--exclude-table", "public.d_part")
+
+			assertTablesNotRestored(restoreConn, []string{"d_part_1_prt_new_part"})
+
+			assertArtifactsCleaned(restoreConn, timestamp)
+		})
+
+		It("does not lose inheritance during backup if the parent table is in the extension", func() {
+			testhelper.AssertQueryRuns(backupConn, `
+				CREATE TABLE child (d int) INHERITS (parent);
+			`)
+
+			defer testhelper.AssertQueryRuns(backupConn, `DROP TABLE child;`)
+
+			timestamp := gpbackup(gpbackupPath, backupHelperPath, "--backup-dir", backupDir)
+			metadataFileContents := string(getMetdataFileContents(backupDir, timestamp, "metadata.sql"))
+			Expect(metadataFileContents).To(ContainSubstring("INHERITS (public.parent)"))
+			gprestore(gprestorePath, restoreHelperPath, timestamp, "--backup-dir", backupDir, "--redirect-db", "restoredb")
+
+			exists := make([]bool, 0)
+			err := restoreConn.Select(&exists,
+				"SELECT EXISTS(SELECT FROM pg_inherits WHERE inhrelid = 'child'::regclass AND inhparent = 'parent'::regclass);")
+
+			Expect(err).To(BeNil())
+			Expect(exists[0]).To(BeTrue())
+
+			assertArtifactsCleaned(restoreConn, timestamp)
 		})
 	})
 })

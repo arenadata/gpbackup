@@ -31,7 +31,10 @@ var _ = Describe("backup integration tests", func() {
 	})
 	Describe("GetAttributeStatistics", func() {
 		It("returns attribute statistics for a table", func() {
-			attStats := backup.GetAttributeStatistics(connectionPool, tables)
+			attStats := make(map[uint32][]backup.AttributeStatistic)
+			backup.GetAttributeStatistics(connectionPool, tables, func(attStat *backup.AttributeStatistic) {
+				attStats[attStat.Oid] = append(attStats[attStat.Oid], *attStat)
+			})
 			Expect(attStats).To(HaveLen(1))
 			Expect(attStats[tableOid]).To(HaveLen(3))
 			tableAttStatsI := attStats[tableOid][0]
@@ -69,7 +72,10 @@ var _ = Describe("backup integration tests", func() {
 	})
 	Describe("GetTupleStatistics", func() {
 		It("returns tuple statistics for a table", func() {
-			tupleStats := backup.GetTupleStatistics(connectionPool, tables)
+			tupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				tupleStats[tupleStat.Oid] = *tupleStat
+			})
 			Expect(tupleStats).To(HaveLen(1))
 			tableTupleStats := tupleStats[tableOid]
 
