@@ -439,6 +439,12 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 			replaced = true
 		}
 
+		// Statistic statements need two schema replacements
+		if strings.Contains(statement, "pg_statistic") {
+			statement = strings.ReplaceAll(statement, oldSchema, newSchema)
+			replaced = true
+		}
+
 		// Only do a general replace if we haven't replaced anything yet, to avoid e.g. hitting a schema in a VIEW definition
 		if !replaced {
 			statement = strings.Replace(statement, oldSchema, newSchema, 1)

@@ -21,7 +21,6 @@ type AttributeStatistic struct {
 	AttName      string
 	Type         string
 	Relid        uint32         `db:"starelid"`
-	AttNumber    int            `db:"staattnum"`
 	Inherit      bool           `db:"stainherit"`
 	NullFraction float64        `db:"stanullfrac"`
 	Width        int            `db:"stawidth"`
@@ -84,7 +83,6 @@ func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table, proce
 		quote_ident(a.attname) AS attname,
 		quote_ident(t.typname) AS type,
 		s.starelid,
-		s.staattnum,
 		%s
 		s.stanullfrac,
 		s.stawidth,
