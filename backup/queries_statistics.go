@@ -80,7 +80,7 @@ func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table, proce
 	SELECT c.oid,
 		quote_ident(n.nspname) AS schema,
 		quote_ident(c.relname) AS table,
-		a.attname AS attname,
+		a.attname,
 		quote_ident(t.typname) AS type,
 		s.starelid,
 		%s
