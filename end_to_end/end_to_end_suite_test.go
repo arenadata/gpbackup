@@ -1185,6 +1185,8 @@ var _ = Describe("backup and restore end to end tests", func() {
 				CREATE EXTENSION test_ext1;
 				INSERT INTO test1 SELECT i FROM generate_series(1, 100) i;
 				INSERT INTO test2 SELECT i, i % 2 != 0 FROM generate_series(1, 100) i;
+				INSERT INTO test1 SELECT i FROM generate_series(1, 100) i;
+				INSERT INTO test2 SELECT i, i % 2 != 0 FROM generate_series(1, 100) i;
 			`)
 			defer testhelper.AssertQueryRuns(backupConn, `
 				DROP EXTENSION test_ext1;
