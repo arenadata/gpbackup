@@ -79,7 +79,6 @@ func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, ta
 func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FilePathInfo, entry toc.CoordinatorDataEntry, tableName string, whichConn int) error {
 	origSize, destSize, resizeCluster, batches := GetResizeClusterInfo()
 
-	var lastErr error
 	var numRowsRestored int64
 	// We don't want duplicate data for replicated tables so only do one batch
 	if entry.IsReplicated {
@@ -105,7 +104,7 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		// If this occurs we need to error out, as subsequent COPY statements
 		// will hang indefinitely waiting to read from pipes that the helper
 		// was expected to set up
-		if backupConfig.SingleDataFile {
+		if backupConfig.SingleDataFile || resizeCluster {
 			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
 			gplog.FatalOnError(agentErr)
 		}
@@ -115,21 +114,14 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		if copyErr != nil {
 			gplog.Error(copyErr.Error())
 			if MustGetFlagBool(options.ON_ERROR_CONTINUE) {
-				if connectionPool.Version.AtLeast("6") && backupConfig.SingleDataFile {
+				if connectionPool.Version.AtLeast("6") && (backupConfig.SingleDataFile || resizeCluster) {
 					// inform segment helpers to skip this entry
 					utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo)
 				}
-				lastErr = copyErr
-				copyErr = nil
-				continue
 			}
 			return copyErr
 		}
 		numRowsRestored += partialRowsRestored
-
-	}
-	if lastErr != nil {
-		return lastErr
 	}
 
 	numRowsBackedUp := entry.RowsCopied
