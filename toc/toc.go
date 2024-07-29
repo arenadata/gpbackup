@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"regexp"
 	"strings"
 
+	"github.com/goccy/go-yaml"
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gpbackup/utils"
-	"gopkg.in/yaml.v2"
 )
 
 type TOC struct {
@@ -17,7 +18,7 @@ type TOC struct {
 	GlobalEntries       []MetadataEntry
 	PredataEntries      []MetadataEntry
 	PostdataEntries     []MetadataEntry
-	StatisticsEntries   []MetadataEntry
+	StatisticsEntries   []MetadataEntry `yaml:",omitempty"`
 	DataEntries         []CoordinatorDataEntry
 	IncrementalMetadata IncrementalEntries
 }
@@ -123,9 +124,11 @@ const (
 
 func NewTOC(filename string) *TOC {
 	toc := &TOC{}
-	contents, err := ioutil.ReadFile(filename)
+	file, err := os.Open(filename)
 	gplog.FatalOnError(err)
-	err = yaml.Unmarshal(contents, toc)
+	defer file.Close()
+	dec := yaml.NewDecoder(file)
+	err = dec.Decode(toc)
 	gplog.FatalOnError(err)
 	return toc
 }
@@ -139,10 +142,41 @@ func NewSegmentTOC(filename string) *SegmentTOC {
 	return toc
 }
 
-func (toc *TOC) WriteToFileAndMakeReadOnly(filename string) {
-	contents, err := yaml.Marshal(toc)
+func encodeMetadataEntry(enc *yaml.Encoder, file *os.File, name string, value []MetadataEntry) {
+	_, err := fmt.Fprintf(file, "%s:", strings.ToLower(name))
 	gplog.FatalOnError(err)
-	err = utils.WriteToFileAndMakeReadOnly(filename, contents)
+	length := len(value)
+	if length == 0 {
+		_, err := fmt.Fprintln(file, " []")
+		gplog.FatalOnError(err)
+	} else {
+		_, err := fmt.Fprintln(file, "")
+		gplog.FatalOnError(err)
+		slice := 10000
+		for start := 0; start < length; start += slice {
+			end := start + slice
+			if end > length {
+				end = length
+			}
+			enc.Encode(value[start:end:end])
+		}
+	}
+}
+
+func (toc *TOC) WriteToFileAndMakeReadOnly(filename string) {
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	gplog.FatalOnError(err)
+	defer file.Close()
+	enc := yaml.NewEncoder(file)
+	defer enc.Close()
+	StatisticsEntries := toc.StatisticsEntries
+	toc.StatisticsEntries = nil
+	err = enc.Encode(toc)
+	gplog.FatalOnError(err)
+	encodeMetadataEntry(enc, file, "StatisticsEntries", StatisticsEntries)
+	err = file.Chmod(0444)
+	gplog.FatalOnError(err)
+	err = file.Sync()
 	gplog.FatalOnError(err)
 }
 
