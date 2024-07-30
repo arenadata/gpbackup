@@ -26,7 +26,7 @@ var (
 	tableDelim = ","
 )
 
-func CopyTableIn(queryContext context.Context, fpInfo *filepath.FilePathInfo, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
+func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
 	if wasTerminated {
 		return -1, nil
 	}
@@ -39,7 +39,7 @@ func CopyTableIn(queryContext context.Context, fpInfo *filepath.FilePathInfo, co
 	if singleDataFile || resizeCluster {
 		//helper.go handles compression, so we don't want to set it here
 		customPipeThroughCommand = utils.DefaultPipeThroughProgram
-		errorFile := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipePathForCopyCommand())
+		errorFile := fmt.Sprintf("%s_error", globalFPInfo.GetSegmentPipePathForCopyCommand())
 		readFromDestinationCommand = fmt.Sprintf("(timeout 300 bash -c \"while [ ! -p \"%s\" && ! -f \"%s\" ]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1)) && %s", destinationToRead, errorFile, destinationToRead, readFromDestinationCommand)
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		readFromDestinationCommand = fmt.Sprintf("%s restore_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
@@ -111,7 +111,7 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 			gplog.FatalOnError(agentErr)
 		}
 
-		partialRowsRestored, copyErr := CopyTableIn(queryContext, fpInfo, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
+		partialRowsRestored, copyErr := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
 
 		if copyErr != nil {
 			gplog.Error(copyErr.Error())
