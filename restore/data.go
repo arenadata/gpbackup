@@ -104,7 +104,7 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		// If this occurs we need to error out, as subsequent COPY statements
 		// will hang indefinitely waiting to read from pipes that the helper
 		// was expected to set up
-		if backupConfig.SingleDataFile || resizeCluster {
+		if backupConfig.SingleDataFile {
 			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
 			gplog.FatalOnError(agentErr)
 		}
