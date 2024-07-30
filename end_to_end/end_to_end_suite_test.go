@@ -2522,6 +2522,35 @@ LANGUAGE plpgsql NO SQL;`)
 			assertArtifactsCleaned("20240710143553")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d; DROP TABLE e; DROP TABLE f; DROP TABLE g; DROP TABLE h;")
 		})
+		It("Will not start next batch after error during resize single data file restore", func() {
+			command := exec.Command("tar", "-xzf", "resources/4-segment-db-single-backup-dir.tar.gz", "-C", backupDir)
+			mustRunCommand(command)
+			gprestoreCmd := exec.Command(gprestorePath,
+				"--timestamp", "20240730085053",
+				"--redirect-db", "restoredb",
+				"--backup-dir", path.Join(backupDir, "4-segment-db-single-backup-dir"),
+				"--resize-cluster", "--on-error-continue", "--metadata-only")
+			_, err := gprestoreCmd.CombinedOutput()
+			Expect(err).To(Not(HaveOccurred()))
+			testhelper.AssertQueryRuns(restoreConn, "ALTER TABLE a ADD COLUMN c text NOT NULL; ALTER TABLE b ADD COLUMN c text NOT NULL; ALTER TABLE c ADD COLUMN c text NOT NULL;")
+			gprestoreCmd = exec.Command(gprestorePath,
+				"--timestamp", "20240730085053",
+				"--redirect-db", "restoredb",
+				"--backup-dir", path.Join(backupDir, "4-segment-db-single-backup-dir"),
+				"--resize-cluster", "--on-error-continue", "--data-only", "--verbose")
+			output, err := gprestoreCmd.CombinedOutput()
+			Expect(err).To(HaveOccurred())
+			Expect(string(output)).To(ContainSubstring(`null value in column "c" violates not-null constraint`))
+			Expect(string(output)).To(MatchRegexp(`Error loading data into table public.a: COPY a, line 1: "\d,a": ERROR: null value in column "c" violates not-null constraint`))
+			Expect(string(output)).To(MatchRegexp(`Error loading data into table public.b: COPY b, line 1: "\d,b": ERROR: null value in column "c" violates not-null constraint`))
+			Expect(string(output)).To(MatchRegexp(`Error loading data into table public.c: COPY c, line 1: "\d,c": ERROR: null value in column "c" violates not-null constraint`))
+			Expect(string(output)).To(Not(ContainSubstring(fmt.Sprintf(`"<SEG_DATA_DIR>/gpbackup_<SEGID>_20240730085053_pipe_%d_16411_1"`, gprestoreCmd.Process.Pid))))
+			Expect(string(output)).To(Not(ContainSubstring(fmt.Sprintf(`"<SEG_DATA_DIR>/gpbackup_<SEGID>_20240730085053_pipe_%d_16417_1"`, gprestoreCmd.Process.Pid))))
+			Expect(string(output)).To(Not(ContainSubstring(fmt.Sprintf(`"<SEG_DATA_DIR>/gpbackup_<SEGID>_20240730085053_pipe_%d_16423_1"`, gprestoreCmd.Process.Pid))))
+			Expect(string(output)).To(ContainSubstring(`Encountered 3 error(s) during table data restore`))
+			assertArtifactsCleaned("20240730085053")
+			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d;")
+		})
 	})
 	Describe("Restore indexes and constraints on exchanged partition tables", func() {
 		BeforeEach(func() {
