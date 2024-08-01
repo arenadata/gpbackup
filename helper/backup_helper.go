@@ -2,7 +2,6 @@ package helper
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -35,7 +34,6 @@ func doBackupAgent() error {
 
 	preloadCreatedPipes(oidList, *copyQueue)
 	var currentPipe string
-	var errBuf bytes.Buffer
 	/*
 	 * It is important that we create the reader before creating the writer
 	 * so that we establish a connection to the first pipe (created by gpbackup)
@@ -64,7 +62,7 @@ func doBackupAgent() error {
 			return err
 		}
 		if i == 0 {
-			pipeWriter, writeCmd, err = getBackupPipeWriter(&errBuf)
+			pipeWriter, writeCmd, err = getBackupPipeWriter()
 			if err != nil {
 				logError(fmt.Sprintf("Oid %d: Error encountered getting backup pipe writer: %v", oid, err))
 				return err
@@ -126,10 +124,10 @@ func getBackupPipeReader(currentPipe string) (io.Reader, io.ReadCloser, error) {
 	return reader, readHandle, nil
 }
 
-func getBackupPipeWriter(errBuf *bytes.Buffer) (pipe BackupPipeWriterCloser, writeCmd *exec.Cmd, err error) {
+func getBackupPipeWriter() (pipe BackupPipeWriterCloser, writeCmd *exec.Cmd, err error) {
 	var writeHandle io.WriteCloser
 	if *pluginConfigFile != "" {
-		writeCmd, writeHandle, err = startBackupPluginCommand(errBuf)
+		writeCmd, writeHandle, err = startBackupPluginCommand()
 	} else {
 		writeHandle, err = os.Create(*dataFile)
 	}
@@ -157,7 +155,7 @@ func getBackupPipeWriter(errBuf *bytes.Buffer) (pipe BackupPipeWriterCloser, wri
 	return nil, nil, fmt.Errorf("unknown compression type '%s' (compression level %d)", *compressionType, *compressionLevel)
 }
 
-func startBackupPluginCommand(errBuf *bytes.Buffer) (*exec.Cmd, io.WriteCloser, error) {
+func startBackupPluginCommand() (*exec.Cmd, io.WriteCloser, error) {
 	pluginConfig, err := utils.ReadPluginConfig(*pluginConfigFile)
 	if err != nil {
 		// error logging handled by calling functions
@@ -171,7 +169,7 @@ func startBackupPluginCommand(errBuf *bytes.Buffer) (*exec.Cmd, io.WriteCloser, 
 		// error logging handled by calling functions
 		return nil, nil, err
 	}
-	writeCmd.Stderr = errBuf
+	writeCmd.Stderr = &errBuf
 	err = writeCmd.Start()
 	if err != nil {
 		// error logging handled by calling functions

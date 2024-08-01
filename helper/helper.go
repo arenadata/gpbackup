@@ -2,6 +2,7 @@ package helper
 
 import (
 	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -24,6 +25,7 @@ import (
 
 var (
 	CleanupGroup  *sync.WaitGroup
+	errBuf        bytes.Buffer
 	version       string
 	wasTerminated bool
 	writeHandle   *os.File

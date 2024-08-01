@@ -2,7 +2,6 @@ package helper
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -48,7 +47,6 @@ type RestoreReader struct {
 	bufReader  *bufio.Reader
 	seekReader io.ReadSeeker
 	readerType ReaderType
-	errBuf     bytes.Buffer
 }
 
 func (r *RestoreReader) positionReader(pos uint64, oid int) error {
@@ -315,7 +313,6 @@ func doRestoreAgent() error {
 				if *singleDataFile {
 					lastByte[contentToRestore] += uint64(bytesRead)
 				}
-				errBuf := readers[contentToRestore].errBuf
 				if errBuf.Len() > 0 {
 					err = errors.Wrap(err, strings.Trim(errBuf.String(), "\x00"))
 				} else {
@@ -418,7 +415,7 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 	restoreReader := new(RestoreReader)
 
 	if *pluginConfigFile != "" {
-		readHandle, isSubset, err = startRestorePluginCommand(fileToRead, objToc, oidList, &restoreReader.errBuf)
+		readHandle, isSubset, err = startRestorePluginCommand(fileToRead, objToc, oidList)
 		if isSubset {
 			// Reader that operates on subset data
 			restoreReader.readerType = SUBSET
@@ -464,7 +461,7 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 	}
 
 	// Check that no error has occurred in plugin command
-	errMsg := strings.Trim(restoreReader.errBuf.String(), "\x00")
+	errMsg := strings.Trim(errBuf.String(), "\x00")
 	if len(errMsg) != 0 {
 		return nil, errors.New(errMsg)
 	}
@@ -507,7 +504,7 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 	return true
 }
 
-func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int, errBuffer *bytes.Buffer) (io.Reader, bool, error) {
+func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (io.Reader, bool, error) {
 	isSubset := false
 	pluginConfig, err := utils.ReadPluginConfig(*pluginConfigFile)
 	if err != nil {
@@ -539,7 +536,7 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 	if err != nil {
 		return nil, false, err
 	}
-	cmd.Stderr = errBuffer
+	cmd.Stderr = &errBuf
 
 	err = cmd.Start()
 	return readHandle, isSubset, err
