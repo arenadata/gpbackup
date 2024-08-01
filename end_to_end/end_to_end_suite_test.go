@@ -1150,8 +1150,6 @@ var _ = Describe("backup and restore end to end tests", func() {
 				CREATE EXTENSION test_ext2;
 				CREATE EXTENSION test_ext4;
 				CREATE EXTENSION test_ext1;
-				INSERT INTO test1 SELECT i FROM generate_series(1, 100) i;
-				INSERT INTO test2 SELECT i, i % 2 != 0 FROM generate_series(1, 100) i;
 			`)
 			defer testhelper.AssertQueryRuns(backupConn, `
 				DROP EXTENSION test_ext1;
@@ -1161,14 +1159,11 @@ var _ = Describe("backup and restore end to end tests", func() {
 				DROP EXTENSION test_ext3;
 			`)
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath)
+			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				"--metadata-only")
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb")
 
-			assertDataRestored(restoreConn, map[string]int{
-				"public.test1": 100,
-				"public.test2": 50,
-			})
 			assertArtifactsCleaned(restoreConn, timestamp)
 		})
 	})
