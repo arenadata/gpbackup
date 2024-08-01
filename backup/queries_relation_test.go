@@ -38,7 +38,7 @@ var _ = Describe("backup internal tests", func() {
 	})
 	Describe("GetAllViews", func() {
 		It("GetAllViews properly handles NULL view definitions", func() {
-			columnDefHeader := []string{"attrelid", "attnum", "name", "attnotnull", "atthasdef", "type", "encoding", "attstattarget", "storagetype", "defaultval", "comment", "privileges", "options", "fdwoptions", "collation", "securitylabelprovider", "securitylabel", "attgenerated", "isinherited"}
+			columnDefHeader := []string{"attrelid", "attnum", "name", "attnotnull", "atthasdef", "type", "encoding", "attstattarget", "storagetype", "defaultval", "comment", "privileges", "kind", "options", "fdwoptions", "collation", "securitylabelprovider", "securitylabel", "attgenerated", "isinherited"}
 			fakeColumnDef := sqlmock.NewRows(columnDefHeader)
 			mock.ExpectQuery(`SELECT (.*)`).WillReturnRows(fakeColumnDef)
 
