@@ -5,7 +5,6 @@ package restore
  */
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -26,7 +25,7 @@ var (
 	tableDelim = ","
 )
 
-func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
+func CopyTableIn(connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
 	whichConn = connectionPool.ValidateConnNum(whichConn)
 	copyCommand := ""
 	readFromDestinationCommand := "cat"
@@ -62,7 +61,7 @@ func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, ta
 		} else {
 			gplog.Verbose(`Executing "%s" on master`, query)
 		}
-		result, err := connectionPool.ExecContext(queryContext, query, whichConn)
+		result, err := connectionPool.Exec(query, whichConn)
 		if err != nil {
 			errStr := fmt.Sprintf("Error loading data into table %s", tableName)
 
@@ -80,7 +79,7 @@ func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, ta
 	return numRows, err
 }
 
-func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FilePathInfo, entry toc.CoordinatorDataEntry, tableName string, whichConn int, origSize int, destSize int) error {
+func restoreSingleTableData(fpInfo *filepath.FilePathInfo, entry toc.CoordinatorDataEntry, tableName string, whichConn int, origSize int, destSize int) error {
 	resizeCluster := MustGetFlagBool(options.RESIZE_CLUSTER)
 	destinationToRead := ""
 	if backupConfig.SingleDataFile || resizeCluster {
@@ -89,7 +88,7 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		destinationToRead = fpInfo.GetTableBackupFilePathForCopyCommand(entry.Oid, utils.GetPipeThroughProgram().Extension, backupConfig.SingleDataFile)
 	}
 	gplog.Debug("Reading from %s", destinationToRead)
-	numRowsRestored, err := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
+	numRowsRestored, err := CopyTableIn(connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
 	if err != nil {
 		return err
 	}
@@ -215,8 +214,6 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	var numErrors int32
 	var mutex = &sync.Mutex{}
 	panicChan := make(chan error)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // Make sure it's called to release resources even if no errors
 
 	for i := 0; i < connectionPool.NumConns; i++ {
 		workerPool.Add(1)
@@ -230,15 +227,8 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 
 			setGUCsForConnection(gucStatements, whichConn)
 			for entry := range tasks {
-				// Check if any error occurred in any other goroutines:
-				select {
-				case <-ctx.Done():
-					return // Error somewhere, terminate
-				default: // Default is must to avoid blocking
-				}
 				if wasTerminated {
 					dataProgressBar.(*pb.ProgressBar).NotPrint = true
-					cancel()
 					return
 				}
 				tableName := utils.MakeFQN(entry.Schema, entry.Name)
@@ -251,7 +241,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					err = TruncateTable(tableName, whichConn)
 				}
 				if err == nil {
-					err = restoreSingleTableData(ctx, &fpInfo, entry, tableName, whichConn, origSize, destSize)
+					err = restoreSingleTableData(&fpInfo, entry, tableName, whichConn, origSize, destSize)
 
 					if gplog.GetVerbosity() > gplog.LOGINFO {
 						// No progress bar at this log level, so we note table count here
@@ -266,7 +256,6 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					atomic.AddInt32(&numErrors, 1)
 					if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 						dataProgressBar.(*pb.ProgressBar).NotPrint = true
-						cancel()
 						return
 					} else if connectionPool.Version.AtLeast("6") && (backupConfig.SingleDataFile || MustGetFlagBool(options.RESIZE_CLUSTER)) {
 						// inform segment helpers to skip this entry
@@ -281,7 +270,6 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
 					if agentErr != nil {
 						gplog.Error(agentErr.Error())
-						cancel()
 						return
 					}
 				}
