@@ -524,7 +524,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			view.Oid = testutils.OidFromObjectName(connectionPool, "public", "simpleview", backup.TYPE_RELATION)
 			Expect(resultViews).To(HaveLen(1))
 			resultMetadata := resultMetadataMap[view.GetUniqueID()]
-			structmatcher.ExpectStructsToMatchExcluding(&view, &resultViews[0], "ColumnDefs")
+			structmatcher.ExpectStructsToMatch(&view, &resultViews[0])
 			structmatcher.ExpectStructsToMatch(&viewMetadata, &resultMetadata)
 		})
 		It("creates a view with options", func() {
@@ -540,7 +540,7 @@ SET SUBPARTITION TEMPLATE ` + `
 
 			view.Oid = testutils.OidFromObjectName(connectionPool, "public", "simpleview", backup.TYPE_RELATION)
 			Expect(resultViews).To(HaveLen(1))
-			structmatcher.ExpectStructsToMatchExcluding(&view, &resultViews[0], "ColumnDefs")
+			structmatcher.ExpectStructsToMatch(&view, &resultViews[0])
 		})
 	})
 	Describe("PrintMaterializedCreateViewStatements", func() {
@@ -564,7 +564,7 @@ SET SUBPARTITION TEMPLATE ` + `
 			view.Oid = testutils.OidFromObjectName(connectionPool, "public", "simplemview", backup.TYPE_RELATION)
 			Expect(resultViews).To(HaveLen(1))
 			resultMetadata := resultMetadataMap[view.GetUniqueID()]
-			structmatcher.ExpectStructsToMatchExcluding(&view, &resultViews[0], "ColumnDefs")
+			structmatcher.ExpectStructsToMatch(&view, &resultViews[0])
 			structmatcher.ExpectStructsToMatch(&viewMetadata, &resultMetadata)
 		})
 		It("creates a materialized view with options", func() {
@@ -579,7 +579,7 @@ SET SUBPARTITION TEMPLATE ` + `
 
 			view.Oid = testutils.OidFromObjectName(connectionPool, "public", "simplemview", backup.TYPE_RELATION)
 			Expect(resultViews).To(HaveLen(1))
-			structmatcher.ExpectStructsToMatchExcluding(&view, &resultViews[0], "ColumnDefs")
+			structmatcher.ExpectStructsToMatch(&view, &resultViews[0])
 		})
 	})
 	Describe("PrintCreateSequenceStatements", func() {

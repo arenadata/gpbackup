@@ -394,8 +394,6 @@ type View struct {
 	Tablespace     string
 	IsMaterialized bool
 	DistPolicy     string
-	NeedsDummy     bool
-	ColumnDefs     []ColumnDefinition
 }
 
 func (v View) GetMetadataEntry() (string, toc.MetadataEntry) {
@@ -427,7 +425,6 @@ func (v View) ObjectType() string {
 
 // This function retrieves both regular views and materialized views.
 func GetAllViews(connectionPool *dbconn.DBConn) []View {
-	columnDefs := GetColumnDefinitions(connectionPool)
 
 	// When querying the view definition using pg_get_viewdef(), the pg function
 	// obtains dependency locks that are not released until the transaction is
@@ -506,8 +503,8 @@ func GetAllViews(connectionPool *dbconn.DBConn) []View {
 		if result.IsMaterialized {
 			result.DistPolicy = distPolicies[result.Oid]
 		}
-		result.ColumnDefs = columnDefs[result.Oid]
 		verifiedResults = append(verifiedResults, result)
+
 	}
 
 	return verifiedResults

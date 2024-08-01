@@ -85,7 +85,13 @@ type Constraint struct {
 }
 
 func (c Constraint) GetMetadataEntry() (string, toc.MetadataEntry) {
-	return "postdata",
+	var tocSection string
+	if c.Def.Valid && !strings.Contains(strings.ToUpper(c.Def.String), "NOT VALID") {
+		tocSection = "predata"
+	} else {
+		tocSection = "postdata"
+	}
+	return tocSection,
 		toc.MetadataEntry{
 			Schema:          c.Schema,
 			Name:            c.Name,
