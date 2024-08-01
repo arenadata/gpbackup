@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -245,7 +244,6 @@ func getOidListFromFile(oidFileName string) ([]int, error) {
 		num, _ := strconv.Atoi(oid)
 		oidList[i] = num
 	}
-	sort.Ints(oidList)
 	return oidList, nil
 }
 
