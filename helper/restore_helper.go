@@ -348,9 +348,9 @@ func doRestoreAgent() error {
 
 	LoopEnd:
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, currentPipe))
-		err = flushAndCloseRestoreWriter(currentPipe, tableOid)
-		if err != nil {
-			logVerbose(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, err))
+		errPipe := flushAndCloseRestoreWriter(currentPipe, tableOid)
+		if errPipe != nil {
+			logVerbose(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, errPipe))
 		}
 
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
@@ -367,7 +367,7 @@ func doRestoreAgent() error {
 		}
 
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: Attempt to delete pipe %s", tableOid, batchNum, currentPipe))
-		errPipe := deletePipe(currentPipe)
+		errPipe = deletePipe(currentPipe)
 		if errPipe != nil {
 			logError("Oid %d, Batch %d: Failed to remove pipe %s: %v", tableOid, batchNum, currentPipe, errPipe)
 		}
