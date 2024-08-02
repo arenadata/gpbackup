@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
@@ -197,7 +198,7 @@ func createDatabase(metadataFilename string) {
 		dbName = quotedDBName
 		statements = toc.SubstituteRedirectDatabaseInStatements(statements, backupConfig.DatabaseName, quotedDBName)
 	}
-	numErrors := ExecuteRestoreMetadataStatements(statements, "", nil, utils.PB_NONE, false)
+	numErrors := ExecuteRestoreMetadataStatements("global", statements, "", nil, utils.PB_NONE, false)
 
 	if numErrors > 0 {
 		gplog.Info("Database creation completed with failures for: %s", dbName)
@@ -219,7 +220,7 @@ func restoreGlobal(metadataFilename string) {
 		statements = toc.SubstituteRedirectDatabaseInStatements(statements, backupConfig.DatabaseName, quotedDBName)
 	}
 	statements = toc.RemoveActiveRole(connectionPool.User, statements)
-	numErrors := ExecuteRestoreMetadataStatements(statements, "Global objects", nil, utils.PB_VERBOSE, false)
+	numErrors := ExecuteRestoreMetadataStatements("global", statements, "Global objects", nil, utils.PB_VERBOSE, false)
 
 	if numErrors > 0 {
 		gplog.Info("Global database metadata restore completed with failures")
@@ -306,7 +307,7 @@ func restorePredata(metadataFilename string) {
 	progressBar.Start()
 
 	RestoreSchemas(schemaStatements, progressBar)
-	executeInParallel := connectionPool.NumConns > 2 && !MustGetFlagBool(options.ON_ERROR_CONTINUE)
+	executeInParallel := connectionPool.NumConns > 1 && !MustGetFlagBool(options.ON_ERROR_CONTINUE)
 	if executeInParallel {
 		// Batch statements by tier to allow more aggressive parallelization by cohort downstream.
 		first, tiered, last := BatchPredataStatements(statements)
@@ -315,7 +316,7 @@ func restorePredata(metadataFilename string) {
 		// Wrap each of the statement batches in a commit to avoid the overhead of 2-phase commits.
 		// This dramatically reduces runtime of large metadata restores.
 		connectionPool.MustBegin(0)
-		numErrors = ExecuteRestoreMetadataStatements(first, "Pre-data objects", progressBar, utils.PB_VERBOSE, false)
+		numErrors = ExecuteRestoreMetadataStatements("predata", first, "Pre-data objects", progressBar, utils.PB_VERBOSE, false)
 		connectionPool.MustCommit(0)
 
 		var t uint32 = 1
@@ -331,7 +332,7 @@ func restorePredata(metadataFilename string) {
 			}
 			txMutex.Unlock()
 
-			numErrors += ExecuteRestoreMetadataStatements(tiered[t], "Pre-data objects", progressBar, utils.PB_VERBOSE, true)
+			numErrors += ExecuteRestoreMetadataStatements("predata", tiered[t], "Pre-data objects", progressBar, utils.PB_VERBOSE, true)
 			t++
 			// Connections are individually committed/rolled back as they finish to avoid lock
 			// contention causing hangs. Ideally there will be no such contention, but this is done
@@ -339,7 +340,7 @@ func restorePredata(metadataFilename string) {
 		}
 		gplog.Debug("Restoring predata metadata tier: %d", len(tiered)+1)
 		connectionPool.MustBegin(0)
-		numErrors += ExecuteRestoreMetadataStatements(last, "Pre-data objects", progressBar, utils.PB_VERBOSE, false)
+		numErrors += ExecuteRestoreMetadataStatements("predata", last, "Pre-data objects", progressBar, utils.PB_VERBOSE, false)
 		connectionPool.MustCommit(0)
 	} else {
 		if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
@@ -348,7 +349,7 @@ func restorePredata(metadataFilename string) {
 			// the perf hit.
 			connectionPool.MustBegin(0)
 		}
-		numErrors = ExecuteRestoreMetadataStatements(statements, "Pre-data objects", progressBar, utils.PB_VERBOSE, false)
+		numErrors = ExecuteRestoreMetadataStatements("predata", statements, "Pre-data objects", progressBar, utils.PB_VERBOSE, false)
 		if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 			connectionPool.Commit(0)
 		}
@@ -391,7 +392,7 @@ func restoreSequenceValues(metadataFilename string) {
 	} else {
 		progressBar := utils.NewProgressBar(len(sequenceValueStatements), "Sequence values restored: ", utils.PB_VERBOSE)
 		progressBar.Start()
-		numErrors = ExecuteRestoreMetadataStatements(sequenceValueStatements, "Sequence values", progressBar, utils.PB_VERBOSE, connectionPool.NumConns > 1)
+		numErrors = ExecuteRestoreMetadataStatements("data", sequenceValueStatements, "Sequence values", progressBar, utils.PB_VERBOSE, connectionPool.NumConns > 1)
 		progressBar.Finish()
 	}
 
@@ -514,9 +515,9 @@ func restorePostdata(metadataFilename string) {
 	progressBar := utils.NewProgressBar(len(statements), "Post-data objects restored: ", utils.PB_VERBOSE)
 	progressBar.Start()
 
-	numErrors := ExecuteRestoreMetadataStatements(firstBatch, "", progressBar, utils.PB_VERBOSE, connectionPool.NumConns > 1)
-	numErrors += ExecuteRestoreMetadataStatements(secondBatch, "", progressBar, utils.PB_VERBOSE, connectionPool.NumConns > 1)
-	numErrors += ExecuteRestoreMetadataStatements(thirdBatch, "", progressBar, utils.PB_VERBOSE, connectionPool.NumConns > 1)
+	numErrors := ExecuteRestoreMetadataStatements("postdata", firstBatch, "", progressBar, utils.PB_VERBOSE, connectionPool.NumConns > 1)
+	numErrors += ExecuteRestoreMetadataStatements("postdata", secondBatch, "", progressBar, utils.PB_VERBOSE, connectionPool.NumConns > 1)
+	numErrors += ExecuteRestoreMetadataStatements("postdata", thirdBatch, "", progressBar, utils.PB_VERBOSE, connectionPool.NumConns > 1)
 	progressBar.Finish()
 
 	if wasTerminated {
@@ -539,7 +540,7 @@ func restoreStatistics() {
 
 	statements := GetRestoreMetadataStatementsFiltered("statistics", statisticsFilename, []string{}, []string{}, filters)
 	editStatementsRedirectSchema(statements, opts.RedirectSchema)
-	numErrors := ExecuteRestoreMetadataStatements(statements, "Table statistics", nil, utils.PB_VERBOSE, false)
+	numErrors := ExecuteRestoreMetadataStatements("statistics", statements, "Table statistics", nil, utils.PB_VERBOSE, false)
 
 	if numErrors > 0 {
 		gplog.Info("Query planner statistics restore completed with failures")
@@ -568,47 +569,8 @@ func runAnalyze(filteredDataEntries map[string][]toc.CoordinatorDataEntry) {
 				Schema:    tableSchema,
 				Name:      entry.Name,
 				Statement: analyzeCommand,
-				Tier:      []uint32{0, 0},
 			}
 			analyzeStatements = append(analyzeStatements, newAnalyzeStatement)
-		}
-	}
-
-	// Only GPDB 5+ has leaf partition stats merged up to the root
-	// automatically. Against GPDB 4.3, we must extract the root partitions
-	// from the leaf partition info and run ANALYZE ROOTPARTITION on the root
-	// partitions. These particular ANALYZE ROOTPARTITION statements should run
-	// last so add them to the end of the analyzeStatements list.
-	if connectionPool.Version.Is("4") {
-		// Create root partition set
-		partitionRootSet := map[string]toc.StatementWithType{}
-		for _, dataEntries := range filteredDataEntries {
-			for _, entry := range dataEntries {
-				if entry.PartitionRoot != "" {
-					tableSchema := entry.Schema
-					if opts.RedirectSchema != "" {
-						tableSchema = opts.RedirectSchema
-					}
-					rootFQN := utils.MakeFQN(tableSchema, entry.PartitionRoot)
-					analyzeCommand := fmt.Sprintf("ANALYZE ROOTPARTITION %s", rootFQN)
-					rootStatement := toc.StatementWithType{
-						Schema:    tableSchema,
-						Name:      entry.PartitionRoot,
-						Statement: analyzeCommand,
-						Tier:      []uint32{0, 0},
-					}
-
-					// use analyze command as map key, since struct isn't a valid key but statement
-					// encodes everything in it anyway
-					if _, ok := partitionRootSet[analyzeCommand]; !ok {
-						partitionRootSet[analyzeCommand] = rootStatement
-					}
-				}
-			}
-		}
-
-		for _, rootAnalyzeStatement := range partitionRootSet {
-			analyzeStatements = append(analyzeStatements, rootAnalyzeStatement)
 		}
 	}
 
@@ -629,7 +591,12 @@ func runAnalyze(filteredDataEntries map[string][]toc.CoordinatorDataEntry) {
 func DoTeardown() {
 	restoreFailed := false
 	defer func() {
-		DoCleanup(restoreFailed)
+		// If the restore was terminated, the signal handler will handle cleanup
+		if wasTerminated {
+			CleanupGroup.Wait()
+		} else {
+			DoCleanup(restoreFailed)
+		}
 
 		errorCode := gplog.GetErrorCode()
 		if errorCode == 0 {
@@ -672,7 +639,7 @@ func DoTeardown() {
 			return
 		}
 		reportFilename := globalFPInfo.GetRestoreReportFilePath(restoreStartTime)
-		origSize, destSize, _ := GetResizeClusterInfo()
+		origSize, destSize, _, _ := GetResizeClusterInfo()
 		report.WriteRestoreReportFile(reportFilename, globalFPInfo.Timestamp, restoreStartTime, connectionPool, version, origSize, destSize, errMsg)
 		report.EmailReport(globalCluster, globalFPInfo.Timestamp, reportFilename, "gprestore", !restoreFailed, backupConfig.DatabaseName)
 		if pluginConfig != nil {
@@ -735,28 +702,38 @@ func writeErrorTables(isMetadata bool) {
 }
 
 func DoCleanup(restoreFailed bool) {
+	cleanupTimeout := 60 * time.Second
+
 	defer func() {
 		if err := recover(); err != nil {
 			gplog.Warn("Encountered error during cleanup: %+v", err)
 		}
-		gplog.Verbose("Cleanup complete")
+		gplog.Info("Cleanup complete")
 		CleanupGroup.Done()
 	}()
 
-	gplog.Verbose("Beginning cleanup")
+	gplog.Info("Beginning cleanup")
 	if backupConfig != nil && (backupConfig.SingleDataFile || MustGetFlagBool(options.RESIZE_CLUSTER)) {
 		fpInfoList := GetBackupFPInfoListFromRestorePlan()
 		for _, fpInfo := range fpInfoList {
 			// Copy sessions must be terminated before cleaning up gpbackup_helper processes to avoid a potential deadlock
 			// If the terminate query is sent via a connection with an active COPY command, and the COPY's pipe is cleaned up, the COPY query will hang.
 			// This results in the DoCleanup function passed to the signal handler to never return, blocking the os.Exit call
-			if wasTerminated { // These should all end on their own in a successful restore
-				utils.TerminateHangingCopySessions(connectionPool, fpInfo, fmt.Sprintf("gprestore_%s_%s", fpInfo.Timestamp, restoreStartTime))
-			}
 
-			// We can have helper processes hanging around even without failures, so call this cleanup routine whether successful or not.
-			utils.CleanUpSegmentHelperProcesses(globalCluster, fpInfo, "restore")
-			utils.CleanUpHelperFilesOnAllHosts(globalCluster, fpInfo)
+			// All COPY commands should end on their own for a successful restore, however we cleanup any hanging COPY sessions here as a precaution
+			utils.TerminateHangingCopySessions(fpInfo, fmt.Sprintf("gprestore_%s_%s", fpInfo.Timestamp, restoreStartTime), cleanupTimeout, 5*time.Second)
+
+			// Ensure we don't leave anything behind on the segments
+			utils.CleanUpSegmentHelperProcesses(globalCluster, fpInfo, "restore", cleanupTimeout)
+			utils.CleanUpHelperFilesOnAllHosts(globalCluster, fpInfo, cleanupTimeout)
+
+			// Check gpbackup_helper errors here if restore was terminated
+			if wasTerminated {
+				err := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
+				if err != nil {
+					gplog.Error(err.Error())
+				}
+			}
 		}
 	}
 

@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
+var _ = Describe("Signal handler tests", func() {
 	BeforeEach(func() {
 		end_to_end_setup()
 		testhelper.AssertQueryRuns(backupConn, "CREATE table bigtable(id int unique); INSERT INTO bigtable SELECT generate_series(1,10000000)")
@@ -32,9 +32,10 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			cmd := exec.Command(gpbackupPath, args...)
 			go func() {
 				/*
-				 * We use a random delay for the sleep in this test (between 1.0s and 1.5s) so that
-				 * gpbackup will be interrupted at a different point in the backup process every time to help catch
-				 * timing issues with the cleanup.
+				* We use a random delay for the sleep in this test (between
+				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
+				* different point in the backup process every time to help
+				* catch timing issues with the cleanup.
 				 */
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
@@ -42,12 +43,13 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			}()
 			output, _ := cmd.CombinedOutput()
 			stdout := string(output)
-			timestamp, err := getBackupTimestamp(stdout)
-			Expect(err).ToNot(HaveOccurred())
-			assertArtifactsCleaned(backupConn, timestamp)
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
+			timestamp := getBackupTimestamp(stdout)
+			if timestamp != "" { // empty timestamp means backup was killed before generating timestamp
+				assertArtifactsCleaned(timestamp)
+			}
 		})
 		It("runs gpbackup with copy-queue-size and sends a SIGINT to ensure cleanup functions successfully", func() {
 			if useOldBackupVersion {
@@ -62,23 +64,23 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 0.5s and 0.8s) so that gpbackup will be interrupted at a
+				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-				time.Sleep(time.Duration(rng.Intn(300)+500) * time.Millisecond)
+				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
 			}()
 			output, _ := cmd.CombinedOutput()
 			stdout := string(output)
-			timestamp, err := getBackupTimestamp(stdout)
-			Expect(err).ToNot(HaveOccurred())
-			assertArtifactsCleaned(backupConn, timestamp)
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting backup process"))
-			Expect(stdout).To(ContainSubstring("Cleaning up segment agent processes"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
+			timestamp := getBackupTimestamp(stdout)
+			if timestamp != "" { // empty timestamp means backup was killed before generating timestamp
+				assertArtifactsCleaned(timestamp)
+			}
 		})
 		It("runs gpbackup and sends a SIGINT to ensure blocked LOCK TABLE query is canceled", func() {
 			if useOldBackupVersion {
@@ -123,12 +125,12 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			backupConn.MustExec("ROLLBACK")
 
 			stdout := string(output)
-			timestamp, err := getBackupTimestamp(stdout)
-			Expect(err).ToNot(HaveOccurred())
-			assertArtifactsCleaned(backupConn, timestamp)
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting backup process"))
+			Expect(stdout).To(ContainSubstring("Interrupt received while acquiring ACCESS SHARE locks on tables"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
+			timestamp := getBackupTimestamp(stdout)
+			assertArtifactsCleaned(timestamp)
 		})
 		It("runs gpbackup with single-data-file and sends a SIGINT to ensure blocked LOCK TABLE query is canceled", func() {
 			if useOldBackupVersion {
@@ -174,20 +176,21 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			backupConn.MustExec("ROLLBACK")
 
 			stdout := string(output)
-			timestamp, err := getBackupTimestamp(stdout)
-			Expect(err).ToNot(HaveOccurred())
-			assertArtifactsCleaned(backupConn, timestamp)
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting backup process"))
+			Expect(stdout).To(ContainSubstring("Interrupt received while acquiring ACCESS SHARE locks on tables"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
+			timestamp := getBackupTimestamp(stdout)
+			assertArtifactsCleaned(timestamp)
 		})
 		It("runs gprestore and sends a SIGINT to ensure cleanup functions successfully", func() {
 			if useOldBackupVersion {
 				Skip("This test is not needed for old backup versions")
 			}
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--backup-dir", backupDir,
 				"--single-data-file")
+			timestamp := getBackupTimestamp(string(output))
 			args := []string{
 				"--timestamp", timestamp,
 				"--redirect-db", "restoredb",
@@ -197,7 +200,7 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 1.0s and 1.5s) so that gprestore will be interrupted at a
+				* 0.5s and 1.5s) so that gprestore will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
@@ -205,23 +208,23 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
 			}()
-			output, _ := cmd.CombinedOutput()
+			output, _ = cmd.CombinedOutput()
 			stdout := string(output)
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting restore process"))
-			Expect(stdout).To(ContainSubstring("Cleaning up segment agent processes"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 		It("runs gprestore with copy-queue-size and sends a SIGINT to ensure cleanup functions successfully", func() {
 			if useOldBackupVersion {
 				Skip("This test is not needed for old backup versions")
 			}
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			outputBkp := gpbackup(gpbackupPath, backupHelperPath,
 				"--backup-dir", backupDir,
 				"--single-data-file")
+			timestampBkp := getBackupTimestamp(string(outputBkp))
 			args := []string{
-				"--timestamp", timestamp,
+				"--timestamp", timestampBkp,
 				"--redirect-db", "restoredb",
 				"--backup-dir", backupDir,
 				"--verbose",
@@ -230,7 +233,7 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 1.0s and 1.5s) so that gprestore will be interrupted at a
+				* 0.5s and 1.5s) so that gprestore will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
@@ -238,12 +241,12 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
 			}()
-			output, _ := cmd.CombinedOutput()
-			stdout := string(output)
-			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting restore process"))
-			Expect(stdout).To(ContainSubstring("Cleanup complete"))
-			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
-			assertArtifactsCleaned(restoreConn, timestamp)
+			outputRes, _ := cmd.CombinedOutput()
+			stdoutRes := string(outputRes)
+			Expect(stdoutRes).To(ContainSubstring("Received an interrupt signal, aborting restore process"))
+			Expect(stdoutRes).To(ContainSubstring("Cleanup complete"))
+			Expect(stdoutRes).To(Not(ContainSubstring("CRITICAL")))
+			assertArtifactsCleaned(timestampBkp)
 		})
 	})
 	Context("SIGTERM", func() {
@@ -259,7 +262,7 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 1.0s and 1.5s) so that gpbackup will be interrupted at a
+				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
@@ -269,12 +272,44 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			}()
 			output, _ := cmd.CombinedOutput()
 			stdout := string(output)
-			timestamp, err := getBackupTimestamp(stdout)
-			Expect(err).ToNot(HaveOccurred())
-			assertArtifactsCleaned(backupConn, timestamp)
 			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
+			timestamp := getBackupTimestamp(stdout)
+			if timestamp != "" { // empty timestamp means backup was killed before generating timestamp
+				assertArtifactsCleaned(timestamp)
+			}
+		})
+		It("runs gpbackup with copy-queue-size and sends a SIGTERM to ensure cleanup functions successfully", func() {
+			if useOldBackupVersion {
+				Skip("This test is not needed for old backup versions")
+			}
+			args := []string{"--dbname", "testdb",
+				"--backup-dir", backupDir,
+				"--single-data-file",
+				"--copy-queue-size", "4",
+				"--verbose"}
+			cmd := exec.Command(gpbackupPath, args...)
+			go func() {
+				/*
+				* We use a random delay for the sleep in this test (between
+				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
+				* different point in the backup process every time to help
+				* catch timing issues with the cleanup.
+				 */
+				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
+				_ = cmd.Process.Signal(unix.SIGTERM)
+			}()
+			output, _ := cmd.CombinedOutput()
+			stdout := string(output)
+			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting backup process"))
+			Expect(stdout).To(ContainSubstring("Cleanup complete"))
+			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
+			timestamp := getBackupTimestamp(stdout)
+			if timestamp != "" { // empty timestamp means backup was killed before generating timestamp
+				assertArtifactsCleaned(timestamp)
+			}
 		})
 		It("runs gpbackup and sends a SIGTERM to ensure blocked LOCK TABLE query is canceled", func() {
 			if useOldBackupVersion {
@@ -319,12 +354,12 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			backupConn.MustExec("ROLLBACK")
 
 			stdout := string(output)
-			timestamp, err := getBackupTimestamp(stdout)
-			Expect(err).ToNot(HaveOccurred())
-			assertArtifactsCleaned(backupConn, timestamp)
 			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting backup process"))
+			Expect(stdout).To(ContainSubstring("Interrupt received while acquiring ACCESS SHARE locks on tables"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
+			timestamp := getBackupTimestamp(stdout)
+			assertArtifactsCleaned(timestamp)
 		})
 		It("runs gpbackup with single-data-file and sends a SIGTERM to ensure blocked LOCK TABLE query is canceled", func() {
 			if useOldBackupVersion {
@@ -370,52 +405,22 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			backupConn.MustExec("ROLLBACK")
 
 			stdout := string(output)
-			timestamp, err := getBackupTimestamp(stdout)
-			Expect(err).ToNot(HaveOccurred())
-			assertArtifactsCleaned(backupConn, timestamp)
 			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
-		})
-		It("runs gpbackup with copy-queue-size and sends a SIGTERM to ensure cleanup functions successfully", func() {
-			if useOldBackupVersion {
-				Skip("This test is not needed for old backup versions")
-			}
-			args := []string{"--dbname", "testdb",
-				"--backup-dir", backupDir,
-				"--single-data-file",
-				"--copy-queue-size", "4",
-				"--verbose"}
-			cmd := exec.Command(gpbackupPath, args...)
-			go func() {
-				/*
-				* We use a random delay for the sleep in this test (between
-				* 1.0s and 1.5s) so that gpbackup will be interrupted at a
-				* different point in the backup process every time to help
-				* catch timing issues with the cleanup.
-				 */
-				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
-				_ = cmd.Process.Signal(unix.SIGTERM)
-			}()
-			output, _ := cmd.CombinedOutput()
-			stdout := string(output)
-			timestamp, err := getBackupTimestamp(stdout)
-			Expect(err).ToNot(HaveOccurred())
-			assertArtifactsCleaned(backupConn, timestamp)
-			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting backup process"))
-			Expect(stdout).To(ContainSubstring("Cleanup complete"))
-			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
+			timestamp := getBackupTimestamp(stdout)
+			assertArtifactsCleaned(timestamp)
 		})
 		It("runs gprestore and sends a SIGTERM to ensure cleanup functions successfully", func() {
 			if useOldBackupVersion {
 				Skip("This test is not needed for old backup versions")
 			}
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			outputBkp := gpbackup(gpbackupPath, backupHelperPath,
 				"--backup-dir", backupDir,
 				"--single-data-file")
+			timestampBkp := getBackupTimestamp(string(outputBkp))
 			args := []string{
-				"--timestamp", timestamp,
+				"--timestamp", timestampBkp,
 				"--redirect-db", "restoredb",
 				"--backup-dir", backupDir,
 				"--verbose"}
@@ -423,7 +428,7 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 1.0s and 1.5s) so that gprestore will be interrupted at a
+				* 0.5s and 1.5s) so that gprestore will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
@@ -431,22 +436,23 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
 			}()
-			output, _ := cmd.CombinedOutput()
-			stdout := string(output)
-			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting restore process"))
-			Expect(stdout).To(ContainSubstring("Cleanup complete"))
-			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
-			assertArtifactsCleaned(restoreConn, timestamp)
+			outputRes, _ := cmd.CombinedOutput()
+			stdoutRes := string(outputRes)
+			Expect(stdoutRes).To(ContainSubstring("Received a termination signal, aborting restore process"))
+			Expect(stdoutRes).To(ContainSubstring("Cleanup complete"))
+			Expect(stdoutRes).To(Not(ContainSubstring("CRITICAL")))
+			assertArtifactsCleaned(timestampBkp)
 		})
 		It("runs gprestore with copy-queue-size and sends a SIGTERM to ensure cleanup functions successfully", func() {
 			if useOldBackupVersion {
 				Skip("This test is not needed for old backup versions")
 			}
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			outputBkp := gpbackup(gpbackupPath, backupHelperPath,
 				"--backup-dir", backupDir,
 				"--single-data-file")
+			timestampBkp := getBackupTimestamp(string(outputBkp))
 			args := []string{
-				"--timestamp", timestamp,
+				"--timestamp", timestampBkp,
 				"--redirect-db", "restoredb",
 				"--backup-dir", backupDir,
 				"--verbose",
@@ -455,7 +461,7 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 			go func() {
 				/*
 				* We use a random delay for the sleep in this test (between
-				* 1.0s and 1.5s) so that gprestore will be interrupted at a
+				* 0.5s and 1.5s) so that gprestore will be interrupted at a
 				* different point in the backup process every time to help
 				* catch timing issues with the cleanup.
 				 */
@@ -463,12 +469,12 @@ var _ = Describe("Signal handler tests", FlakeAttempts(5), func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
 			}()
-			output, _ := cmd.CombinedOutput()
-			stdout := string(output)
-			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting restore process"))
-			Expect(stdout).To(ContainSubstring("Cleanup complete"))
-			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
-			assertArtifactsCleaned(restoreConn, timestamp)
+			outputRes, _ := cmd.CombinedOutput()
+			stdoutRes := string(outputRes)
+			Expect(stdoutRes).To(ContainSubstring("Received a termination signal, aborting restore process"))
+			Expect(stdoutRes).To(ContainSubstring("Cleanup complete"))
+			Expect(stdoutRes).To(Not(ContainSubstring("CRITICAL")))
+			assertArtifactsCleaned(timestampBkp)
 		})
 	})
 })

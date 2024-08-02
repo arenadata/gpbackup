@@ -7,14 +7,11 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/greenplum-db/gp-common-go-libs/gplog"
-	"github.com/greenplum-db/gp-common-go-libs/operating"
-	"github.com/jmoiron/sqlx"
-	"github.com/pkg/errors"
-
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
+	"github.com/greenplum-db/gp-common-go-libs/gplog"
+	"github.com/greenplum-db/gp-common-go-libs/operating"
 	"github.com/greenplum-db/gp-common-go-libs/structmatcher"
 	"github.com/greenplum-db/gp-common-go-libs/testhelper"
 	"github.com/greenplum-db/gpbackup/backup"
@@ -22,6 +19,8 @@ import (
 	"github.com/greenplum-db/gpbackup/restore"
 	"github.com/greenplum-db/gpbackup/toc"
 	"github.com/greenplum-db/gpbackup/utils"
+	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
 	"github.com/sergi/go-diff/diffmatchpatch"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -528,18 +527,6 @@ func GetUserByID(connectionPool *dbconn.DBConn, oid uint32) string {
 func CreateSecurityLabelIfGPDB6(connectionPool *dbconn.DBConn, objectType string, objectName string) {
 	if connectionPool.Version.AtLeast("6") {
 		testhelper.AssertQueryRuns(connectionPool, fmt.Sprintf("SECURITY LABEL FOR dummy ON %s %s IS 'unclassified';", objectType, objectName))
-	}
-}
-
-func SkipIfNot4(connectionPool *dbconn.DBConn) {
-	if connectionPool.Version.AtLeast("5") {
-		Skip("Test only applicable to GPDB4")
-	}
-}
-
-func SkipIfBefore5(connectionPool *dbconn.DBConn) {
-	if connectionPool.Version.Before("5") {
-		Skip("Test only applicable to GPDB5 and above")
 	}
 }
 

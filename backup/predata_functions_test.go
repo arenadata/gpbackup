@@ -356,7 +356,7 @@ $_$`)
 		BeforeEach(func() {
 			aggDefinition = backup.Aggregate{Oid: 1, Schema: "public", Name: "agg_name", Arguments: sql.NullString{String: "integer, integer", Valid: true}, IdentArgs: sql.NullString{String: "integer, integer", Valid: true}, TransitionFunction: 1, TransitionDataType: "integer", InitValIsNull: true, MInitValIsNull: true}
 			emptyMetadata = backup.ObjectMetadata{}
-			aggMetadata = testutils.DefaultMetadata(toc.OBJ_AGGREGATE, false, true, true, true)
+			aggMetadata = testutils.DefaultMetadata(toc.OBJ_AGGREGATE, true, true, true, true)
 		})
 
 		It("prints an aggregate definition for an unordered aggregate with no optional specifications", func() {
@@ -579,6 +579,9 @@ $_$`)
 	STYPE = integer
 );`, "COMMENT ON AGGREGATE public.agg_name(integer, integer) IS 'This is an aggregate comment.';",
 				"ALTER AGGREGATE public.agg_name(integer, integer) OWNER TO testrole;",
+				`REVOKE ALL ON FUNCTION public.agg_name(integer, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.agg_name(integer, integer) FROM testrole;
+GRANT ALL ON FUNCTION public.agg_name(integer, integer) TO testrole;`,
 				"SECURITY LABEL FOR dummy ON AGGREGATE public.agg_name(integer, integer) IS 'unclassified';"}
 			testutils.AssertBufferContents(tocfile.PredataEntries, buffer, expectedStatements...)
 		})
@@ -593,6 +596,9 @@ $_$`)
 );`,
 				"COMMENT ON AGGREGATE public.agg_name(*) IS 'This is an aggregate comment.';",
 				"ALTER AGGREGATE public.agg_name(*) OWNER TO testrole;",
+				`REVOKE ALL ON FUNCTION public.agg_name(*) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.agg_name(*) FROM testrole;
+GRANT ALL ON FUNCTION public.agg_name(*) TO testrole;`,
 				"SECURITY LABEL FOR dummy ON AGGREGATE public.agg_name(*) IS 'unclassified';"}
 			testutils.AssertBufferContents(tocfile.PredataEntries, buffer, expectedStatements...)
 		})
@@ -621,6 +627,7 @@ $_$`)
 );`, expected),
 					"COMMENT ON AGGREGATE public.agg_name(*) IS 'This is an aggregate comment.';",
 					"ALTER AGGREGATE public.agg_name(*) OWNER TO testrole;",
+					"REVOKE ALL ON FUNCTION public.agg_name(*) FROM PUBLIC;\nREVOKE ALL ON FUNCTION public.agg_name(*) FROM testrole;\nGRANT ALL ON FUNCTION public.agg_name(*) TO testrole;",
 					"SECURITY LABEL FOR dummy ON AGGREGATE public.agg_name(*) IS 'unclassified';"}
 				testutils.AssertBufferContents(tocfile.PredataEntries, buffer, expectedStatements...)
 			},
@@ -836,10 +843,8 @@ ALTER FUNCTION pg_catalog.plperl_validator(oid) OWNER TO testrole;`,
 				"ALTER FUNCTION pg_catalog.plpython_call_handler() OWNER TO testrole;",
 				"COMMENT ON LANGUAGE plpythonu IS 'This is a language comment.';",
 			}
-			if connectionPool.Version.AtLeast("5") {
-				// Languages have implicit owners in 4.3, but do not support ALTER OWNER
-				expectedStatements = append(expectedStatements, "ALTER LANGUAGE plpythonu OWNER TO testrole;")
-			}
+
+			expectedStatements = append(expectedStatements, "ALTER LANGUAGE plpythonu OWNER TO testrole;")
 			expectedStatements = append(expectedStatements, `REVOKE ALL ON LANGUAGE plpythonu FROM PUBLIC;
 REVOKE ALL ON LANGUAGE plpythonu FROM testrole;
 GRANT ALL ON LANGUAGE plpythonu TO testrole;`,
@@ -864,10 +869,8 @@ GRANT ALL ON LANGUAGE plpythonu TO testrole;`,
 				"ALTER FUNCTION pg_catalog.plperl_call_handler() OWNER TO owner%percentage;\nALTER FUNCTION pg_catalog.plperl_inline_handler(internal) OWNER TO owner%percentage;\nALTER FUNCTION pg_catalog.plperl_validator(oid) OWNER TO owner%percentage;",
 				`COMMENT ON LANGUAGE plperl IS 'This is a language comment.';`,
 			}
-			if connectionPool.Version.AtLeast("5") {
-				// Languages have implicit owners in 4.3, but do not support ALTER OWNER
-				expectedStatements = append(expectedStatements, `ALTER LANGUAGE plperl OWNER TO testrole;`)
-			}
+
+			expectedStatements = append(expectedStatements, `ALTER LANGUAGE plperl OWNER TO testrole;`)
 			expectedStatements = append(expectedStatements, `REVOKE ALL ON LANGUAGE plperl FROM PUBLIC;
 REVOKE ALL ON LANGUAGE plperl FROM testrole;
 GRANT ALL ON LANGUAGE plperl TO testrole;`,

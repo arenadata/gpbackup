@@ -53,7 +53,7 @@ var (
 	isResizeRestore  *bool
 	origSize         *int
 	destSize         *int
-	replicationFile  *string
+	verbosity        *int
 )
 
 func DoHelper() {
@@ -77,15 +77,22 @@ func DoHelper() {
 	}
 	if err != nil {
 		// error logging handled in doBackupAgent and doRestoreAgent
-		handle, _ := utils.OpenFileForWrite(fmt.Sprintf("%s_error", *pipeFile))
-		_ = handle.Close()
+		errFile := fmt.Sprintf("%s_error", *pipeFile)
+		gplog.Debug("Writing error file %s", errFile)
+		handle, err := utils.OpenFileForWrite(errFile)
+		if err != nil {
+			logVerbose("Encountered error creating error file: %v", err)
+		}
+		err = handle.Close()
+		if err != nil {
+			logVerbose("Encountered error closing error file: %v", err)
+		}
 	}
 }
 
 func InitializeGlobals() {
 	CleanupGroup = &sync.WaitGroup{}
 	CleanupGroup.Add(1)
-	gplog.InitializeLogging("gpbackup_helper", "")
 
 	backupAgent = flag.Bool("backup-agent", false, "Use gpbackup_helper as an agent for backup")
 	content = flag.Int("content", -2, "Content ID of the corresponding segment")
@@ -105,8 +112,13 @@ func InitializeGlobals() {
 	isResizeRestore = flag.Bool("resize-cluster", false, "Used with resize cluster restore.")
 	origSize = flag.Int("orig-seg-count", 0, "Used with resize restore.  Gives the segment count of the backup.")
 	destSize = flag.Int("dest-seg-count", 0, "Used with resize restore.  Gives the segment count of the current cluster.")
-	replicationFile = flag.String("replication-file", "", "Used with resize restore.  Gives the list of replicated tables.")
+	verbosity = flag.Int("verbosity", gplog.LOGINFO, "Log file verbosity")
 
+	flag.Parse()
+	if *printVersion {
+		fmt.Printf("gpbackup_helper version %s\n", version)
+		os.Exit(0)
+	}
 	if *onErrorContinue && !*restoreAgent {
 		fmt.Printf("--on-error-continue flag can only be used with --restore-agent flag")
 		os.Exit(1)
@@ -115,14 +127,12 @@ func InitializeGlobals() {
 		fmt.Printf("Both --orig-seg-count and --dest-seg-count must be used during a resize restore")
 		os.Exit(1)
 	}
-	flag.Parse()
-	if *printVersion {
-		fmt.Printf("gpbackup_helper version %s\n", version)
-		os.Exit(0)
-	}
 	operating.InitializeSystemFunctions()
 
 	pipesMap = make(map[string]bool, 0)
+
+	gplog.InitializeLogging("gpbackup_helper", "")
+	gplog.SetLogFileVerbosity(*verbosity)
 }
 
 func InitializeSignalHandler() {
@@ -168,7 +178,7 @@ func InitializeSignalHandler() {
  */
 
 func createPipe(pipe string) error {
-	err := unix.Mkfifo(pipe, 0777)
+	err := unix.Mkfifo(pipe, 0700)
 	if err != nil {
 		return err
 	}
@@ -188,11 +198,36 @@ func deletePipe(pipe string) error {
 }
 
 // Gpbackup creates the first n pipes. Record these pipes.
-func preloadCreatedPipes(oidList []int, queuedPipeCount int) {
+func preloadCreatedPipesForBackup(oidList []int, queuedPipeCount int) {
 	for i := 0; i < queuedPipeCount; i++ {
 		pipeName := fmt.Sprintf("%s_%d", *pipeFile, oidList[i])
 		pipesMap[pipeName] = true
 	}
+}
+
+func preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int) {
+	for i := 0; i < queuedPipeCount; i++ {
+		pipeName := fmt.Sprintf("%s_%d_%d", *pipeFile, oidWithBatchList[i].oid, oidWithBatchList[i].batch)
+		pipesMap[pipeName] = true
+	}
+}
+
+func getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
+	oidStr, err := operating.System.ReadFile(oidFileName)
+	if err != nil {
+		logError(fmt.Sprintf("Error encountered reading oid batch list from file: %v", err))
+		return nil, err
+	}
+	oidStrList := strings.Split(strings.TrimSpace(fmt.Sprintf("%s", oidStr)), "\n")
+	oidList := make([]oidWithBatch, len(oidStrList))
+	for i, entry := range oidStrList {
+		oidWithBatchEntry := strings.Split(entry, ",")
+		oidNum, _ := strconv.Atoi(oidWithBatchEntry[0])
+		batchNum, _ := strconv.Atoi(oidWithBatchEntry[1])
+
+		oidList[i] = oidWithBatch{oid: oidNum, batch: batchNum}
+	}
+	return oidList, nil
 }
 
 func getOidListFromFile(oidFileName string) ([]int, error) {
@@ -212,13 +247,14 @@ func getOidListFromFile(oidFileName string) ([]int, error) {
 
 func flushAndCloseRestoreWriter(pipeName string, oid int) error {
 	if writer != nil {
+		writer.Write([]byte{}) // simulate writer connected in case of error
 		err := writer.Flush()
 		if err != nil {
 			logError("Oid %d: Failed to flush pipe %s", oid, pipeName)
 			return err
 		}
 		writer = nil
-		log("Oid %d: Successfully flushed pipe %s", oid, pipeName)
+		logVerbose("Oid %d: Successfully flushed pipe %s", oid, pipeName)
 	}
 	if writeHandle != nil {
 		err := writeHandle.Close()
@@ -227,7 +263,7 @@ func flushAndCloseRestoreWriter(pipeName string, oid int) error {
 			return err
 		}
 		writeHandle = nil
-		log("Oid %d: Successfully closed pipe handle", oid)
+		logVerbose("Oid %d: Successfully closed pipe handle", oid)
 	}
 	return nil
 }
@@ -244,19 +280,27 @@ func DoCleanup() {
 		 * success, so we create an error file and check for its presence in
 		 * gprestore after the COPYs are finished.
 		 */
-		handle, _ := utils.OpenFileForWrite(fmt.Sprintf("%s_error", *pipeFile))
-		_ = handle.Close()
+		errFile := fmt.Sprintf("%s_error", *pipeFile)
+		gplog.Debug("Writing error file %s", errFile)
+		handle, err := utils.OpenFileForWrite(errFile)
+		if err != nil {
+			logVerbose("Encountered error creating error file: %v", err)
+		}
+		err = handle.Close()
+		if err != nil {
+			logVerbose("Encountered error closing error file: %v", err)
+		}
 	}
 	err := flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
 	if err != nil {
-		log("Encountered error during cleanup: %v", err)
+		logVerbose("Encountered error during cleanup: %v", err)
 	}
 
 	for pipeName, _ := range pipesMap {
-		log("Removing pipe %s", pipeName)
+		logVerbose("Removing pipe %s", pipeName)
 		err = deletePipe(pipeName)
 		if err != nil {
-			log("Encountered error removing pipe %s: %v", pipeName, err)
+			logVerbose("Encountered error removing pipe %s: %v", pipeName, err)
 		}
 	}
 
@@ -264,20 +308,25 @@ func DoCleanup() {
 	for _, skipFile := range skipFiles {
 		err = utils.RemoveFileIfExists(skipFile)
 		if err != nil {
-			log("Encountered error during cleanup skip files: %v", err)
+			logVerbose("Encountered error during cleanup skip files: %v", err)
 		}
 	}
-	log("Cleanup complete")
+	logVerbose("Cleanup complete")
 }
 
-func log(s string, v ...interface{}) {
+func logInfo(s string, v ...interface{}) {
 	s = fmt.Sprintf("Segment %d: %s", *content, s)
-	gplog.Verbose(s, v...)
+	gplog.Info(s, v...)
 }
 
-func logWarning(s string, v ...interface{}) {
+func logWarn(s string, v ...interface{}) {
 	s = fmt.Sprintf("Segment %d: %s", *content, s)
 	gplog.Warn(s, v...)
+}
+
+func logVerbose(s string, v ...interface{}) {
+	s = fmt.Sprintf("Segment %d: %s", *content, s)
+	gplog.Verbose(s, v...)
 }
 
 func logError(s string, v ...interface{}) {
