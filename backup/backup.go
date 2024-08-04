@@ -290,6 +290,9 @@ func backupPredata(metadataFile *utils.FileWithByteCount, tables []Table, tableO
 }
 
 func backupData(tables []Table) {
+	if wasTerminated {
+		return
+	}
 	if len(tables) == 0 {
 		// No incremental data changes to backup
 		gplog.Info("No tables to backup")
@@ -311,7 +314,7 @@ func backupData(tables []Table) {
 		initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, globalFPInfo)
 		// Do not pass through the --on-error-continue flag or the resizeClusterMap because neither apply to gpbackup
 		utils.StartGpbackupHelpers(globalCluster, globalFPInfo, "--backup-agent",
-			MustGetFlagString(options.PLUGIN_CONFIG), compressStr, false, false, &wasTerminated, initialPipes, true, false, 0, 0)
+			MustGetFlagString(options.PLUGIN_CONFIG), compressStr, false, false, &wasTerminated, initialPipes, true, false, 0, 0, gplog.GetVerbosity())
 	}
 	gplog.Info("Writing data to file")
 	rowsCopiedMaps := BackupDataForAllTables(tables)
@@ -361,7 +364,12 @@ func backupStatistics(tables []Table) {
 func DoTeardown() {
 	backupFailed := false
 	defer func() {
-		DoCleanup(backupFailed)
+		// If the backup was terminated, the signal handler will handle cleanup
+		if wasTerminated {
+			CleanupGroup.Wait()
+		} else {
+			DoCleanup(backupFailed)
+		}
 
 		errorCode := gplog.GetErrorCode()
 		if errorCode == 0 {
@@ -453,6 +461,8 @@ func DoTeardown() {
 }
 
 func DoCleanup(backupFailed bool) {
+	cleanupTimeout := 60 * time.Second
+
 	defer func() {
 		if err := recover(); err != nil {
 			gplog.Warn("Encountered error during cleanup: %v", err)
@@ -460,53 +470,60 @@ func DoCleanup(backupFailed bool) {
 		if connectionPool != nil {
 			connectionPool.Close()
 		}
-		gplog.Verbose("Cleanup complete")
+		gplog.Info("Cleanup complete")
 		CleanupGroup.Done()
 	}()
 
-	gplog.Verbose("Beginning cleanup")
+	gplog.Info("Beginning cleanup")
 	if connectionPool != nil {
 		cancelBlockedQueries(globalFPInfo.Timestamp)
 	}
-	if globalFPInfo.Timestamp != "" {
-		if MustGetFlagBool(options.SINGLE_DATA_FILE) {
-			// Copy sessions must be terminated before cleaning up gpbackup_helper processes to avoid a potential deadlock
-			// If the terminate query is sent via a connection with an active COPY command, and the COPY's pipe is cleaned up, the COPY query will hang.
-			// This results in the DoCleanup function passed to the signal handler to never return, blocking the os.Exit call
-			if wasTerminated {
-				// It is possible for the COPY command to become orphaned if an agent process is stopped
-				utils.TerminateHangingCopySessions(connectionPool, globalFPInfo, fmt.Sprintf("gpbackup_%s", globalFPInfo.Timestamp))
-			}
-			// We can have helper processes hanging around even without failures, so call this cleanup routine whether successful or not.
-			utils.CleanUpSegmentHelperProcesses(globalCluster, globalFPInfo, "backup")
-			utils.CleanUpHelperFilesOnAllHosts(globalCluster, globalFPInfo)
-		}
+	if globalFPInfo.Timestamp != "" && MustGetFlagBool(options.SINGLE_DATA_FILE) {
+		// Copy sessions must be terminated before cleaning up gpbackup_helper processes to avoid a potential deadlock
+		// If the terminate query is sent via a connection with an active COPY command, and the COPY's pipe is cleaned up, the COPY query will hang.
+		// This results in the DoCleanup function passed to the signal handler to never return, blocking the os.Exit call
 
-		// The gpbackup_history entry is written to the DB with an "In Progress" status and a preliminary EndTime value
-		// very early on.  If we get to cleanup and the backup succeeded, mark it as a success, otherwise mark it as a
-		// failure; in either case, update the end time to the actual value. Between our signal handler and recovering
-		// panics, there should be no way for gpbackup to exit that leaves the entry in the initial status.
+		// All COPY commands should end on their own for a successful restore, however we cleanup any hanging COPY sessions here as a precaution
+		utils.TerminateHangingCopySessions(globalFPInfo, fmt.Sprintf("gpbackup_%s", globalFPInfo.Timestamp), cleanupTimeout, 5*time.Second)
 
-		if !MustGetFlagBool(options.NO_HISTORY) {
-			var statusString string
-			if backupFailed {
-				statusString = history.BackupStatusFailed
-			} else {
-				statusString = history.BackupStatusSucceed
-			}
-			historyDBName := globalFPInfo.GetBackupHistoryDatabasePath()
-			historyDB, err := history.InitializeHistoryDatabase(historyDBName)
+		// Ensure we don't leave anything behind on the segments
+		utils.CleanUpSegmentHelperProcesses(globalCluster, globalFPInfo, "backup", cleanupTimeout)
+		utils.CleanUpHelperFilesOnAllHosts(globalCluster, globalFPInfo, cleanupTimeout)
+
+		// Check gpbackup_helper errors here if backup was terminated
+		if wasTerminated {
+			err := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
 			if err != nil {
-				gplog.Error(fmt.Sprintf("Unable to update history database.  Error: %v", err))
-			} else {
-				_, err := historyDB.Exec(fmt.Sprintf("UPDATE backups SET status='%s', end_time='%s' WHERE timestamp='%s'", statusString, backupReport.BackupConfig.EndTime, globalFPInfo.Timestamp))
-				historyDB.Close()
-				if err != nil {
-					gplog.Error(fmt.Sprintf("Unable to update history database.  Error: %v", err))
-				}
+				gplog.Error(err.Error())
 			}
 		}
 	}
+
+	// The gpbackup_history entry is written to the DB with an "In Progress" status and a preliminary EndTime value
+	// very early on.  If we get to cleanup and the backup succeeded, mark it as a success, otherwise mark it as a
+	// failure; in either case, update the end time to the actual value. Between our signal handler and recovering
+	// panics, there should be no way for gpbackup to exit that leaves the entry in the initial status.
+
+	if !MustGetFlagBool(options.NO_HISTORY) {
+		var statusString string
+		if backupFailed {
+			statusString = history.BackupStatusFailed
+		} else {
+			statusString = history.BackupStatusSucceed
+		}
+		historyDBName := globalFPInfo.GetBackupHistoryDatabasePath()
+		historyDB, err := history.InitializeHistoryDatabase(historyDBName)
+		if err != nil {
+			gplog.Error(fmt.Sprintf("Unable to update history database.  Error: %v", err))
+		} else {
+			_, err := historyDB.Exec(fmt.Sprintf("UPDATE backups SET status='%s', end_time='%s' WHERE timestamp='%s'", statusString, backupReport.BackupConfig.EndTime, globalFPInfo.Timestamp))
+			historyDB.Close()
+			if err != nil {
+				gplog.Error(fmt.Sprintf("Unable to update history database.  Error: %v", err))
+			}
+		}
+	}
+
 	err := backupLockFile.Unlock()
 	if err != nil && backupLockFile != "" {
 		gplog.Warn("Failed to remove lock file %s.", backupLockFile)
@@ -585,7 +602,7 @@ func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionP
 		maxPipes = len(oidList)
 	}
 	for i := 0; i < maxPipes; i++ {
-		utils.CreateSegmentPipeOnAllHosts(oidList[i], c, fpInfo)
+		utils.CreateSegmentPipeOnAllHostsForBackup(oidList[i], c, fpInfo)
 	}
 	return maxPipes
 }

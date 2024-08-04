@@ -38,7 +38,7 @@ depend :
 	go mod download
 
 $(GINKGO) :
-	go install github.com/onsi/ginkgo/v2/ginkgo@v2.8.4
+	go install github.com/onsi/ginkgo/v2/ginkgo
 
 $(GOIMPORTS) :
 	go install golang.org/x/tools/cmd/goimports@latest
@@ -63,7 +63,6 @@ unit : $(GINKGO)
 	ginkgo $(GINKGO_FLAGS) $(SUBDIRS_HAS_UNIT) 2>&1
 
 unit_all_gpdb_versions : $(GINKGO)
-		TEST_GPDB_VERSION=4.3.999 ginkgo $(GINKGO_FLAGS) $(SUBDIRS_HAS_UNIT) 2>&1
 		TEST_GPDB_VERSION=5.999.0 ginkgo $(GINKGO_FLAGS) $(SUBDIRS_HAS_UNIT) 2>&1
 		TEST_GPDB_VERSION=6.999.0 ginkgo $(GINKGO_FLAGS) $(SUBDIRS_HAS_UNIT) 2>&1
 		TEST_GPDB_VERSION=7.999.0 ginkgo $(GINKGO_FLAGS) $(SUBDIRS_HAS_UNIT) 2>&1 # GPDB main
@@ -142,7 +141,7 @@ info-report:
 test-s3-local: build install
 	${PWD}/plugins/generate_minio_config.sh
 	mkdir -p /tmp/minio/gpbackup-s3-test
-	docker run -d --name s3-minio -p 9000:9000 -p 9001:9001 -v /tmp/minio:/data/minio quay.io/minio/minio server /data/minio --console-address ":9001"
+	docker run -d --name s3-minio --memory="2g" -p 9000:9000 -p 9001:9001 -v /tmp/minio:/data/minio quay.io/minio/minio server /data/minio --console-address ":9001"
 	sleep 2 # Wait for minio server to start up
 	${PWD}/plugins/plugin_test.sh $(BIN_DIR)/gpbackup_s3_plugin /tmp/minio_config.yaml
 	docker stop s3-minio

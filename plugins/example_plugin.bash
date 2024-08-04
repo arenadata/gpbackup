@@ -77,6 +77,11 @@ restore_data() {
   filename=`basename "$2"`
   timestamp_dir=`basename $(dirname "$2")`
   timestamp_day_dir=${timestamp_dir%??????}
+  if [ -e "/tmp/GPBACKUP_PLUGIN_LOG_TO_STDERR" ] ; then
+    echo 'Some plugin warning' >&2
+  elif [ -e "/tmp/GPBACKUP_PLUGIN_DIE" ] ; then
+    exit 1
+  fi
 	cat /tmp/plugin_dest/$timestamp_day_dir/$timestamp_dir/$filename
 }
 
@@ -90,11 +95,13 @@ delete_backup() {
 
 }
 
+# utility/debugging function to maintain parity with ddboost and s3 plugin
 list_directory() {
   echo "list_directory $1 /tmp/plugin_dest" >> /tmp/plugin_out.txt
   ls /tmp/plugin_dest
 }
 
+# utility/debugging function to maintain parity with ddboost and s3 plugin
 delete_directory() {
   echo "delete_directory $1 /tmp/plugin_dest" >> /tmp/plugin_out.txt
   rm -rf /tmp/plugin_dest

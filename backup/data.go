@@ -51,7 +51,7 @@ func AddTableDataEntriesToTOC(tables []Table, rowsCopiedMaps []map[uint32]int64)
 				}
 			}
 			attributes := ConstructTableAttributesList(table.ColumnDefs)
-			globalTOC.AddCoordinatorDataEntry(table.Schema, table.Name, table.Oid, attributes, rowsCopied, table.PartitionLevelInfo.RootName, table.DistPolicy)
+			globalTOC.AddCoordinatorDataEntry(table.Schema, table.Name, table.Oid, attributes, rowsCopied, table.PartitionLevelInfo.RootName, table.DistPolicy.Policy, table.DistPolicy.DistByEnum)
 		}
 	}
 }
@@ -63,6 +63,9 @@ type BackupProgressCounters struct {
 }
 
 func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite string, connNum int) (int64, error) {
+	if wasTerminated {
+		return -1, nil
+	}
 	checkPipeExistsCommand := ""
 	customPipeThroughCommand := utils.GetPipeThroughProgram().OutputCommand
 	sendToDestinationCommand := ">"
@@ -74,7 +77,7 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 		 * of the data is backed up.
 		 */
 		checkPipeExistsCommand = fmt.Sprintf("(test -p \"%s\" || (echo \"Pipe not found %s\">&2; exit 1)) && ", destinationToWrite, destinationToWrite)
-		customPipeThroughCommand = "cat -"
+		customPipeThroughCommand = utils.DefaultPipeThroughProgram
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		sendToDestinationCommand = fmt.Sprintf("| %s backup_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
 	}
@@ -99,8 +102,16 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 		}
 	}
 
+	workerInfo := ""
+	if gplog.GetVerbosity() >= gplog.LOGVERBOSE {
+		workerInfo = fmt.Sprintf("Worker %d: ", connNum)
+	}
 	query := fmt.Sprintf("COPY %s%s TO %s WITH CSV DELIMITER '%s' ON SEGMENT%s;", tableName, columnNames, copyCommand, tableDelim, ignoreExternalPartitions)
-	gplog.Verbose("Worker %d: %s", connNum, query)
+	if connectionPool.Version.AtLeast("7") {
+		utils.LogProgress(`%sExecuting "%s" on coordinator`, workerInfo, query)
+	} else {
+		utils.LogProgress(`%sExecuting "%s" on master`, workerInfo, query)
+	}
 	result, err := connectionPool.Exec(query, connNum)
 	if err != nil {
 		return 0, err
@@ -111,15 +122,14 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 }
 
 func BackupSingleTableData(table Table, rowsCopiedMap map[uint32]int64, counters *BackupProgressCounters, whichConn int) error {
-	logMessage := fmt.Sprintf("Worker %d: Writing data for table %s to file", whichConn, table.FQN())
+	workerInfo := ""
+	if gplog.GetVerbosity() >= gplog.LOGVERBOSE {
+		workerInfo = fmt.Sprintf("Worker %d: ", whichConn)
+	}
+	logMessage := fmt.Sprintf("%sWriting data for table %s to file", workerInfo, table.FQN())
 	// Avoid race condition by incrementing counters in call to sprintf
 	tableCount := fmt.Sprintf(" (table %d of %d)", atomic.AddInt64(&counters.NumRegTables, 1), counters.TotalRegTables)
-	if gplog.GetVerbosity() > gplog.LOGINFO {
-		// No progress bar at this log level, so we note table count here
-		gplog.Verbose(logMessage + tableCount)
-	} else {
-		gplog.Verbose(logMessage)
-	}
+	utils.LogProgress(logMessage + tableCount)
 
 	destinationToWrite := ""
 	if MustGetFlagBool(options.SINGLE_DATA_FILE) {

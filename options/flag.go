@@ -37,7 +37,6 @@ const (
 	NO_HISTORY            = "no-history"
 	PLUGIN_CONFIG         = "plugin-config"
 	QUIET                 = "quiet"
-	SINGLE_BACKUP_DIR     = "single-backup-dir"
 	SINGLE_DATA_FILE      = "single-data-file"
 	COPY_QUEUE_SIZE       = "copy-queue-size"
 	VERBOSE               = "verbose"
@@ -46,6 +45,7 @@ const (
 	ON_ERROR_CONTINUE     = "on-error-continue"
 	REDIRECT_DB           = "redirect-db"
 	RUN_ANALYZE           = "run-analyze"
+	SINGLE_BACKUP_DIR     = "single-backup-dir"
 	TIMESTAMP             = "timestamp"
 	WITH_GLOBALS          = "with-globals"
 	REDIRECT_SCHEMA       = "redirect-schema"
@@ -57,7 +57,6 @@ const (
 )
 
 func SetBackupFlagDefaults(flagSet *pflag.FlagSet) {
-	flagSet.Bool(SINGLE_BACKUP_DIR, false, "Back up all data to a single directory instead of split by segment")
 	flagSet.String(BACKUP_DIR, "", "The absolute path of the directory to which all backup files will be written")
 	flagSet.String(COMPRESSION_TYPE, "gzip", "Type of compression to use during data backup. Valid values are 'gzip', 'zstd'")
 	flagSet.Int(COMPRESSION_LEVEL, 1, "Level of compression to use during data backup. Range of valid values depends on compression type")
@@ -83,6 +82,7 @@ func SetBackupFlagDefaults(flagSet *pflag.FlagSet) {
 	flagSet.String(PLUGIN_CONFIG, "", "The configuration file to use for a plugin")
 	flagSet.Bool("version", false, "Print version number and exit")
 	flagSet.Bool(QUIET, false, "Suppress non-warning, non-error log messages")
+	flagSet.Bool(SINGLE_BACKUP_DIR, false, "Back up all data to a single directory instead of split by segment")
 	flagSet.Bool(SINGLE_DATA_FILE, false, "Back up all data to a single file instead of one per table")
 	flagSet.Int(COPY_QUEUE_SIZE, 1, "number of COPY commands gpbackup should enqueue when backing up using the --single-data-file option")
 	flagSet.Bool(VERBOSE, false, "Print verbose log messages")

@@ -43,7 +43,7 @@ gpbackup and gprestore will call the plugin executable in the format
 [plugin_executable_name] [command] arg1 arg2
 ```
 
-If an error occurs during plugin execution, plugins should write an error message to stderr and return a non-zero error code.
+If an error occurs during plugin execution, the plugin should exit with a non-zero code. Plugins may write log messages to stderr without affecting the execution.
 
 
 

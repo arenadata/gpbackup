@@ -65,9 +65,10 @@ CREATE TYPE public.colors AS ENUM (
     'green',
     'blue'
 );
---CREATE TABLE public.legacy_enum (
---    color public.colors
---) DISTRIBUTED BY (color cdbhash_enum_ops);
+
+CREATE TABLE public.legacy_enum (
+   color public.colors
+) DISTRIBUTED BY (color cdbhash_enum_ops);
 
 CREATE TABLE aa (
     a integer NOT NULL,
