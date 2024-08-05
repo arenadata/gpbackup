@@ -212,7 +212,18 @@ func preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCo
 	}
 }
 
-func getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
+type Helper interface {
+	getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error)
+	createPipe(pipe string) error
+}
+
+type HelperImpl struct{}
+
+func (h HelperImpl) createPipe(pipe string) error {
+	return createPipe(pipe)
+}
+
+func (h HelperImpl) getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
 	oidStr, err := operating.System.ReadFile(oidFileName)
 	if err != nil {
 		logError(fmt.Sprintf("Error encountered reading oid batch list from file: %v", err))

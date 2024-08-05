@@ -123,7 +123,19 @@ type oidWithBatch struct {
 	batch int
 }
 
-func doRestoreAgent() error {
+type RestoreHelper interface {
+	getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*RestoreReader, error)
+	getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error)
+	checkForSkipFile(pipeFile string, tableOid int) bool
+}
+
+type RestoreHelperImpl struct{}
+
+func (RestoreHelperImpl) checkForSkipFile(pipeFile string, tableOid int) bool {
+	return utils.FileExists(fmt.Sprintf("%s_skip_%d", pipeFile, tableOid))
+}
+
+func doRestoreAgent_internal(h Helper, rh RestoreHelper) error {
 	// We need to track various values separately per content for resize restore
 	var segmentTOC map[int]*toc.SegmentTOC
 	var tocEntries map[int]map[uint]toc.SegmentDataEntry
@@ -136,7 +148,7 @@ func doRestoreAgent() error {
 
 	readers := make(map[int]*RestoreReader)
 
-	oidWithBatchList, err := getOidWithBatchListFromFile(*oidFile)
+	oidWithBatchList, err := h.getOidWithBatchListFromFile(*oidFile)
 	if err != nil {
 		return err
 	}
@@ -184,7 +196,7 @@ func doRestoreAgent() error {
 			tocEntries[contentToRestore] = segmentTOC[contentToRestore].DataEntries
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
-			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
+			readers[contentToRestore], err = rh.getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
 			if readers[contentToRestore] != nil {
 				// NOTE: If we reach here with batches > 1, there will be
 				// *origSize / *destSize (N old segments / N new segments)
@@ -229,7 +241,7 @@ func doRestoreAgent() error {
 			nextBatchNum := nextOidWithBatch.batch
 			nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
 			logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-			err := createPipe(nextPipeToCreate)
+			err := h.createPipe(nextPipeToCreate)
 			if err != nil {
 				logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 				// In the case this error is hit it means we have lost the
@@ -256,7 +268,7 @@ func doRestoreAgent() error {
 				// We pre-create readers above for the sake of not re-opening SDF readers.  For MDF we can't
 				// re-use them but still having them in a map simplifies overall code flow.  We repeatedly assign
 				// to a map entry here intentionally.
-				readers[contentToRestore], err = getRestoreDataReader(filename, nil, nil)
+				readers[contentToRestore], err = rh.getRestoreDataReader(filename, nil, nil)
 				if err != nil {
 					logError(fmt.Sprintf("Oid: %d, Batch %d: Error encountered getting restore data reader: %v", tableOid, batchNum, err))
 					return err
@@ -266,7 +278,7 @@ func doRestoreAgent() error {
 
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Opening pipe %s", tableOid, batchNum, currentPipe))
 		for {
-			writer, writeHandle, err = getRestorePipeWriter(currentPipe)
+			writer, writeHandle, err = rh.getRestorePipeWriter(currentPipe)
 			if err != nil {
 				if errors.Is(err, unix.ENXIO) {
 					// COPY (the pipe reader) has not tried to access the pipe yet so our restore_helper
@@ -277,7 +289,7 @@ func doRestoreAgent() error {
 					// might be good to have a GPDB version check here. However, the restore helper should
 					// not contain a database connection so the version should be passed through the helper
 					// invocation from gprestore (e.g. create a --db-version flag option).
-					if *onErrorContinue && utils.FileExists(fmt.Sprintf("%s_skip_%d", *pipeFile, tableOid)) {
+					if *onErrorContinue && rh.checkForSkipFile(*pipeFile, tableOid) {
 						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 						err = nil
 						goto LoopEnd
@@ -387,6 +399,12 @@ func doRestoreAgent() error {
 	return lastError
 }
 
+func doRestoreAgent() error {
+	helper := new(HelperImpl)
+	restorer := new(RestoreHelperImpl)
+	return doRestoreAgent_internal(helper, restorer)
+}
+
 func constructSingleTableFilename(name string, contentToRestore int, oid int) string {
 	name = strings.ReplaceAll(name, fmt.Sprintf("gpbackup_%d", *content), fmt.Sprintf("gpbackup_%d", contentToRestore))
 	nameParts := strings.Split(name, ".")
@@ -406,7 +424,7 @@ func replaceContentInFilename(filename string, content int) string {
 	return contentRE.ReplaceAllString(filename, fmt.Sprintf("gpbackup_%d_", content))
 }
 
-func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*RestoreReader, error) {
+func (RestoreHelperImpl) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*RestoreReader, error) {
 	var readHandle io.Reader
 	var seekHandle io.ReadSeeker
 	var isSubset bool
@@ -470,7 +488,7 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 	return restoreReader, err
 }
 
-func getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
+func (RestoreHelperImpl) getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
 	fileHandle, err := os.OpenFile(currentPipe, os.O_WRONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
 	if err != nil {
 		// error logging handled by calling functions
