@@ -53,12 +53,16 @@ func filtersEmpty(filters Filters) bool {
 }
 
 func SetLoggerVerbosity() {
+	gplog.SetLogFileVerbosity(gplog.LOGINFO)
 	if MustGetFlagBool(options.QUIET) {
 		gplog.SetVerbosity(gplog.LOGERROR)
+		gplog.SetLogFileVerbosity(gplog.LOGERROR)
 	} else if MustGetFlagBool(options.DEBUG) {
 		gplog.SetVerbosity(gplog.LOGDEBUG)
+		gplog.SetLogFileVerbosity(gplog.LOGDEBUG)
 	} else if MustGetFlagBool(options.VERBOSE) {
 		gplog.SetVerbosity(gplog.LOGVERBOSE)
+		gplog.SetLogFileVerbosity(gplog.LOGVERBOSE)
 	}
 }
 
@@ -86,12 +90,7 @@ SET standard_conforming_strings = on;
 SET default_with_oids = off;
 `
 
-	if connectionPool.Version.Is("4") {
-		setupQuery += "SET gp_strict_xml_parse = off;\n"
-	}
-	if connectionPool.Version.AtLeast("5") {
-		setupQuery += "SET gp_ignore_error_table = on;\n"
-	}
+	setupQuery += "SET gp_ignore_error_table = on;\n"
 	if connectionPool.Version.Before("6") {
 		setupQuery += "SET allow_system_table_mods = 'DML';\n"
 	}
@@ -147,9 +146,7 @@ func SetMaxCsvLineLengthQuery(connectionPool *dbconn.DBConn) string {
 	}
 
 	var maxLineLength int
-	if connectionPool.Version.Is("4") && connectionPool.Version.AtLeast("4.3.30") {
-		maxLineLength = 1024 * 1024 * 1024 // 1GB
-	} else if connectionPool.Version.Is("5") && connectionPool.Version.AtLeast("5.11.0") {
+	if connectionPool.Version.Is("5") && connectionPool.Version.AtLeast("5.11.0") {
 		maxLineLength = 1024 * 1024 * 1024
 	} else {
 		maxLineLength = 4 * 1024 * 1024 // 4MB
@@ -238,8 +235,8 @@ func RecoverMetadataFilesUsingPlugin() {
 	for _, fpInfo := range fpInfoList {
 		pluginConfig.MustRestoreFile(fpInfo.GetTOCFilePath())
 		if backupConfig.SingleDataFile {
-			origSize, destSize, isResizeRestore := GetResizeClusterInfo()
-			pluginConfig.RestoreSegmentTOCs(globalCluster, fpInfo, isResizeRestore, origSize, destSize)
+			origSize, destSize, _, batches := GetResizeClusterInfo()
+			pluginConfig.RestoreSegmentTOCs(globalCluster, fpInfo, origSize, destSize, batches)
 		}
 	}
 }
@@ -313,10 +310,10 @@ func GetRestoreMetadataStatementsFiltered(section string, filename string, inclu
 	return statements
 }
 
-func ExecuteRestoreMetadataStatements(statements []toc.StatementWithType, objectsTitle string, progressBar utils.ProgressBar, showProgressBar int, executeInParallel bool) int32 {
+func ExecuteRestoreMetadataStatements(section string, statements []toc.StatementWithType, objectsTitle string, progressBar utils.ProgressBar, showProgressBar int, executeInParallel bool) int32 {
 	var numErrors int32
-	if progressBar == nil {
-		numErrors = ExecuteStatementsAndCreateProgressBar(statements, objectsTitle, showProgressBar, executeInParallel)
+	if section == "predata" {
+		numErrors = ExecutePredataStatements(statements, progressBar, executeInParallel)
 	} else {
 		numErrors = ExecuteStatements(statements, progressBar, executeInParallel)
 	}
@@ -353,7 +350,7 @@ func setGUCsForConnection(gucStatements []toc.StatementWithType, whichConn int) 
 		objectTypes := []string{toc.OBJ_SESSION_GUC}
 		gucStatements = GetRestoreMetadataStatements("global", globalFPInfo.GetMetadataFilePath(), objectTypes, []string{})
 	}
-	ExecuteStatementsAndCreateProgressBar(gucStatements, "", utils.PB_NONE, false, whichConn)
+	ExecuteStatements(gucStatements, nil, false, whichConn)
 	return gucStatements
 }
 
@@ -415,10 +412,4 @@ func GetExistingSchemas() ([]string, error) {
 
 	err := connectionPool.Select(&existingSchemas, query)
 	return existingSchemas, err
-}
-
-func TruncateTable(tableFQN string, whichConn int) error {
-	gplog.Verbose("Truncating table %s prior to restoring data", tableFQN)
-	_, err := connectionPool.Exec(`TRUNCATE `+tableFQN, whichConn)
-	return err
 }

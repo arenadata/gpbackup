@@ -22,8 +22,13 @@ func copyPluginToAllHosts(conn *dbconn.DBConn, pluginPath string) {
 	hostnameQuery := `SELECT DISTINCT hostname AS string FROM gp_segment_configuration WHERE content != -1`
 	hostnames := dbconn.MustSelectStringSlice(conn, hostnameQuery)
 	for _, hostname := range hostnames {
-		pluginDir, _ := path.Split(pluginPath)
-		command := exec.Command("ssh", hostname, fmt.Sprintf("mkdir -p %s", pluginDir))
+		// Skip the local host
+		h, _ := os.Hostname()
+		if hostname == h {
+			continue
+		}
+		examplePluginTestDir, _ := path.Split(pluginPath)
+		command := exec.Command("ssh", hostname, fmt.Sprintf("mkdir -p %s", examplePluginTestDir))
 		mustRunCommand(command)
 		command = exec.Command("scp", pluginPath, fmt.Sprintf("%s:%s", hostname, pluginPath))
 		mustRunCommand(command)
@@ -54,9 +59,11 @@ var _ = Describe("End to End plugin tests", func() {
 
 	Describe("Single data file", func() {
 		It("runs gpbackup and gprestore with single-data-file flag", func() {
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--single-data-file",
 				"--backup-dir", backupDir)
+			timestamp := getBackupTimestamp(string(output))
+
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
 				"--backup-dir", backupDir)
@@ -64,15 +71,16 @@ var _ = Describe("End to End plugin tests", func() {
 			assertRelationsCreated(restoreConn, TOTAL_RELATIONS)
 			assertDataRestored(restoreConn, publicSchemaTupleCounts)
 			assertDataRestored(restoreConn, schema2TupleCounts)
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 
 		})
 		It("runs gpbackup and gprestore with single-data-file flag with copy-queue-size", func() {
 			skipIfOldBackupVersionBefore("1.23.0")
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--single-data-file",
 				"--copy-queue-size", "4",
 				"--backup-dir", backupDir)
+			timestamp := getBackupTimestamp(string(output))
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
 				"--copy-queue-size", "4",
@@ -81,14 +89,15 @@ var _ = Describe("End to End plugin tests", func() {
 			assertRelationsCreated(restoreConn, TOTAL_RELATIONS)
 			assertDataRestored(restoreConn, publicSchemaTupleCounts)
 			assertDataRestored(restoreConn, schema2TupleCounts)
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 
 		})
 		It("runs gpbackup and gprestore with single-data-file flag without compression", func() {
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--single-data-file",
 				"--backup-dir", backupDir,
 				"--no-compression")
+			timestamp := getBackupTimestamp(string(output))
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
 				"--backup-dir", backupDir)
@@ -96,15 +105,16 @@ var _ = Describe("End to End plugin tests", func() {
 			assertRelationsCreated(restoreConn, TOTAL_RELATIONS)
 			assertDataRestored(restoreConn, publicSchemaTupleCounts)
 			assertDataRestored(restoreConn, schema2TupleCounts)
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 		It("runs gpbackup and gprestore with single-data-file flag without compression with copy-queue-size", func() {
 			skipIfOldBackupVersionBefore("1.23.0")
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--single-data-file",
 				"--copy-queue-size", "4",
 				"--backup-dir", backupDir,
 				"--no-compression")
+			timestamp := getBackupTimestamp(string(output))
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
 				"--copy-queue-size", "4",
@@ -113,7 +123,7 @@ var _ = Describe("End to End plugin tests", func() {
 			assertRelationsCreated(restoreConn, TOTAL_RELATIONS)
 			assertDataRestored(restoreConn, publicSchemaTupleCounts)
 			assertDataRestored(restoreConn, schema2TupleCounts)
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 		It("runs gpbackup and gprestore on database with all objects", func() {
 			schemaResetStatements := "DROP SCHEMA IF EXISTS schema2 CASCADE; DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
@@ -170,13 +180,14 @@ var _ = Describe("End to End plugin tests", func() {
 					"DROP MATERIALIZED VIEW mview2;")
 			}
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--leaf-partition-data",
 				"--single-data-file")
+			timestamp := getBackupTimestamp(string(output))
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--metadata-only",
 				"--redirect-db", "restoredb")
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 		It("runs gpbackup and gprestore on database with all objects with copy-queue-size", func() {
 			skipIfOldBackupVersionBefore("1.23.0")
@@ -220,24 +231,26 @@ var _ = Describe("End to End plugin tests", func() {
 					"DROP MATERIALIZED VIEW mview2;")
 			}
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--leaf-partition-data",
 				"--single-data-file",
 				"--copy-queue-size", "4")
+			timestamp := getBackupTimestamp(string(output))
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--metadata-only",
 				"--redirect-db", "restoredb",
 				"--copy-queue-size", "4")
-			assertArtifactsCleaned(restoreConn, timestamp)
+			assertArtifactsCleaned(timestamp)
 		})
 
 		Context("with include filtering on restore", func() {
 			It("runs gpbackup and gprestore with include-table-file restore flag with a single data file", func() {
 				includeFile := iohelper.MustOpenFileForWriting("/tmp/include-tables.txt")
 				utils.MustPrintln(includeFile, "public.sales\npublic.foo\npublic.myseq1\npublic.myview1")
-				timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				output := gpbackup(gpbackupPath, backupHelperPath,
 					"--backup-dir", backupDir,
 					"--single-data-file")
+				timestamp := getBackupTimestamp(string(output))
 				gprestore(gprestorePath, restoreHelperPath, timestamp,
 					"--redirect-db", "restoredb",
 					"--backup-dir", backupDir,
@@ -245,7 +258,7 @@ var _ = Describe("End to End plugin tests", func() {
 				assertRelationsCreated(restoreConn, 16)
 				assertDataRestored(restoreConn, map[string]int{
 					"public.sales": 13, "public.foo": 40000})
-				assertArtifactsCleaned(restoreConn, timestamp)
+				assertArtifactsCleaned(timestamp)
 
 				_ = os.Remove("/tmp/include-tables.txt")
 			})
@@ -253,10 +266,11 @@ var _ = Describe("End to End plugin tests", func() {
 				skipIfOldBackupVersionBefore("1.23.0")
 				includeFile := iohelper.MustOpenFileForWriting("/tmp/include-tables.txt")
 				utils.MustPrintln(includeFile, "public.sales\npublic.foo\npublic.myseq1\npublic.myview1")
-				timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				output := gpbackup(gpbackupPath, backupHelperPath,
 					"--backup-dir", backupDir,
 					"--single-data-file",
 					"--copy-queue-size", "4")
+				timestamp := getBackupTimestamp(string(output))
 				gprestore(gprestorePath, restoreHelperPath, timestamp,
 					"--redirect-db", "restoredb",
 					"--backup-dir", backupDir,
@@ -265,14 +279,15 @@ var _ = Describe("End to End plugin tests", func() {
 				assertRelationsCreated(restoreConn, 16)
 				assertDataRestored(restoreConn, map[string]int{
 					"public.sales": 13, "public.foo": 40000})
-				assertArtifactsCleaned(restoreConn, timestamp)
+				assertArtifactsCleaned(timestamp)
 
 				_ = os.Remove("/tmp/include-tables.txt")
 			})
 			It("runs gpbackup and gprestore with include-schema restore flag with a single data file", func() {
-				timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				output := gpbackup(gpbackupPath, backupHelperPath,
 					"--backup-dir", backupDir,
 					"--single-data-file")
+				timestamp := getBackupTimestamp(string(output))
 				gprestore(gprestorePath, restoreHelperPath, timestamp,
 					"--redirect-db", "restoredb",
 					"--backup-dir", backupDir,
@@ -280,14 +295,15 @@ var _ = Describe("End to End plugin tests", func() {
 
 				assertRelationsCreated(restoreConn, 17)
 				assertDataRestored(restoreConn, schema2TupleCounts)
-				assertArtifactsCleaned(restoreConn, timestamp)
+				assertArtifactsCleaned(timestamp)
 			})
 			It("runs gpbackup and gprestore with include-schema restore flag with a single data file with copy-queue-size", func() {
 				skipIfOldBackupVersionBefore("1.23.0")
-				timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				output := gpbackup(gpbackupPath, backupHelperPath,
 					"--backup-dir", backupDir,
 					"--single-data-file",
 					"--copy-queue-size", "4")
+				timestamp := getBackupTimestamp(string(output))
 				gprestore(gprestorePath, restoreHelperPath, timestamp,
 					"--redirect-db", "restoredb",
 					"--backup-dir", backupDir,
@@ -296,7 +312,7 @@ var _ = Describe("End to End plugin tests", func() {
 
 				assertRelationsCreated(restoreConn, 17)
 				assertDataRestored(restoreConn, schema2TupleCounts)
-				assertArtifactsCleaned(restoreConn, timestamp)
+				assertArtifactsCleaned(timestamp)
 			})
 		})
 
@@ -309,16 +325,16 @@ var _ = Describe("End to End plugin tests", func() {
 				}
 			})
 			It("Will not hang if gpbackup and gprestore runs with single-data-file and plugin fails at init for restore", func(ctx SpecContext) {
-				pluginExecutablePath := fmt.Sprintf("%s/src/github.com/greenplum-db/gpbackup/plugins/example_plugin.bash", os.Getenv("GOPATH"))
-				copyPluginToAllHosts(backupConn, pluginExecutablePath)
+				copyPluginToAllHosts(backupConn, examplePluginExec)
 
 				testhelper.AssertQueryRuns(backupConn, "CREATE TABLE t0(a int);")
 				testhelper.AssertQueryRuns(backupConn, "INSERT INTO t0 SELECT i FROM generate_series(1, 10)i;")
 				defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE t0;")
 
-				timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				output := gpbackup(gpbackupPath, backupHelperPath,
 					"--single-data-file",
-					"--plugin-config", pluginConfigPath)
+					"--plugin-config", examplePluginTestConfig)
+				timestamp := getBackupTimestamp(string(output))
 
 				backupCluster.GenerateAndExecuteCommand(
 					"Instruct plugin to fail",
@@ -330,7 +346,7 @@ var _ = Describe("End to End plugin tests", func() {
 				gprestoreCmd := exec.Command(gprestorePath,
 					"--timestamp", timestamp,
 					"--redirect-db", "restoredb",
-					"--plugin-config", pluginConfigPath)
+					"--plugin-config", examplePluginTestConfig)
 
 				_, err := gprestoreCmd.CombinedOutput()
 				Expect(err).To(HaveOccurred())
@@ -342,101 +358,101 @@ var _ = Describe("End to End plugin tests", func() {
 						return fmt.Sprintf("rm /tmp/GPBACKUP_PLUGIN_FAIL")
 					})
 
-				assertArtifactsCleaned(restoreConn, timestamp)
+				assertArtifactsCleaned(timestamp)
 			}, SpecTimeout(time.Second*30))
 			It("runs gpbackup and gprestore with plugin, single-data-file, and no-compression", func() {
-				pluginExecutablePath := fmt.Sprintf("%s/src/github.com/greenplum-db/gpbackup/plugins/example_plugin.bash", os.Getenv("GOPATH"))
-				copyPluginToAllHosts(backupConn, pluginExecutablePath)
+				copyPluginToAllHosts(backupConn, examplePluginExec)
 
-				timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				output := gpbackup(gpbackupPath, backupHelperPath,
 					"--single-data-file",
 					"--no-compression",
-					"--plugin-config", pluginConfigPath)
+					"--plugin-config", examplePluginTestConfig)
+				timestamp := getBackupTimestamp(string(output))
 				forceMetadataFileDownloadFromPlugin(backupConn, timestamp)
 
 				gprestore(gprestorePath, restoreHelperPath, timestamp,
 					"--redirect-db", "restoredb",
-					"--plugin-config", pluginConfigPath)
+					"--plugin-config", examplePluginTestConfig)
 
 				assertRelationsCreated(restoreConn, TOTAL_RELATIONS)
 				assertDataRestored(restoreConn, publicSchemaTupleCounts)
 				assertDataRestored(restoreConn, schema2TupleCounts)
-				assertArtifactsCleaned(restoreConn, timestamp)
+				assertArtifactsCleaned(timestamp)
 			})
 			It("runs gpbackup and gprestore with plugin, single-data-file, no-compression, and copy-queue-size", func() {
-				pluginExecutablePath := fmt.Sprintf("%s/src/github.com/greenplum-db/gpbackup/plugins/example_plugin.bash", os.Getenv("GOPATH"))
-				copyPluginToAllHosts(backupConn, pluginExecutablePath)
+				copyPluginToAllHosts(backupConn, examplePluginExec)
 
-				timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				output := gpbackup(gpbackupPath, backupHelperPath,
 					"--single-data-file",
 					"--copy-queue-size", "4",
 					"--no-compression",
-					"--plugin-config", pluginConfigPath)
+					"--plugin-config", examplePluginTestConfig)
+				timestamp := getBackupTimestamp(string(output))
 				forceMetadataFileDownloadFromPlugin(backupConn, timestamp)
 
 				gprestore(gprestorePath, restoreHelperPath, timestamp,
 					"--redirect-db", "restoredb",
-					"--plugin-config", pluginConfigPath,
+					"--plugin-config", examplePluginTestConfig,
 					"--copy-queue-size", "4")
 
 				assertRelationsCreated(restoreConn, TOTAL_RELATIONS)
 				assertDataRestored(restoreConn, publicSchemaTupleCounts)
 				assertDataRestored(restoreConn, schema2TupleCounts)
-				assertArtifactsCleaned(restoreConn, timestamp)
+				assertArtifactsCleaned(timestamp)
 			})
 			It("runs gpbackup and gprestore with plugin and single-data-file", func() {
-				pluginExecutablePath := fmt.Sprintf("%s/src/github.com/greenplum-db/gpbackup/plugins/example_plugin.bash", os.Getenv("GOPATH"))
-				copyPluginToAllHosts(backupConn, pluginExecutablePath)
+				copyPluginToAllHosts(backupConn, examplePluginExec)
 
-				timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				output := gpbackup(gpbackupPath, backupHelperPath,
 					"--single-data-file",
-					"--plugin-config", pluginConfigPath)
+					"--plugin-config", examplePluginTestConfig)
+				timestamp := getBackupTimestamp(string(output))
 				forceMetadataFileDownloadFromPlugin(backupConn, timestamp)
 
 				gprestore(gprestorePath, restoreHelperPath, timestamp,
 					"--redirect-db", "restoredb",
-					"--plugin-config", pluginConfigPath)
+					"--plugin-config", examplePluginTestConfig)
 
 				assertRelationsCreated(restoreConn, TOTAL_RELATIONS)
 				assertDataRestored(restoreConn, publicSchemaTupleCounts)
 				assertDataRestored(restoreConn, schema2TupleCounts)
-				assertArtifactsCleaned(restoreConn, timestamp)
+				assertArtifactsCleaned(timestamp)
 			})
 			It("runs gpbackup and gprestore with plugin, single-data-file, and copy-queue-size", func() {
-				pluginExecutablePath := fmt.Sprintf("%s/src/github.com/greenplum-db/gpbackup/plugins/example_plugin.bash", os.Getenv("GOPATH"))
-				copyPluginToAllHosts(backupConn, pluginExecutablePath)
+				copyPluginToAllHosts(backupConn, examplePluginExec)
 
-				timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				output := gpbackup(gpbackupPath, backupHelperPath,
 					"--single-data-file",
 					"--copy-queue-size", "4",
-					"--plugin-config", pluginConfigPath)
+					"--plugin-config", examplePluginTestConfig)
+				timestamp := getBackupTimestamp(string(output))
 				forceMetadataFileDownloadFromPlugin(backupConn, timestamp)
 
 				gprestore(gprestorePath, restoreHelperPath, timestamp,
 					"--redirect-db", "restoredb",
-					"--plugin-config", pluginConfigPath,
+					"--plugin-config", examplePluginTestConfig,
 					"--copy-queue-size", "4")
 
 				assertRelationsCreated(restoreConn, TOTAL_RELATIONS)
 				assertDataRestored(restoreConn, publicSchemaTupleCounts)
 				assertDataRestored(restoreConn, schema2TupleCounts)
-				assertArtifactsCleaned(restoreConn, timestamp)
+				assertArtifactsCleaned(timestamp)
 			})
 			It("runs gpbackup and gprestore with plugin and metadata-only", func() {
-				pluginExecutablePath := fmt.Sprintf("%s/src/github.com/greenplum-db/gpbackup/plugins/example_plugin.bash", os.Getenv("GOPATH"))
-				copyPluginToAllHosts(backupConn, pluginExecutablePath)
+				copyPluginToAllHosts(backupConn, examplePluginExec)
 
-				timestamp := gpbackup(gpbackupPath, backupHelperPath,
+				output := gpbackup(gpbackupPath, backupHelperPath,
 					"--metadata-only",
-					"--plugin-config", pluginConfigPath)
+					"--plugin-config", examplePluginTestConfig)
+				timestamp := getBackupTimestamp(string(output))
 				forceMetadataFileDownloadFromPlugin(backupConn, timestamp)
 
 				gprestore(gprestorePath, restoreHelperPath, timestamp,
 					"--redirect-db", "restoredb",
-					"--plugin-config", pluginConfigPath)
+					"--plugin-config", examplePluginTestConfig)
 
 				assertRelationsCreated(restoreConn, TOTAL_RELATIONS)
-				assertArtifactsCleaned(restoreConn, timestamp)
+				assertArtifactsCleaned(timestamp)
 			})
 		})
 	})
@@ -448,17 +464,17 @@ var _ = Describe("End to End plugin tests", func() {
 			if useOldBackupVersion {
 				Skip("This test is only needed for the most recent backup versions")
 			}
-			pluginExecutablePath := fmt.Sprintf("%s/src/github.com/greenplum-db/gpbackup/plugins/example_plugin.bash", os.Getenv("GOPATH"))
-			copyPluginToAllHosts(backupConn, pluginExecutablePath)
+			copyPluginToAllHosts(backupConn, examplePluginExec)
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
+			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--no-compression",
-				"--plugin-config", pluginConfigPath)
+				"--plugin-config", examplePluginTestConfig)
+			timestamp := getBackupTimestamp(string(output))
 			forceMetadataFileDownloadFromPlugin(backupConn, timestamp)
 
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
-				"--plugin-config", pluginConfigPath)
+				"--plugin-config", examplePluginTestConfig)
 
 			assertRelationsCreated(restoreConn, TOTAL_RELATIONS)
 			assertDataRestored(restoreConn, publicSchemaTupleCounts)
@@ -470,16 +486,16 @@ var _ = Describe("End to End plugin tests", func() {
 			if useOldBackupVersion {
 				Skip("This test is only needed for the most recent backup versions")
 			}
-			pluginExecutablePath := fmt.Sprintf("%s/src/github.com/greenplum-db/gpbackup/plugins/example_plugin.bash", os.Getenv("GOPATH"))
-			copyPluginToAllHosts(backupConn, pluginExecutablePath)
+			copyPluginToAllHosts(backupConn, examplePluginExec)
 
-			timestamp := gpbackup(gpbackupPath, backupHelperPath,
-				"--plugin-config", pluginConfigPath)
+			output := gpbackup(gpbackupPath, backupHelperPath,
+				"--plugin-config", examplePluginTestConfig)
+			timestamp := getBackupTimestamp(string(output))
 			forceMetadataFileDownloadFromPlugin(backupConn, timestamp)
 
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
-				"--plugin-config", pluginConfigPath)
+				"--plugin-config", examplePluginTestConfig)
 
 			assertRelationsCreated(restoreConn, TOTAL_RELATIONS)
 			assertDataRestored(restoreConn, publicSchemaTupleCounts)
@@ -492,12 +508,9 @@ var _ = Describe("End to End plugin tests", func() {
 			if useOldBackupVersion {
 				Skip("This test is only needed for the latest backup version")
 			}
-			pluginsDir := fmt.Sprintf("%s/src/github.com/greenplum-db/gpbackup/plugins", os.Getenv("GOPATH"))
-			copyPluginToAllHosts(backupConn, fmt.Sprintf("%s/example_plugin.bash", pluginsDir))
-			command := exec.Command("bash", "-c", fmt.Sprintf("%s/plugin_test.sh %s/example_plugin.bash %s/example_plugin_config.yaml /tmp/plugin_dest", pluginsDir, pluginsDir, pluginsDir))
+			copyPluginToAllHosts(backupConn, examplePluginExec)
+			command := exec.Command("bash", "-c", fmt.Sprintf("%s/plugin_test.sh %s %s", examplePluginDir, examplePluginExec, examplePluginTestConfig))
 			mustRunCommand(command)
-
-			_ = os.RemoveAll("/tmp/plugin_dest")
 		})
 	})
 })

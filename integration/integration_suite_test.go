@@ -10,6 +10,7 @@ import (
 	"github.com/blang/semver"
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
+	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gp-common-go-libs/testhelper"
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/restore"
@@ -33,7 +34,7 @@ var (
 	gpbackupHelperPath string
 	stderr, logFile    *Buffer
 
-	// GUC defaults. Initially set to GPDB4 values
+	// GUC defaults.
 	concurrencyDefault    = "20"
 	memSharedDefault      = "20"
 	memSpillDefault       = "20"
@@ -120,6 +121,7 @@ var _ = BeforeEach(func() {
 
 	restoreCmdFlags = pflag.NewFlagSet("gprestore", pflag.ExitOnError)
 	restore.SetCmdFlags(restoreCmdFlags)
+	gplog.SetLogFileVerbosity(gplog.LOGDEBUG)
 })
 
 var _ = AfterSuite(func() {
@@ -147,5 +149,5 @@ var _ = AfterSuite(func() {
 	testhelper.AssertQueryRuns(connection1, "DROP ROLE anothertestrole")
 	connection1.Close()
 	_ = os.RemoveAll("/tmp/helper_test")
-	_ = os.RemoveAll("/tmp/plugin_dest")
+	_ = os.RemoveAll(examplePluginTestDir)
 })

@@ -3,6 +3,7 @@ package restore_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gpbackup/backup"
-	"github.com/greenplum-db/gpbackup/filepath"
 	"github.com/greenplum-db/gpbackup/history"
 	"github.com/greenplum-db/gpbackup/options"
 	"github.com/greenplum-db/gpbackup/restore"
@@ -22,16 +22,9 @@ import (
 )
 
 var _ = Describe("restore/data tests", func() {
-	var fpInfo filepath.FilePathInfo
-	copyFromPipeQueryTemplate := "COPY public.foo(i,j) FROM PROGRAM " +
-		"'(timeout 300 bash -c \"while [ ! -p \"%s\" ]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1)) && " +
-		"cat %s | cat - && test ! -e \"%s_error\"' WITH CSV DELIMITER ',' ON SEGMENT;"
-	BeforeEach(func() {
-		fpInfo = restore.GetFPInfo()
-	})
 	Describe("CopyTableIn", func() {
 		BeforeEach(func() {
-			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "cat", OutputCommand: "cat -", InputCommand: "cat -", Extension: ""})
+			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "cat", OutputCommand: utils.DefaultPipeThroughProgram, InputCommand: utils.DefaultPipeThroughProgram, Extension: ""})
 			backup.SetPluginConfig(nil)
 			_ = cmdFlags.Set(options.PLUGIN_CONFIG, "")
 			backup.SetCluster(&cluster.Cluster{ContentIDs: []int{-1, 0, 1, 2}})
@@ -42,7 +35,7 @@ var _ = Describe("restore/data tests", func() {
 			execStr := regexp.QuoteMeta("COPY public.foo(i,j) FROM PROGRAM 'cat <SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456.gz | gzip -d -c' WITH CSV DELIMITER ',' ON SEGMENT")
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456.gz"
-			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
+			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -51,23 +44,23 @@ var _ = Describe("restore/data tests", func() {
 			execStr := regexp.QuoteMeta("COPY public.foo(i,j) FROM PROGRAM 'cat <SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456.zst | zstd --decompress -c' WITH CSV DELIMITER ',' ON SEGMENT")
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456.zst"
-			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
+			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 		It("will restore a table from its own file without compression", func() {
-			execStr := regexp.QuoteMeta("COPY public.foo(i,j) FROM PROGRAM 'cat <SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456 | cat -' WITH CSV DELIMITER ',' ON SEGMENT")
+			execStr := regexp.QuoteMeta("COPY public.foo(i,j) FROM PROGRAM 'cat <SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456' WITH CSV DELIMITER ',' ON SEGMENT")
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456"
-			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
+			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 		It("will restore a table from a single data file", func() {
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
+			execStr := regexp.QuoteMeta(fmt.Sprintf("COPY public.foo(i,j) FROM PROGRAM '(timeout 300 bash -c \"while [[ ! -p \"<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456\" && ! -f \"<SEG_DATA_DIR>/gpbackup_<SEGID>_20170101010101_pipe_%d_error\" ]]; do sleep 1; done\" || (echo \"Pipe not found <SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456\">&2; exit 1)) && cat <SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456' WITH CSV DELIMITER ',' ON SEGMENT", os.Getpid()))
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
-			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, true, 0, false)
+			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456"
+			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, true, 0)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -80,7 +73,7 @@ var _ = Describe("restore/data tests", func() {
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456.gz"
-			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
+			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -93,7 +86,7 @@ var _ = Describe("restore/data tests", func() {
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456.zst"
-			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
+			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -101,16 +94,16 @@ var _ = Describe("restore/data tests", func() {
 			_ = cmdFlags.Set(options.PLUGIN_CONFIG, "/tmp/plugin_config")
 			pluginConfig := utils.PluginConfig{ExecutablePath: "/tmp/fake-plugin.sh", ConfigPath: "/tmp/plugin_config"}
 			restore.SetPluginConfig(&pluginConfig)
-			execStr := regexp.QuoteMeta("COPY public.foo(i,j) FROM PROGRAM '/tmp/fake-plugin.sh restore_data /tmp/plugin_config <SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456.gz | cat -' WITH CSV DELIMITER ',' ON SEGMENT")
+			execStr := regexp.QuoteMeta("COPY public.foo(i,j) FROM PROGRAM '/tmp/fake-plugin.sh restore_data /tmp/plugin_config <SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456.gz' WITH CSV DELIMITER ',' ON SEGMENT")
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456.gz"
-			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
+			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 		It("will output expected error string from COPY ON SEGMENT failure", func() {
-			execStr := regexp.QuoteMeta("COPY public.foo(i,j) FROM PROGRAM 'cat <SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456 | cat -' WITH CSV DELIMITER ',' ON SEGMENT")
+			execStr := regexp.QuoteMeta("COPY public.foo(i,j) FROM PROGRAM 'cat <SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456' WITH CSV DELIMITER ',' ON SEGMENT")
 			pgErr := &pgconn.PgError{
 				Severity: "ERROR",
 				Code:     "22P04",
@@ -119,233 +112,12 @@ var _ = Describe("restore/data tests", func() {
 			}
 			mock.ExpectExec(execStr).WillReturnError(pgErr)
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456"
-			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
+			_, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("Error loading data into table public.foo: " +
 				"COPY foo, line 1: \"5\": " +
 				"ERROR: value of distribution key doesn't belong to segment with ID 0, it belongs to segment with ID 1 (SQLSTATE 22P04)"))
-		})
-	})
-	Describe("CopyTableIn with resize restore from 4 to 3 segments", func() {
-		BeforeEach(func() {
-			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "cat", OutputCommand: "cat -", InputCommand: "cat -", Extension: ""})
-			backup.SetPluginConfig(nil)
-			_ = cmdFlags.Set(options.PLUGIN_CONFIG, "")
-			_ = cmdFlags.Set(options.RESIZE_CLUSTER, "true")
-			backup.SetCluster(&cluster.Cluster{ContentIDs: []int{-1, 0, 1, 2}})
-			restore.SetBackupConfig(&history.BackupConfig{SegmentCount: 4})
-		})
-		It("will restore a table from its own file with gzip compression", func() {
-			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "gzip", OutputCommand: "gzip -c -1", InputCommand: "gzip -d -c", Extension: ".gz"})
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456.gz"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(20)))
-		})
-		It("will restore a table from its own file with zstd compression", func() {
-			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "zstd", OutputCommand: "zstd --compress -1 -c", InputCommand: "zstd --decompress -c", Extension: ".zst"})
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456.zst"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(20)))
-		})
-		It("will restore a table from its own file without compression", func() {
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(20)))
-		})
-		It("will restore a table from a single data file", func() {
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, true, 0, false)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(20)))
-		})
-		It("will restore a table from its own file with gzip compression using a plugin", func() {
-			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "gzip", OutputCommand: "gzip -c -1", InputCommand: "gzip -d -c", Extension: ".gz"})
-			_ = cmdFlags.Set(options.PLUGIN_CONFIG, "/tmp/plugin_config")
-			pluginConfig := utils.PluginConfig{ExecutablePath: "/tmp/fake-plugin.sh", ConfigPath: "/tmp/plugin_config"}
-			restore.SetPluginConfig(&pluginConfig)
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456.gz"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(20)))
-		})
-		It("will restore a table from its own file with zstd compression using a plugin", func() {
-			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "zstd", OutputCommand: "zstd --compress -1 -c", InputCommand: "zstd --decompress -c", Extension: ".zst"})
-			_ = cmdFlags.Set(options.PLUGIN_CONFIG, "/tmp/plugin_config")
-			pluginConfig := utils.PluginConfig{ExecutablePath: "/tmp/fake-plugin.sh", ConfigPath: "/tmp/plugin_config"}
-			restore.SetPluginConfig(&pluginConfig)
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456.zst"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(20)))
-		})
-		It("will restore a table from its own file without compression using a plugin", func() {
-			_ = cmdFlags.Set(options.PLUGIN_CONFIG, "/tmp/plugin_config")
-			pluginConfig := utils.PluginConfig{ExecutablePath: "/tmp/fake-plugin.sh", ConfigPath: "/tmp/plugin_config"}
-			restore.SetPluginConfig(&pluginConfig)
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456.gz"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(20)))
-		})
-		It("will output expected error string from COPY ON SEGMENT failure", func() {
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			pgErr := &pgconn.PgError{
-				Severity: "ERROR",
-				Code:     "22P04",
-				Message:  "value of distribution key doesn't belong to segment with ID 0, it belongs to segment with ID 1",
-				Where:    "COPY foo, line 1: \"5\"",
-			}
-			mock.ExpectExec(execStr).WillReturnError(pgErr)
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, false)
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("Error loading data into table public.foo: " +
-				"COPY foo, line 1: \"5\": " +
-				"ERROR: value of distribution key doesn't belong to segment with ID 0, it belongs to segment with ID 1 (SQLSTATE 22P04)"))
-			Expect(numRowsRestored).Should(Equal(int64(0)))
-		})
-	})
-	Describe("CopyTableIn with resize restore from 4 to 3 segments and replicated table", func() {
-		BeforeEach(func() {
-			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "cat", OutputCommand: "cat -", InputCommand: "cat -", Extension: ""})
-			backup.SetPluginConfig(nil)
-			_ = cmdFlags.Set(options.PLUGIN_CONFIG, "")
-			_ = cmdFlags.Set(options.RESIZE_CLUSTER, "true")
-			backup.SetCluster(&cluster.Cluster{ContentIDs: []int{-1, 0, 1, 2}})
-			restore.SetBackupConfig(&history.BackupConfig{SegmentCount: 4})
-		})
-		It("will restore a table from its own file with gzip compression", func() {
-			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "gzip", OutputCommand: "gzip -c -1", InputCommand: "gzip -d -c", Extension: ".gz"})
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456.gz"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, true)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(10)))
-		})
-		It("will restore a table from its own file with zstd compression", func() {
-			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "zstd", OutputCommand: "zstd --compress -1 -c", InputCommand: "zstd --decompress -c", Extension: ".zst"})
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456.zst"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, true)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(10)))
-		})
-		It("will restore a table from its own file without compression", func() {
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, true)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(10)))
-		})
-		It("will restore a table from a single data file", func() {
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, true, 0, true)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(10)))
-		})
-		It("will restore a table from its own file with gzip compression using a plugin", func() {
-			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "gzip", OutputCommand: "gzip -c -1", InputCommand: "gzip -d -c", Extension: ".gz"})
-			_ = cmdFlags.Set(options.PLUGIN_CONFIG, "/tmp/plugin_config")
-			pluginConfig := utils.PluginConfig{ExecutablePath: "/tmp/fake-plugin.sh", ConfigPath: "/tmp/plugin_config"}
-			restore.SetPluginConfig(&pluginConfig)
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456.gz"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, true)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(10)))
-		})
-		It("will restore a table from its own file with zstd compression using a plugin", func() {
-			utils.SetPipeThroughProgram(utils.PipeThroughProgram{Name: "zstd", OutputCommand: "zstd --compress -1 -c", InputCommand: "zstd --decompress -c", Extension: ".zst"})
-			_ = cmdFlags.Set(options.PLUGIN_CONFIG, "/tmp/plugin_config")
-			pluginConfig := utils.PluginConfig{ExecutablePath: "/tmp/fake-plugin.sh", ConfigPath: "/tmp/plugin_config"}
-			restore.SetPluginConfig(&pluginConfig)
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456.zst"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, true)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(10)))
-		})
-		It("will restore a table from its own file without compression using a plugin", func() {
-			_ = cmdFlags.Set(options.PLUGIN_CONFIG, "/tmp/plugin_config")
-			pluginConfig := utils.PluginConfig{ExecutablePath: "/tmp/fake-plugin.sh", ConfigPath: "/tmp/plugin_config"}
-			restore.SetPluginConfig(&pluginConfig)
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_pipe_3456.gz"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 10))
-
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, true)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(numRowsRestored).Should(Equal(int64(10)))
-		})
-		It("will output expected error string from COPY ON SEGMENT failure", func() {
-			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456"
-			execStr := regexp.QuoteMeta(fmt.Sprintf(copyFromPipeQueryTemplate, filename, filename, filename, fpInfo.GetSegmentPipePathForCopyCommand()))
-			pgErr := &pgconn.PgError{
-				Severity: "ERROR",
-				Code:     "22P04",
-				Message:  "value of distribution key doesn't belong to segment with ID 0, it belongs to segment with ID 1",
-				Where:    "COPY foo, line 1: \"5\"",
-			}
-			mock.ExpectExec(execStr).WillReturnError(pgErr)
-			numRowsRestored, err := restore.CopyTableIn(context.Background(), connectionPool, "public.foo", "(i,j)", filename, false, 0, true)
-
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("Error loading data into table public.foo: " +
-				"COPY foo, line 1: \"5\": " +
-				"ERROR: value of distribution key doesn't belong to segment with ID 0, it belongs to segment with ID 1 (SQLSTATE 22P04)"))
-			Expect(numRowsRestored).Should(Equal(int64(0)))
 		})
 	})
 	Describe("CheckRowsRestored", func() {

@@ -27,81 +27,105 @@ var (
 	tableDelim = ","
 )
 
-func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int, isReplicated bool) (int64, error) {
+func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
+	if wasTerminated {
+		return -1, nil
+	}
 	whichConn = connectionPool.ValidateConnNum(whichConn)
 	copyCommand := ""
 	readFromDestinationCommand := "cat"
 	customPipeThroughCommand := utils.GetPipeThroughProgram().InputCommand
-	origSize, destSize, resizeCluster := GetResizeClusterInfo()
-	checkPipeExistsCommand := ""
-	checkHelperErrorFileCommand := ""
+	resizeCluster := MustGetFlagBool(options.RESIZE_CLUSTER)
 
 	if singleDataFile || resizeCluster {
 		//helper.go handles compression, so we don't want to set it here
-		customPipeThroughCommand = "cat -"
-		checkPipeExistsCommand = fmt.Sprintf("(timeout 300 bash -c \"while [ ! -p \"%s\" ]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1)) && ", destinationToRead, destinationToRead)
-		// If, by the end of reading from the pipe, the restore helper error file exists, it means restore helper faced
-		// an error during table restore, and we can't rely on COPY results (even if GPDB reported Ok status),
-		// as restore helper could push into the pipe less data than expected (or even no data at all).
-		helperErrorFileName := fmt.Sprintf("%s_error", globalFPInfo.GetSegmentPipePathForCopyCommand())
-		checkHelperErrorFileCommand = fmt.Sprintf(" && test ! -e \"%s\"", helperErrorFileName)
+		customPipeThroughCommand = utils.DefaultPipeThroughProgram
+		errorFile := fmt.Sprintf("%s_error", globalFPInfo.GetSegmentPipePathForCopyCommand())
+		readFromDestinationCommand = fmt.Sprintf("(timeout 300 bash -c \"while [[ ! -p \"%s\" && ! -f \"%s\" ]]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1)) && %s", destinationToRead, errorFile, destinationToRead, readFromDestinationCommand)
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		readFromDestinationCommand = fmt.Sprintf("%s restore_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
 	}
 
-	copyCommand = fmt.Sprintf("PROGRAM '%s%s %s | %s%s'", checkPipeExistsCommand, readFromDestinationCommand, destinationToRead, customPipeThroughCommand, checkHelperErrorFileCommand)
+	if customPipeThroughCommand == utils.DefaultPipeThroughProgram {
+		copyCommand = fmt.Sprintf("PROGRAM '%s %s'", readFromDestinationCommand, destinationToRead)
+	} else {
+		copyCommand = fmt.Sprintf("PROGRAM '%s %s | %s'", readFromDestinationCommand, destinationToRead, customPipeThroughCommand)
+	}
 
 	query := fmt.Sprintf("COPY %s%s FROM %s WITH CSV DELIMITER '%s' ON SEGMENT;", tableName, tableAttributes, copyCommand, tableDelim)
 
-	var numRows int64
-	var err error
-
-	// During a larger-to-smaller restore, we need multiple COPY passes to load all the data.
-	// One pass is sufficient for smaller-to-larger and normal restores.
-	batches := 1
-	if !isReplicated && resizeCluster && origSize > destSize {
-		batches = origSize / destSize
-		if origSize%destSize != 0 {
-			batches += 1
-		}
+	if connectionPool.Version.AtLeast("7") {
+		utils.LogProgress(`Executing "%s" on coordinator`, query)
+	} else {
+		utils.LogProgress(`Executing "%s" on master`, query)
 	}
-	for i := 0; i < batches; i++ {
-		if connectionPool.Version.AtLeast("7") {
-			gplog.Verbose(`Executing "%s" on coordinator`, query)
-		} else {
-			gplog.Verbose(`Executing "%s" on master`, query)
-		}
-		result, err := connectionPool.ExecContext(queryContext, query, whichConn)
-		if err != nil {
-			errStr := fmt.Sprintf("Error loading data into table %s", tableName)
+	result, err := connectionPool.ExecContext(queryContext, query, whichConn)
+	if err != nil {
+		errStr := fmt.Sprintf("Error loading data into table %s", tableName)
 
-			// The COPY ON SEGMENT error might contain useful CONTEXT output
-			if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Where != "" {
-				errStr = fmt.Sprintf("%s: %s", errStr, pgErr.Where)
-			}
-
-			return 0, errors.Wrap(err, errStr)
+		// The COPY ON SEGMENT error might contain useful CONTEXT output
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Where != "" {
+			errStr = fmt.Sprintf("%s: %s", errStr, pgErr.Where)
 		}
-		rowsLoaded, _ := result.RowsAffected()
-		numRows += rowsLoaded
+
+		err = errors.Wrap(err, errStr)
+
+		return 0, err
 	}
 
-	return numRows, err
+	rowsLoaded, _ := result.RowsAffected()
+
+	return rowsLoaded, nil
 }
 
-func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FilePathInfo, entry toc.CoordinatorDataEntry, tableName string, whichConn int, origSize int, destSize int) error {
-	resizeCluster := MustGetFlagBool(options.RESIZE_CLUSTER)
-	destinationToRead := ""
-	if backupConfig.SingleDataFile || resizeCluster {
-		destinationToRead = fmt.Sprintf("%s_%d", fpInfo.GetSegmentPipePathForCopyCommand(), entry.Oid)
-	} else {
-		destinationToRead = fpInfo.GetTableBackupFilePathForCopyCommand(entry.Oid, utils.GetPipeThroughProgram().Extension, backupConfig.SingleDataFile)
+func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FilePathInfo, entry toc.CoordinatorDataEntry, tableName string, whichConn int) error {
+	origSize, destSize, resizeCluster, batches := GetResizeClusterInfo()
+
+	var numRowsRestored int64
+	// We don't want duplicate data for replicated tables so only do one batch
+	if entry.IsReplicated {
+		batches = 1
 	}
-	gplog.Debug("Reading from %s", destinationToRead)
-	numRowsRestored, err := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn, entry.IsReplicated)
-	if err != nil {
-		return err
+	for i := 0; i < batches; i++ {
+		destinationToRead := ""
+		if backupConfig.SingleDataFile || resizeCluster {
+			destinationToRead = fmt.Sprintf("%s_%d_%d", fpInfo.GetSegmentPipePathForCopyCommand(), entry.Oid, i)
+		} else {
+			destinationToRead = fpInfo.GetTableBackupFilePathForCopyCommand(entry.Oid, utils.GetPipeThroughProgram().Extension, backupConfig.SingleDataFile)
+		}
+		gplog.Debug("Reading from %s", destinationToRead)
+
+		if entry.DistByEnum {
+			gplog.Verbose("Setting gp_enable_segment_copy_checking TO off for table %s", tableName)
+			connectionPool.MustExec("SET gp_enable_segment_copy_checking TO off;", whichConn)
+			defer connectionPool.MustExec("RESET gp_enable_segment_copy_checking;", whichConn)
+		}
+
+		// In the case where an error file is found, this means that the
+		// restore_helper has encountered an error and has shutdown.
+		// If this occurs we need to error out, as subsequent COPY statements
+		// will hang indefinitely waiting to read from pipes that the helper
+		// was expected to set up
+		if backupConfig.SingleDataFile || resizeCluster {
+			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
+			gplog.FatalOnError(agentErr)
+		}
+
+		partialRowsRestored, copyErr := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
+
+		if copyErr != nil {
+			gplog.Error(copyErr.Error())
+			if MustGetFlagBool(options.ON_ERROR_CONTINUE) {
+				if connectionPool.Version.AtLeast("6") && (backupConfig.SingleDataFile || resizeCluster) {
+					// inform segment helpers to skip this entry
+					utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo)
+				}
+			}
+			return copyErr
+		}
+		numRowsRestored += partialRowsRestored
 	}
+
 	numRowsBackedUp := entry.RowsCopied
 
 	// For replicated tables, we don't restore second and subsequent batches of data in the larger-to-smaller case,
@@ -112,23 +136,28 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		numRowsRestored /= int64(destSize)
 	}
 
-	err = CheckRowsRestored(numRowsRestored, numRowsBackedUp, tableName)
+	err := CheckRowsRestored(numRowsRestored, numRowsBackedUp, tableName)
 	if err != nil {
+		gplog.Error(err.Error())
 		return err
 	}
 
-	if resizeCluster {
+	if resizeCluster || entry.DistByEnum {
 		// replicated tables cannot be redistributed, so instead expand them if needed
 		if entry.IsReplicated && (origSize < destSize) {
-			err = ExpandReplicatedTable(origSize, tableName, whichConn)
+			err := ExpandReplicatedTable(origSize, tableName, whichConn)
+			if err != nil {
+				gplog.Error(err.Error())
+			}
 		} else {
-			err = RedistributeTableData(tableName, whichConn)
-		}
-		if err != nil {
-			return err
+			err := RedistributeTableData(tableName, whichConn)
+			if err != nil {
+				gplog.Error(err.Error())
+			}
 		}
 	}
-	return err
+
+	return nil
 }
 
 func ExpandReplicatedTable(origSize int, tableName string, whichConn int) error {
@@ -175,7 +204,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		return 0
 	}
 
-	origSize, destSize, resizeCluster := GetResizeClusterInfo()
+	origSize, destSize, resizeCluster, batches := GetResizeClusterInfo()
 	if backupConfig.SingleDataFile || resizeCluster {
 		msg := ""
 		if backupConfig.SingleDataFile {
@@ -186,19 +215,22 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		}
 		gplog.Verbose("Initializing pipes and gpbackup_helper on segments for %srestore", msg)
 		utils.VerifyHelperVersionOnSegments(version, globalCluster)
-		oidList := make([]string, totalTables)
-		replicatedOidList := make([]string, 0)
-		for i, entry := range dataEntries {
-			oidString := fmt.Sprintf("%d", entry.Oid)
-			oidList[i] = oidString
+
+		// During a larger-to-smaller restore, we need to do multiple passes of
+		// data loading so we assign the batches here.
+		oidList := make([]string, 0)
+		for _, entry := range dataEntries {
 			if entry.IsReplicated {
-				replicatedOidList = append(replicatedOidList, oidString)
+				oidList = append(oidList, fmt.Sprintf("%d,0", entry.Oid))
+				continue
+			}
+
+			for b := 0; b < batches; b++ {
+				oidList = append(oidList, fmt.Sprintf("%d,%d", entry.Oid, b))
 			}
 		}
+
 		utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, "oid")
-		if len(replicatedOidList) > 0 {
-			utils.WriteOidListToSegments(replicatedOidList, globalCluster, fpInfo, "replicated_oid")
-		}
 		initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo)
 		if wasTerminated {
 			return 0
@@ -211,7 +243,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		if backupConfig.Compressed {
 			compressStr = fmt.Sprintf(" --compression-type %s ", utils.GetPipeThroughProgram().Name)
 		}
-		utils.StartGpbackupHelpers(globalCluster, fpInfo, "--restore-agent", MustGetFlagString(options.PLUGIN_CONFIG), compressStr, MustGetFlagBool(options.ON_ERROR_CONTINUE), isFilter, &wasTerminated, initialPipes, backupConfig.SingleDataFile, resizeCluster, origSize, destSize)
+		utils.StartGpbackupHelpers(globalCluster, fpInfo, "--restore-agent", MustGetFlagString(options.PLUGIN_CONFIG), compressStr, MustGetFlagBool(options.ON_ERROR_CONTINUE), isFilter, &wasTerminated, initialPipes, backupConfig.SingleDataFile, resizeCluster, origSize, destSize, gplog.GetVerbosity())
 	}
 	/*
 	 * We break when an interrupt is received and rely on
@@ -241,8 +273,6 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 				})
 				if remoteOutput.NumErrors != 0 {
 					gplog.Error("gpbackup_helper failed to start on some segments")
-					// the delay below is to give the restore helper a chance to close all pipes, if it can...
-					time.Sleep(5 * time.Second)
 					cancel()
 				}
 			}
@@ -279,42 +309,28 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 				// Truncate table before restore, if needed
 				var err error
 				if MustGetFlagBool(options.INCREMENTAL) || MustGetFlagBool(options.TRUNCATE_TABLE) {
-					err = TruncateTable(tableName, whichConn)
+					gplog.Verbose("Truncating table %s prior to restoring data", tableName)
+					_, err := connectionPool.Exec(`TRUNCATE `+tableName, whichConn)
+					if err != nil {
+						gplog.Error(err.Error())
+					}
 				}
 				if err == nil {
-					err = restoreSingleTableData(ctx, &fpInfo, entry, tableName, whichConn, origSize, destSize)
-
-					if gplog.GetVerbosity() > gplog.LOGINFO {
-						// No progress bar at this log level, so we note table count here
-						gplog.Verbose("Restored data to table %s from file (table %d of %d)", tableName, atomic.AddInt64(&tableNum, 1), totalTables)
-					} else {
-						gplog.Verbose("Restored data to table %s from file", tableName)
-					}
+					err = restoreSingleTableData(ctx, &fpInfo, entry, tableName, whichConn)
 				}
 
 				if err != nil {
-					gplog.Error(err.Error())
 					atomic.AddInt32(&numErrors, 1)
 					if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 						dataProgressBar.(*pb.ProgressBar).NotPrint = true
 						cancel()
 						return
-					} else if connectionPool.Version.AtLeast("6") && (backupConfig.SingleDataFile || MustGetFlagBool(options.RESIZE_CLUSTER)) {
-						// inform segment helpers to skip this entry
-						utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo)
 					}
 					mutex.Lock()
 					errorTablesData[tableName] = Empty{}
 					mutex.Unlock()
-				}
-
-				if backupConfig.SingleDataFile || MustGetFlagBool(options.RESIZE_CLUSTER) {
-					agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
-					if agentErr != nil {
-						gplog.Error(agentErr.Error())
-						cancel()
-						return
-					}
+				} else {
+					utils.LogProgress("Restored data to table %s from file (table %d of %d)", tableName, atomic.AddInt64(&tableNum, 1), totalTables)
 				}
 
 				dataProgressBar.Increment()
@@ -351,7 +367,7 @@ func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionP
 		maxPipes = len(oidList)
 	}
 	for i := 0; i < maxPipes; i++ {
-		utils.CreateSegmentPipeOnAllHosts(oidList[i], c, fpInfo)
+		utils.CreateSegmentPipeOnAllHostsForRestore(oidList[i], c, fpInfo)
 	}
 	return maxPipes
 }
