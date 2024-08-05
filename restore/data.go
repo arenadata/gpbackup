@@ -259,10 +259,8 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Make sure it's called to release resources even if no errors
 
-	// Launch a checker that polls if the restore helper has ended with an error.
-	// It is our 'Ultima ratio regum' - in case restore helper couldn't read a file with the oid list, it is not aware
-	// about the pipes, pre-created by the gprestore, and it can't close them.  So we cancel all pending COPY commands
-	// from here after giving a chance to the restore helper to close pipes on its own.
+	// Launch a checker that polls if the restore helper has ended with an error. It will cancel all pending
+	// COPY commands that could be hanging on pipes, that the restore helper didn't close before it died.
 	if backupConfig.SingleDataFile || resizeCluster {
 		go func() {
 			for {
