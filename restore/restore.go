@@ -410,11 +410,13 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 		return
 	}
 
-	schemaMatch := `(?:".+?"|[^.]+?)` // matches either an unquoted schema with no dots or a quoted schema containing dots
+	schemaMatch := `(?:".+?"|[^."']+?)` // matches either an unquoted schema with no dots and no quotes or a quoted schema
 	// This expression matches a GRANT or REVOKE statement on any object and captures the old schema name
 	permissionsRE := regexp.MustCompile(fmt.Sprintf(`(?m)(^(?:REVOKE|GRANT) .+ ON .+?) (%s)((\..+)? (?:FROM|TO) .+)`, schemaMatch))
 	// This expression matches an ATTACH PARTITION statement and captures both the parent and child schema names
 	attachRE := regexp.MustCompile(fmt.Sprintf(`(ALTER TABLE(?: ONLY)?) (%[1]s)(\..+ ATTACH PARTITION) (%[1]s)(\..+)`, schemaMatch))
+	// This expression matches a '<schema>.<table>'::regclass::oid expression
+	regclassOidRE := regexp.MustCompile(fmt.Sprintf(`(')(%s)((\.[^']+)'\:\:regclass\:\:oid)`, schemaMatch))
 	for i := range statements {
 		oldSchema := fmt.Sprintf("%s.", statements[i].Schema)
 		newSchema := fmt.Sprintf("%s.", redirectSchema)
@@ -442,7 +444,7 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 
 		// Statistic statements need two schema replacements
 		if strings.Contains(statement, "pg_statistic") {
-			statement = strings.ReplaceAll(statement, oldSchema, newSchema)
+			statement = regclassOidRE.ReplaceAllString(statement, fmt.Sprintf("'%s$3", redirectSchema))
 			replaced = true
 		}
 
