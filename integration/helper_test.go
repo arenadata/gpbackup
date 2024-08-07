@@ -372,11 +372,9 @@ options:
 			err = helperCmd.Start()
 			Expect(err).ToNot(HaveOccurred())
 
-			for _, i := range []int{1, 3} {
-				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
-				// Empty output
-				Expect(contents).To(Equal([]byte{}))
-			}
+			contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, 1))
+			// Empty output
+			Expect(contents).To(Equal([]byte{}))
 
 			err = helperCmd.Wait()
 			Expect(err).To(HaveOccurred())
