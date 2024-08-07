@@ -416,7 +416,10 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 	// This expression matches an ATTACH PARTITION statement and captures both the parent and child schema names
 	attachRE := regexp.MustCompile(fmt.Sprintf(`(ALTER TABLE(?: ONLY)?) (%[1]s)(\..+ ATTACH PARTITION) (%[1]s)(\..+)`, schemaMatch))
 	// This expression matches a '<schema>.<table>'::regclass::oid expression
-	regclassOidRE := regexp.MustCompile(fmt.Sprintf(`(')(%s)((\.[^']+)'\:\:regclass\:\:oid)`, schemaMatch))
+	regclassOidRE := regexp.MustCompile(fmt.Sprintf(`'(%s)((\.[^']+)'\:\:regclass\:\:oid)`, schemaMatch))
+	// These expressions match the first and the last occurences of the '<schema>.<table>'::regclass::oid expression
+	firstRegclassOidRE := regexp.MustCompile(fmt.Sprintf(`(?s)^(.*?)(%s)(.*)$`, regclassOidRE))
+	lastRegclassOidRE := regexp.MustCompile(fmt.Sprintf(`(?s)^(.*)(%s)(.*?)$`, regclassOidRE))
 	for i := range statements {
 		oldSchema := fmt.Sprintf("%s.", statements[i].Schema)
 		newSchema := fmt.Sprintf("%s.", redirectSchema)
@@ -442,9 +445,11 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 			replaced = true
 		}
 
-		// Statistic statements need two schema replacements
+		// Statistic statements need two schema replacements. We replace the first and the last occurences,
+		// to avoid a very small chance that schema name was in the statistic data itself, that we do not want to alter.
 		if strings.Contains(statement, "pg_statistic") {
-			statement = regclassOidRE.ReplaceAllString(statement, fmt.Sprintf("'%s$3", redirectSchema))
+			statement = firstRegclassOidRE.ReplaceAllString(statement, fmt.Sprintf("${1}'%s${4}$6", redirectSchema))
+			statement = lastRegclassOidRE.ReplaceAllString(statement, fmt.Sprintf("${1}'%s${4}$6", redirectSchema))
 			replaced = true
 		}
 
