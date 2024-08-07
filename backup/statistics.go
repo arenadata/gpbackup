@@ -69,16 +69,16 @@ func GenerateAttributeStatisticsQueries(table Table, attStat AttributeStatistic)
 		attributeSlotsQueryStr = generateAttributeSlotsQuery4(attStat)
 	}
 
-	attributeQueries = append(attributeQueries, fmt.Sprintf(`DELETE FROM pg_statistic
-WHERE starelid = %s AND staattnum = (SELECT attnum FROM pg_attribute WHERE attrelid = %s AND attname = '%s');`, starelidStr, starelidStr, utils.EscapeSingleQuotes(attStat.AttName)))
+	attributeQueries = append(attributeQueries, fmt.Sprintf(`WITH attr_info AS (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = %s AND attname = '%s')
+DELETE FROM pg_statistic WHERE starelid = (SELECT attrelid from attr_info) AND staattnum = (SELECT attnum from attr_info);`, starelidStr, utils.EscapeSingleQuotes(attStat.AttName)))
 	attributeQueries = append(attributeQueries, fmt.Sprintf(`INSERT INTO pg_statistic SELECT
-	%s,
+	attrelid,
 	attnum,%s
 	%f::real,
 	%d::integer,
 	%f::real,
 	%s
-FROM pg_attribute WHERE attrelid = %s AND attname = '%s';`, starelidStr, inheritStr, attStat.NullFraction, attStat.Width, attStat.Distinct, attributeSlotsQueryStr, starelidStr, utils.EscapeSingleQuotes(attStat.AttName)))
+FROM pg_attribute WHERE attrelid = %s AND attname = '%s';`, inheritStr, attStat.NullFraction, attStat.Width, attStat.Distinct, attributeSlotsQueryStr, starelidStr, utils.EscapeSingleQuotes(attStat.AttName)))
 
 	/*
 	 * If a type name starts with exactly one underscore, it describes an array

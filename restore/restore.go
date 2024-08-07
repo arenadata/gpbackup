@@ -410,15 +410,14 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 		return
 	}
 
-	schemaMatch := `(?:".+?"|[^."']+?)` // matches either an unquoted schema with no dots and no quotes or a quoted schema
+	schemaMatch := `(?:".+?"|[^.]+?)` // matches either an unquoted schema with no dots or a quoted schema containing dots
 	// This expression matches a GRANT or REVOKE statement on any object and captures the old schema name
 	permissionsRE := regexp.MustCompile(fmt.Sprintf(`(?m)(^(?:REVOKE|GRANT) .+ ON .+?) (%s)((\..+)? (?:FROM|TO) .+)`, schemaMatch))
 	// This expression matches an ATTACH PARTITION statement and captures both the parent and child schema names
 	attachRE := regexp.MustCompile(fmt.Sprintf(`(ALTER TABLE(?: ONLY)?) (%[1]s)(\..+ ATTACH PARTITION) (%[1]s)(\..+)`, schemaMatch))
 	// This expression matches a '<schema>.<table>'::regclass::oid expression
 	regclassOidRE := regexp.MustCompile(fmt.Sprintf(`'(%s)((\.[^']+)'\:\:regclass\:\:oid)`, schemaMatch))
-	// These expressions match the first and the last occurences of the '<schema>.<table>'::regclass::oid expression
-	firstRegclassOidRE := regexp.MustCompile(fmt.Sprintf(`(?s)^(.*?)(%s)(.*)$`, regclassOidRE))
+	// These expression matches the last occurence of the '<schema>.<table>'::regclass::oid expression
 	lastRegclassOidRE := regexp.MustCompile(fmt.Sprintf(`(?s)^(.*)(%s)(.*?)$`, regclassOidRE))
 	for i := range statements {
 		oldSchema := fmt.Sprintf("%s.", statements[i].Schema)
@@ -445,10 +444,9 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 			replaced = true
 		}
 
-		// Statistic statements need two schema replacements. We replace the first and the last occurences,
-		// to avoid a very small chance that schema name was in the statistic data itself, that we do not want to alter.
+		// Statistic statements needs one schema replacements. We replace the last occurence to avoid a very small
+		// chance that schema name was in the statistic data itself, that we do not want to alter.
 		if strings.Contains(statement, "pg_statistic") {
-			statement = firstRegclassOidRE.ReplaceAllString(statement, fmt.Sprintf("${1}'%s${4}$6", redirectSchema))
 			statement = lastRegclassOidRE.ReplaceAllString(statement, fmt.Sprintf("${1}'%s${4}$6", redirectSchema))
 			replaced = true
 		}
