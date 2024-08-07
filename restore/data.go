@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
@@ -262,19 +261,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	// Launch a checker that polls if the restore helper has ended with an error. It will cancel all pending
 	// COPY commands that could be hanging on pipes, that the restore helper didn't close before it died.
 	if backupConfig.SingleDataFile || resizeCluster {
-		go func() {
-			for {
-				time.Sleep(5 * time.Second)
-				remoteOutput := globalCluster.GenerateAndExecuteCommand("Checking gpbackup_helper agent failure", cluster.ON_SEGMENTS, func(contentID int) string {
-					helperErrorFileName := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID))
-					return fmt.Sprintf("! ls %s", helperErrorFileName)
-				})
-				if remoteOutput.NumErrors != 0 {
-					gplog.Error("gpbackup_helper failed to start on some segments")
-					cancel()
-				}
-			}
-		}()
+		utils.StartHelperChecker(globalCluster, globalFPInfo, cancel)
 	}
 
 	for i := 0; i < connectionPool.NumConns; i++ {
