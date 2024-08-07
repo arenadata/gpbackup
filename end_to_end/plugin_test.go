@@ -340,7 +340,7 @@ var _ = Describe("End to End plugin tests", func() {
 					"Instruct plugin to fail",
 					cluster.ON_HOSTS,
 					func(contentID int) string {
-						return fmt.Sprintf("touch /tmp/GPBACKUP_PLUGIN_FAIL")
+						return fmt.Sprintf("touch /tmp/GPBACKUP_PLUGIN_KILL_HELPER")
 					})
 
 				gprestoreCmd := exec.Command(gprestorePath,
@@ -355,7 +355,7 @@ var _ = Describe("End to End plugin tests", func() {
 					"Unset plugin failure",
 					cluster.ON_HOSTS,
 					func(contentID int) string {
-						return fmt.Sprintf("rm /tmp/GPBACKUP_PLUGIN_FAIL")
+						return fmt.Sprintf("rm /tmp/GPBACKUP_PLUGIN_KILL_HELPER")
 					})
 
 				assertArtifactsCleaned(timestamp)

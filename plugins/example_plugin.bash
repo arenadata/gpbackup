@@ -79,9 +79,8 @@ restore_data() {
   timestamp_day_dir=${timestamp_dir%??????}
   if [ -e "/tmp/GPBACKUP_PLUGIN_LOG_TO_STDERR" ] ; then
     echo 'Some plugin warning' >&2
-  elif [ -e "/tmp/GPBACKUP_PLUGIN_FAIL" ] ; then
+  elif [ -e "/tmp/GPBACKUP_PLUGIN_KILL_HELPER" ] ; then
     pkill "gpbackup_helper"
-    exit 1
   elif [ -e "/tmp/GPBACKUP_PLUGIN_DIE" ] ; then
     exit 1
   fi
