@@ -100,8 +100,8 @@ SET
 	reltuples = 0.000000::real
 WHERE oid = 'testschema.testtable2'::regclass::oid;`,
 
-				`WITH attr_info AS (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'testschema.testtable2'::regclass::oid AND attname = 'testattWithArray')
-DELETE FROM pg_statistic WHERE starelid = (SELECT attrelid from attr_info) AND staattnum = (SELECT attnum from attr_info);`,
+				`DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+	(SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'testschema.testtable2'::regclass::oid AND attname = 'testattWithArray');`,
 				fmt.Sprintf(`INSERT INTO pg_statistic SELECT
 	attrelid,
 	attnum,%[1]s
@@ -126,8 +126,8 @@ DELETE FROM pg_statistic WHERE starelid = (SELECT attrelid from attr_info) AND s
 	NULL
 FROM pg_attribute WHERE attrelid = 'testschema.testtable2'::regclass::oid AND attname = 'testattWithArray';`, insertReplace1, insertReplace2, insertReplace3, insertReplace4, insertReplace5),
 
-				`WITH attr_info AS (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'testschema.testtable2'::regclass::oid AND attname = 'testatt')
-DELETE FROM pg_statistic WHERE starelid = (SELECT attrelid from attr_info) AND staattnum = (SELECT attnum from attr_info);`,
+				`DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+	(SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'testschema.testtable2'::regclass::oid AND attname = 'testatt');`,
 				fmt.Sprintf(`INSERT INTO pg_statistic SELECT
 	attrelid,
 	attnum,%[1]s
@@ -181,8 +181,8 @@ WHERE oid = '"""test''schema"""."""test''table"""'::regclass::oid;`))
 			}
 
 			attStatsQueries := backup.GenerateAttributeStatisticsQueries(tableTestTable, attStats)
-			Expect(attStatsQueries[0]).To(Equal(fmt.Sprintf(`WITH attr_info AS (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'testschema."test''table"'::regclass::oid AND attname = 'testatt')
-DELETE FROM pg_statistic WHERE starelid = (SELECT attrelid from attr_info) AND staattnum = (SELECT attnum from attr_info);`)))
+			Expect(attStatsQueries[0]).To(Equal(fmt.Sprintf(`DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+	(SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'testschema."test''table"'::regclass::oid AND attname = 'testatt');`)))
 
 			insertReplace1, insertReplace2, insertReplace3, insertReplace4, insertReplace5 := getStatInsertReplace(0, 0)
 			Expect(attStatsQueries[1]).To(Equal(fmt.Sprintf(`INSERT INTO pg_statistic SELECT
@@ -220,8 +220,8 @@ FROM pg_attribute WHERE attrelid = 'testschema."test''table"'::regclass::oid AND
 
 			attStatsQueries := backup.GenerateAttributeStatisticsQueries(tableTestTable, attStats)
 
-			Expect(attStatsQueries[0]).To(Equal(fmt.Sprintf(`WITH attr_info AS (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'testschema."test''table"'::regclass::oid AND attname = 'testatt')
-DELETE FROM pg_statistic WHERE starelid = (SELECT attrelid from attr_info) AND staattnum = (SELECT attnum from attr_info);`)))
+			Expect(attStatsQueries[0]).To(Equal(fmt.Sprintf(`DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+	(SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'testschema."test''table"'::regclass::oid AND attname = 'testatt');`)))
 
 			insertReplace1, insertReplace2, insertReplace3, insertReplace4, insertReplace5 := getStatInsertReplace(10, 12)
 			Expect(attStatsQueries[1]).To(Equal(fmt.Sprintf(`INSERT INTO pg_statistic SELECT

@@ -69,8 +69,8 @@ func GenerateAttributeStatisticsQueries(table Table, attStat AttributeStatistic)
 		attributeSlotsQueryStr = generateAttributeSlotsQuery4(attStat)
 	}
 
-	attributeQueries = append(attributeQueries, fmt.Sprintf(`WITH attr_info AS (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = %s AND attname = '%s')
-DELETE FROM pg_statistic WHERE starelid = (SELECT attrelid from attr_info) AND staattnum = (SELECT attnum from attr_info);`, starelidStr, utils.EscapeSingleQuotes(attStat.AttName)))
+	attributeQueries = append(attributeQueries, fmt.Sprintf(`DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+	(SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = %s AND attname = '%s');`, starelidStr, utils.EscapeSingleQuotes(attStat.AttName)))
 	attributeQueries = append(attributeQueries, fmt.Sprintf(`INSERT INTO pg_statistic SELECT
 	attrelid,
 	attnum,%s
