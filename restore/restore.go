@@ -417,7 +417,7 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 	attachRE := regexp.MustCompile(fmt.Sprintf(`(ALTER TABLE(?: ONLY)?) (%[1]s)(\..+ ATTACH PARTITION) (%[1]s)(\..+)`, schemaMatch))
 	// This expression matches a '<schema>.<table>'::regclass::oid expression
 	regclassOidRE := regexp.MustCompile(fmt.Sprintf(`'(%s)((\.[^']+)'\:\:regclass\:\:oid)`, schemaMatch))
-	// These expression matches the last occurence of the '<schema>.<table>'::regclass::oid expression
+	// This expression matches the last occurence of the '<schema>.<table>'::regclass::oid expression
 	lastRegclassOidRE := regexp.MustCompile(fmt.Sprintf(`(?s)^(.*)(%s)(.*?)$`, regclassOidRE))
 	for i := range statements {
 		oldSchema := fmt.Sprintf("%s.", statements[i].Schema)
