@@ -446,7 +446,7 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 
 		// Statistic statements needs one schema replacements. We replace the last occurence to avoid a very small
 		// chance that schema name was in the statistic data itself, that we do not want to alter.
-		if strings.HasPrefix(statement, "\n\nDELETE FROM pg_statistic") || strings.HasPrefix(statement, "\n\nINSERT INTO pg_statistic") {
+		if statements[i].ObjectType == toc.OBJ_STATISTICS {
 			statement = lastRegclassOidRE.ReplaceAllString(statement, fmt.Sprintf("${1}'%s${4}$6", redirectSchema))
 			replaced = true
 		}
