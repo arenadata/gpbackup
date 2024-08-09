@@ -212,9 +212,17 @@ func doRestoreAgent() error {
 	preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
 
 	var currentPipe string
+
+	// If skip file detected for the particular tableOid, Will not process batches related to this oid
+	skipOid := -1
+
 	for i, oidWithBatch := range oidWithBatchList {
 		tableOid := oidWithBatch.oid
 		batchNum := oidWithBatch.batch
+
+		if tableOid == skipOid {
+			continue
+		}
 
 		contentToRestore := *content + (*destSize * batchNum)
 		if wasTerminated {
@@ -280,6 +288,7 @@ func doRestoreAgent() error {
 					if *onErrorContinue && utils.FileExists(fmt.Sprintf("%s_skip_%d", *pipeFile, tableOid)) {
 						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 						err = nil
+						skipOid = tableOid
 						goto LoopEnd
 					} else {
 						// keep trying to open the pipe
