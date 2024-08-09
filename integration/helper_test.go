@@ -8,8 +8,9 @@ import (
 	"math"
 	"os"
 	"os/exec"
-	"path"
+
 	"path/filepath"
+	path "path/filepath"
 	"strings"
 	"time"
 
@@ -433,6 +434,116 @@ options:
 			Expect(err).To(HaveOccurred())
 			assertErrorsHandled()
 		})
+
+		It("skips batches if skip file discovered", func() {
+			// Run helper only with restore for a few batches and skip file defined
+			//
+			By("Write data file")
+			dataFile := dataFileFullPath
+			f, _ := os.Create(dataFile + ".gz")
+			gzipf := gzip.NewWriter(f)
+			// Named pipes can buffer, so we need to write more than the buffer size to trigger flush error
+			customData := "here is some data\n"
+			dataLength := 128*1024 + 1
+			customData += strings.Repeat("a", dataLength)
+			customData += "here is some data\n"
+
+			_, _ = gzipf.Write([]byte(customData))
+			_ = gzipf.Close()
+
+			// Write oid file
+			fOid, _ := os.Create(restoreOidFile)
+			_, _ = fOid.WriteString("1,0\n1,1\n1,2\n")
+			defer func() {
+				_ = os.Remove(restoreOidFile)
+			}()
+
+			err := unix.Mkfifo(fmt.Sprintf("%s_%d_0", pipeFile, 1), 0700)
+			if err != nil {
+				Fail(fmt.Sprintf("%v", err))
+			}
+
+			By("Write custom TOC")
+			customTOC := fmt.Sprintf(`dataentries:
+  1:
+    startbyte: 0
+    endbyte: 18
+  2:
+    startbyte: 18
+    endbyte: %[1]d
+  3:
+    startbyte: %[1]d
+    endbyte: %d
+`, dataLength+18, dataLength+18+18)
+			fToc, _ := os.Create(tocFile)
+			_, _ = fToc.WriteString(customTOC)
+			defer func() {
+				_ = os.Remove(tocFile)
+			}()
+
+			By("create skip file")
+			skipFile := fmt.Sprintf("%s_skip_%d", pipeFile, 1)
+			fSkip, _ := os.Create(skipFile)
+			fSkip.Close()
+
+			defer func() {
+				_ = os.Remove(skipFile)
+			}()
+
+			By("Create restore command")
+			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath+".gz", "--on-error-continue")
+
+			pipeNames := []string{}
+			for i := 1; i <= 3; i++ {
+				pipeNames = append(pipeNames, fmt.Sprintf("%s_%d_0", pipeFile, i))
+			}
+
+			By("Check pipes")
+			// Pipe 1 attached to batch with skip
+			contents, err := ioutil.ReadFile(pipeNames[0])
+			Expect(err).ToNot(HaveOccurred())
+			Expect(string(contents)).To(Equal("here is some data\n"))
+
+			// Pipe 2 and 3 shall not exists
+			for _, v := range []int{1, 2} {
+				_, errOpen := os.Open(pipeNames[v])
+				Expect(errOpen).To(HaveOccurred())
+				Expect(errOpen).To(MatchError(ContainSubstring("no such file or directory")))
+			}
+			_, errOpen := os.Open(pipeNames[1])
+			Expect(errOpen).To(HaveOccurred())
+			Expect(errOpen).To(MatchError(ContainSubstring("no such file or directory")))
+			_, errOpen = os.Open(pipeNames[2])
+			Expect(errOpen).To(HaveOccurred())
+			Expect(errOpen).To(MatchError(ContainSubstring("no such file or directory")))
+
+			// Block here until gpbackup_helper finishes (cleaning up pipes)
+			By("Block here until gpbackup_helper finishes (cleaning up pipes)")
+			_ = helperCmd.Wait()
+			for _, i := range []int{1, 2, 3} {
+				currentPipe := fmt.Sprintf("%s_%d_0", pipeFile, i)
+				Expect(currentPipe).ToNot(BeAnExistingFile())
+			}
+
+			By("Check in logs that batches were not restored")
+
+			homeDir := os.Getenv("HOME")
+			helperFiles, _ := path.Glob(path.Join(homeDir, "gpAdminLogs/gpbackup_helper_*"))
+
+			pattern_helper_pid := fmt.Sprintf(":%d", helperCmd.Process.Pid)
+			helper_out, _ := exec.Command("grep", pattern_helper_pid, helperFiles[len(helperFiles)-1]).CombinedOutput()
+			helperOutput := string(helper_out)
+
+			// Batch 1 should be processed
+			Expect(helperOutput).To(ContainSubstring(`Segment 1: Oid 1, Batch 1: Skip file discovered, skipping this relation`))
+			Expect(helperOutput).To(ContainSubstring(`Segment 1: Oid 1, Batch 1: Opening pipe`))
+
+			// Batch 2 must not be processed
+			Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Skip file discovered, skipping this relation`))
+			Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Opening pipe`))
+
+		})
+
 		It("Continues restore process when encountering an error with flag --on-error-continue", func() {
 			// Write data file
 			dataFile := dataFileFullPath
