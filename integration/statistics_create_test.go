@@ -83,6 +83,64 @@ var _ = Describe("backup integration tests", func() {
 				structmatcher.ExpectStructsToMatchExcluding(&oldAtts[i], &newAtts[i], "Oid", "Relid")
 			}
 		})
+		It("prints attribute and tuple statistics for a table with dropped column", func() {
+			tables := []backup.Table{
+				{Relation: backup.Relation{SchemaOid: 2200, Schema: "public", Name: "foo"}},
+			}
+
+			// Create and ANALYZE a table to generate statistics
+			testhelper.AssertQueryRuns(connectionPool, `CREATE TABLE public.foo(i int, j text, k bool, "i'2 3" int)`)
+			defer testhelper.AssertQueryRuns(connectionPool, "DROP TABLE public.foo")
+			testhelper.AssertQueryRuns(connectionPool, "INSERT INTO public.foo VALUES (1, 'a', 't', 1)")
+			testhelper.AssertQueryRuns(connectionPool, "INSERT INTO public.foo VALUES (2, 'b', 'f', 2)")
+			testhelper.AssertQueryRuns(connectionPool, "ANALYZE public.foo")
+			testhelper.AssertQueryRuns(connectionPool, "ALTER TABLE public.foo DROP COLUMN j")
+
+			oldTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo", backup.TYPE_RELATION)
+			tables[0].Oid = oldTableOid
+
+			beforeAttStats := make(map[uint32][]backup.AttributeStatistic)
+			backup.GetAttributeStatistics(connectionPool, tables, func(attStat *backup.AttributeStatistic) {
+				beforeAttStats[attStat.Oid] = append(beforeAttStats[attStat.Oid], *attStat)
+			})
+			beforeTupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				beforeTupleStats[tupleStat.Oid] = *tupleStat
+			})
+			beforeTupleStat := beforeTupleStats[oldTableOid]
+
+			// Drop and recreate the table to clear the statistics
+			testhelper.AssertQueryRuns(connectionPool, "DROP TABLE public.foo")
+			testhelper.AssertQueryRuns(connectionPool, `CREATE TABLE public.foo(i int, k bool, "i'2 3" int)`)
+
+			// Reload the retrieved statistics into the new table
+			PrintStatisticsStatements(backupfile, tocfile, tables, beforeAttStats, beforeTupleStats)
+			testhelper.AssertQueryRuns(connectionPool, buffer.String())
+
+			newTableOid := testutils.OidFromObjectName(connectionPool, "public", "foo", backup.TYPE_RELATION)
+			tables[0].Oid = newTableOid
+			afterAttStats := make(map[uint32][]backup.AttributeStatistic)
+			backup.GetAttributeStatistics(connectionPool, tables, func(attStat *backup.AttributeStatistic) {
+				afterAttStats[attStat.Oid] = append(afterAttStats[attStat.Oid], *attStat)
+			})
+			afterTupleStats := make(map[uint32]backup.TupleStatistic)
+			backup.GetTupleStatistics(connectionPool, tables, func(tupleStat *backup.TupleStatistic) {
+				afterTupleStats[tupleStat.Oid] = *tupleStat
+			})
+			afterTupleStat := afterTupleStats[newTableOid]
+
+			oldAtts := beforeAttStats[oldTableOid]
+			newAtts := afterAttStats[newTableOid]
+
+			// Ensure the statistics match
+			Expect(afterTupleStats).To(HaveLen(len(beforeTupleStats)))
+			structmatcher.ExpectStructsToMatchExcluding(&beforeTupleStat, &afterTupleStat, "Oid")
+			Expect(oldAtts).To(HaveLen(3))
+			Expect(newAtts).To(HaveLen(3))
+			for i := range oldAtts {
+				structmatcher.ExpectStructsToMatchExcluding(&oldAtts[i], &newAtts[i], "Oid", "Relid")
+			}
+		})
 		It("prints attribute and tuple statistics for a quoted table", func() {
 			tables := []backup.Table{
 				{Relation: backup.Relation{SchemaOid: 2200, Schema: "public", Name: "\"foo'\"\"''bar\""}},
