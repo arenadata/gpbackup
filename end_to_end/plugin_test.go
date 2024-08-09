@@ -324,7 +324,7 @@ var _ = Describe("End to End plugin tests", func() {
 					Skip("This test is only needed for the most recent backup versions")
 				}
 			})
-			It("Will not hang if gpbackup and gprestore runs with single-data-file and plugin fails at init for restore", func(ctx SpecContext) {
+			It("Will not hang if gpbackup and gprestore runs with single-data-file and the helper goes down at its start", func(ctx SpecContext) {
 				copyPluginToAllHosts(backupConn, examplePluginExec)
 
 				testhelper.AssertQueryRuns(backupConn, "CREATE TABLE t0(a int);")
@@ -337,10 +337,17 @@ var _ = Describe("End to End plugin tests", func() {
 				timestamp := getBackupTimestamp(string(output))
 
 				backupCluster.GenerateAndExecuteCommand(
-					"Instruct plugin to fail",
+					"Instruct plugin to kill the helper",
 					cluster.ON_HOSTS,
 					func(contentID int) string {
 						return fmt.Sprintf("touch /tmp/GPBACKUP_PLUGIN_KILL_HELPER")
+					})
+
+				defer backupCluster.GenerateAndExecuteCommand(
+					"Unset plugin instruction",
+					cluster.ON_HOSTS,
+					func(contentID int) string {
+						return fmt.Sprintf("rm /tmp/GPBACKUP_PLUGIN_KILL_HELPER")
 					})
 
 				gprestoreCmd := exec.Command(gprestorePath,
@@ -350,13 +357,6 @@ var _ = Describe("End to End plugin tests", func() {
 
 				_, err := gprestoreCmd.CombinedOutput()
 				Expect(err).To(HaveOccurred())
-
-				backupCluster.GenerateAndExecuteCommand(
-					"Unset plugin failure",
-					cluster.ON_HOSTS,
-					func(contentID int) string {
-						return fmt.Sprintf("rm /tmp/GPBACKUP_PLUGIN_KILL_HELPER")
-					})
 
 				assertArtifactsCleaned(timestamp)
 			}, SpecTimeout(time.Second*30))
