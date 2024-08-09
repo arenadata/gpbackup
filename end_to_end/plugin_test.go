@@ -337,17 +337,17 @@ var _ = Describe("End to End plugin tests", func() {
 				timestamp := getBackupTimestamp(string(output))
 
 				backupCluster.GenerateAndExecuteCommand(
-					"Instruct plugin to kill the helper",
+					"Instruct plugin to fail",
 					cluster.ON_HOSTS,
 					func(contentID int) string {
-						return fmt.Sprintf("touch /tmp/GPBACKUP_PLUGIN_KILL_HELPER")
+						return fmt.Sprintf("touch /tmp/GPBACKUP_PLUGIN_DIE")
 					})
 
 				defer backupCluster.GenerateAndExecuteCommand(
 					"Unset plugin instruction",
 					cluster.ON_HOSTS,
 					func(contentID int) string {
-						return fmt.Sprintf("rm /tmp/GPBACKUP_PLUGIN_KILL_HELPER")
+						return fmt.Sprintf("rm /tmp/GPBACKUP_PLUGIN_DIE")
 					})
 
 				gprestoreCmd := exec.Command(gprestorePath,
