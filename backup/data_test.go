@@ -1,6 +1,7 @@
 package backup_test
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 
@@ -79,7 +80,7 @@ var _ = Describe("backup/data tests", func() {
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456.gz"
 
-			_, err := backup.CopyTableOut(connectionPool, testTable, filename, defaultConnNum)
+			_, err := backup.CopyTableOut(context.Background(), connectionPool, testTable, filename, defaultConnNum)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -92,7 +93,7 @@ var _ = Describe("backup/data tests", func() {
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456"
-			_, err := backup.CopyTableOut(connectionPool, testTable, filename, defaultConnNum)
+			_, err := backup.CopyTableOut(context.Background(), connectionPool, testTable, filename, defaultConnNum)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -102,7 +103,7 @@ var _ = Describe("backup/data tests", func() {
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456.zst"
 
-			_, err := backup.CopyTableOut(connectionPool, testTable, filename, defaultConnNum)
+			_, err := backup.CopyTableOut(context.Background(), connectionPool, testTable, filename, defaultConnNum)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -115,7 +116,7 @@ var _ = Describe("backup/data tests", func() {
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456"
-			_, err := backup.CopyTableOut(connectionPool, testTable, filename, defaultConnNum)
+			_, err := backup.CopyTableOut(context.Background(), connectionPool, testTable, filename, defaultConnNum)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -125,7 +126,7 @@ var _ = Describe("backup/data tests", func() {
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456"
 
-			_, err := backup.CopyTableOut(connectionPool, testTable, filename, defaultConnNum)
+			_, err := backup.CopyTableOut(context.Background(), connectionPool, testTable, filename, defaultConnNum)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -138,7 +139,7 @@ var _ = Describe("backup/data tests", func() {
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456"
-			_, err := backup.CopyTableOut(connectionPool, testTable, filename, defaultConnNum)
+			_, err := backup.CopyTableOut(context.Background(), connectionPool, testTable, filename, defaultConnNum)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -148,7 +149,7 @@ var _ = Describe("backup/data tests", func() {
 			mock.ExpectExec(execStr).WillReturnResult(sqlmock.NewResult(10, 0))
 			filename := "<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_3456"
 
-			_, err := backup.CopyTableOut(connectionPool, testTable, filename, defaultConnNum)
+			_, err := backup.CopyTableOut(context.Background(), connectionPool, testTable, filename, defaultConnNum)
 
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -178,7 +179,7 @@ var _ = Describe("backup/data tests", func() {
 			backupFile := fmt.Sprintf("<SEG_DATA_DIR>/gpbackup_<SEGID>_20170101010101_pipe_(.*)_%d", testTable.Oid)
 			copyCmd := fmt.Sprintf(copyFmtStr, backupFile)
 			mock.ExpectExec(copyCmd).WillReturnResult(sqlmock.NewResult(0, 10))
-			err := backup.BackupSingleTableData(testTable, rowsCopiedMap, &counters, 0)
+			err := backup.BackupSingleTableData(context.Background(), testTable, rowsCopiedMap, &counters, 0)
 
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(rowsCopiedMap[0]).To(Equal(int64(10)))
@@ -190,7 +191,7 @@ var _ = Describe("backup/data tests", func() {
 			backupFile := fmt.Sprintf("<SEG_DATA_DIR>/backups/20170101/20170101010101/gpbackup_<SEGID>_20170101010101_%d", testTable.Oid)
 			copyCmd := fmt.Sprintf(copyFmtStr, backupFile)
 			mock.ExpectExec(copyCmd).WillReturnResult(sqlmock.NewResult(0, 10))
-			err := backup.BackupSingleTableData(testTable, rowsCopiedMap, &counters, 0)
+			err := backup.BackupSingleTableData(context.Background(), testTable, rowsCopiedMap, &counters, 0)
 
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(rowsCopiedMap[0]).To(Equal(int64(10)))
