@@ -530,7 +530,7 @@ options:
 			homeDir := os.Getenv("HOME")
 			helperFiles, _ := path.Glob(path.Join(homeDir, "gpAdminLogs/gpbackup_helper_*"))
 
-			pattern_helper_pid := fmt.Sprintf(":%d", helperCmd.Process.Pid)
+			pattern_helper_pid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
 			helper_out, _ := exec.Command("grep", pattern_helper_pid, helperFiles[len(helperFiles)-1]).CombinedOutput()
 			helperOutput := string(helper_out)
 
