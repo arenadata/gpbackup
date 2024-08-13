@@ -220,10 +220,6 @@ func doRestoreAgent() error {
 		tableOid := oidWithBatch.oid
 		batchNum := oidWithBatch.batch
 
-		if tableOid == skipOid {
-			continue
-		}
-
 		contentToRestore := *content + (*destSize * batchNum)
 		if wasTerminated {
 			logError("Terminated due to user request")
@@ -245,6 +241,10 @@ func doRestoreAgent() error {
 				// --on-error-continue is given
 				return err
 			}
+		}
+
+		if tableOid == skipOid {
+			goto LoopEnd
 		}
 
 		if *singleDataFile {

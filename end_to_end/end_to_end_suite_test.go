@@ -2464,7 +2464,7 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring("Encountered 1 errors during metadata restore"))
 			Expect(string(output)).To(ContainSubstring("Error loading data into table schemaone.tabletwo"))
-			Expect(string(output)).To(ContainSubstring("Encountered errors with 3 helper agent(s)."))
+			Expect(string(output)).To(ContainSubstring("Encountered 1 error(s) during table data restore"))
 			Expect(string(output)).To(ContainSubstring("Data restore completed with failures"))
 		})
 		It("Will clean up segments helper processes after error during restore", func() {
