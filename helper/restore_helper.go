@@ -244,6 +244,7 @@ func doRestoreAgent() error {
 		}
 
 		if tableOid == skipOid {
+			logVerbose(fmt.Sprintf("Oid %d, Batch %d: skip due to skip file\n", tableOid, batchNum))
 			goto LoopEnd
 		}
 
