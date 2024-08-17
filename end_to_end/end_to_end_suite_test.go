@@ -969,6 +969,14 @@ var _ = Describe("backup and restore end to end tests", func() {
 				"DROP INDEX schema2.foo3_idx1")
 			testhelper.AssertQueryRuns(backupConn,
 				"ANALYZE schema2.foo3")
+			testhelper.AssertQueryRuns(backupConn,
+				`CREATE TABLE schema2.foo4 ("schema2." TEXT)`)
+			defer testhelper.AssertQueryRuns(backupConn,
+				"DROP TABLE schema2.foo4")
+			testhelper.AssertQueryRuns(backupConn,
+				`INSERT INTO schema2.foo4 VALUES ('schema2.'),('schema2.')`)
+			testhelper.AssertQueryRuns(backupConn,
+				"ANALYZE schema2.foo4")
 			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--with-stats")
 			timestamp := getBackupTimestamp(string(output))
@@ -976,11 +984,13 @@ var _ = Describe("backup and restore end to end tests", func() {
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
 				"--include-table", "schema2.foo3",
+				"--include-table", "schema2.foo4",
 				"--redirect-schema", "schema3",
 				"--with-stats")
 
 			schema3TupleCounts := map[string]int{
 				"schema3.foo3": 100,
+				"schema3.foo4": 2,
 			}
 			assertDataRestored(restoreConn, schema3TupleCounts)
 			assertPGClassStatsRestored(restoreConn, restoreConn, schema3TupleCounts)
@@ -992,6 +1002,14 @@ var _ = Describe("backup and restore end to end tests", func() {
 			actualStatisticCount := dbconn.MustSelectString(restoreConn,
 				`SELECT count(*) FROM pg_statistic WHERE starelid='schema3.foo3'::regclass::oid;`)
 			Expect(actualStatisticCount).To(Equal("1"))
+
+			actualStatisticCount = dbconn.MustSelectString(restoreConn,
+				`SELECT count(*) FROM pg_statistic WHERE starelid='schema3.foo4'::regclass::oid;`)
+			Expect(actualStatisticCount).To(Equal("1"))
+
+			stavaluesTableFoo4 := dbconn.MustSelectString(restoreConn,
+				`SELECT stavalues1 FROM pg_statistic WHERE starelid='schema3.foo4'::regclass::oid;`)
+			Expect(stavaluesTableFoo4).To(Equal("{schema2.}"))
 		})
 		It("runs gprestore with --redirect-schema to redirect data back to the original database which still contain the original tables", func() {
 			skipIfOldBackupVersionBefore("1.17.0")
