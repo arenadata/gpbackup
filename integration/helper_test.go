@@ -252,7 +252,7 @@ options:
 		})
 		It("runs restore gpbackup_helper with gzip compression with plugin", func() {
 			setupRestoreFiles("gzip", true)
-			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--verbose", "--data-file", dataFileFullPath+".gz", "--plugin-config", examplePluginTestConfig)
+			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath+".gz", "--plugin-config", examplePluginTestConfig)
 			for _, i := range []int{1, 3} {
 				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
 				Expect(string(contents)).To(Equal("here is some data\n"))
