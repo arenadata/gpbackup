@@ -43,7 +43,16 @@ var (
  * SUBSET type applies when restoring using plugin(if compatible) from uncompressed data with filters
  * NONSEEKABLE type applies for every other restore scenario
  */
-type RestoreReader struct {
+type RestoreReader interface {
+	waitForPlugin() error
+	positionReader(pos uint64, oid int) error
+	copyData(num int64) (int64, error)
+	copyAllData() (int64, error)
+	getFileHandle() *os.File
+	getReaderType() ReaderType
+}
+
+type RestoreReaderImpl struct {
 	fileHandle *os.File
 	bufReader  *bufio.Reader
 	seekReader io.ReadSeeker
@@ -53,7 +62,7 @@ type RestoreReader struct {
 
 // Wait for plugin process that should be already finished. This should be
 // called on every reader that used a plugin as to not leave any zombies behind.
-func (r *RestoreReader) waitForPlugin() error {
+func (r *RestoreReaderImpl) waitForPlugin() error {
 	var err error
 	if r.pluginCmd != nil && r.pluginCmd.Process != nil {
 		logVerbose(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.Process.Pid))
@@ -72,7 +81,7 @@ func (r *RestoreReader) waitForPlugin() error {
 	return err
 }
 
-func (r *RestoreReader) positionReader(pos uint64, oid int) error {
+func (r *RestoreReaderImpl) positionReader(pos uint64, oid int) error {
 	switch r.readerType {
 	case SEEKABLE:
 		seekPosition, err := r.seekReader.Seek(int64(pos), io.SeekCurrent)
@@ -94,7 +103,7 @@ func (r *RestoreReader) positionReader(pos uint64, oid int) error {
 	return nil
 }
 
-func (r *RestoreReader) copyData(num int64) (int64, error) {
+func (r *RestoreReaderImpl) copyData(num int64) (int64, error) {
 	var bytesRead int64
 	var err error
 	switch r.readerType {
@@ -106,7 +115,7 @@ func (r *RestoreReader) copyData(num int64) (int64, error) {
 	return bytesRead, err
 }
 
-func (r *RestoreReader) copyAllData() (int64, error) {
+func (r *RestoreReaderImpl) copyAllData() (int64, error) {
 	var bytesRead int64
 	var err error
 	switch r.readerType {
@@ -118,13 +127,21 @@ func (r *RestoreReader) copyAllData() (int64, error) {
 	return bytesRead, err
 }
 
+func (r *RestoreReaderImpl) getReaderType() ReaderType {
+	return r.readerType
+}
+
+func (r *RestoreReaderImpl) getFileHandle() *os.File {
+	return r.fileHandle
+}
+
 type oidWithBatch struct {
 	oid   int
 	batch int
 }
 
 type RestoreHelper interface {
-	getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*RestoreReader, error)
+	getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (RestoreReader, error)
 	getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error)
 	checkForSkipFile(pipeFile string, tableOid int) bool
 }
@@ -146,7 +163,7 @@ func doRestoreAgent_internal(h Helper, rh RestoreHelper) error {
 	var bytesRead int64
 	var lastError error
 
-	readers := make(map[int]*RestoreReader)
+	readers := make(map[int]RestoreReader)
 
 	oidWithBatchList, err := h.getOidWithBatchListFromFile(*oidFile)
 	if err != nil {
@@ -215,7 +232,7 @@ func doRestoreAgent_internal(h Helper, rh RestoreHelper) error {
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
 			}
-			logVerbose(fmt.Sprintf("Using reader type: %s", readers[contentToRestore].readerType))
+			logVerbose(fmt.Sprintf("Using reader type: %s", readers[contentToRestore].getReaderType()))
 
 			contentToRestore += *destSize
 		}
@@ -263,7 +280,7 @@ func doRestoreAgent_internal(h Helper, rh RestoreHelper) error {
 				// Close file before it gets overwritten. Free up these
 				// resources when the reader is not needed anymore.
 				if reader, ok := readers[contentToRestore]; ok {
-					reader.fileHandle.Close()
+					reader.getFileHandle().Close()
 				}
 				// We pre-create readers above for the sake of not re-opening SDF readers.  For MDF we can't
 				// re-use them but still having them in a map simplifies overall code flow.  We repeatedly assign
@@ -424,13 +441,13 @@ func replaceContentInFilename(filename string, content int) string {
 	return contentRE.ReplaceAllString(filename, fmt.Sprintf("gpbackup_%d_", content))
 }
 
-func (RestoreHelperImpl) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*RestoreReader, error) {
+func (RestoreHelperImpl) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (RestoreReader, error) {
 	var readHandle io.Reader
 	var seekHandle io.ReadSeeker
 	var isSubset bool
 	var err error = nil
 	var pluginCmd *PluginCmd = nil
-	restoreReader := new(RestoreReader)
+	restoreReader := new(RestoreReaderImpl)
 
 	if *pluginConfigFile != "" {
 		pluginCmd, readHandle, isSubset, err = startRestorePluginCommand(fileToRead, objToc, oidList)
