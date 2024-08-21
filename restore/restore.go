@@ -410,11 +410,16 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 		return
 	}
 
-	schemaMatch := `(?:".+?"|[^.]+?)` // matches either an unquoted schema with no dots or a quoted schema containing dots
+	schemaMatch := `(?:".+?"|[^."]+?)` // matches either an unquoted schema with no dots or quotes or a quoted schema containing dots
 	// This expression matches a GRANT or REVOKE statement on any object and captures the old schema name
 	permissionsRE := regexp.MustCompile(fmt.Sprintf(`(?m)(^(?:REVOKE|GRANT) .+ ON .+?) (%s)((\..+)? (?:FROM|TO) .+)`, schemaMatch))
 	// This expression matches an ATTACH PARTITION statement and captures both the parent and child schema names
 	attachRE := regexp.MustCompile(fmt.Sprintf(`(ALTER TABLE(?: ONLY)?) (%[1]s)(\..+ ATTACH PARTITION) (%[1]s)(\..+)`, schemaMatch))
+	// This expression matches a '<schema>.<table>'::regclass::oid expression.
+	tableMatch := schemaMatch // table name should follow the same rules as schema name
+	regclassOidRE := regexp.MustCompile(fmt.Sprintf(`'(%s)((\.%s)'\:\:regclass\:\:oid)`, schemaMatch, tableMatch))
+	// This expression matches the last occurence of the '<schema>.<table>'::regclass::oid expression
+	lastRegclassOidRE := regexp.MustCompile(fmt.Sprintf(`(?s)^(.*)(%s)(.*?)$`, regclassOidRE))
 	for i := range statements {
 		oldSchema := fmt.Sprintf("%s.", statements[i].Schema)
 		newSchema := fmt.Sprintf("%s.", redirectSchema)
@@ -437,6 +442,13 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 		// ALTER TABLE schema.root ATTACH PARTITION schema.leaf needs two schema replacements
 		if connectionPool.Version.AtLeast("7") && statements[i].ObjectType == toc.OBJ_TABLE && statements[i].ReferenceObject != "" && strings.Contains(statement, "ATTACH") {
 			statement = attachRE.ReplaceAllString(statement, fmt.Sprintf("$1 %[1]s$3 %[1]s$5", redirectSchema))
+			replaced = true
+		}
+
+		// Statistic statements needs one schema replacements. We replace the last occurence to avoid a very small
+		// chance that schema name was in the statistic data itself, that we do not want to alter.
+		if statements[i].ObjectType == toc.OBJ_STATISTICS {
+			statement = lastRegclassOidRE.ReplaceAllString(statement, fmt.Sprintf("${1}'%s${4}$6", redirectSchema))
 			replaced = true
 		}
 
