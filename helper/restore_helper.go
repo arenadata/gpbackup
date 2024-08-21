@@ -377,7 +377,7 @@ func doRestoreAgent_internal(h Helper, rh RestoreHelper) error {
 
 	LoopEnd:
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, currentPipe))
-		errPipe = h.flushAndCloseRestoreWriter(currentPipe, tableOid)
+		errPipe := h.flushAndCloseRestoreWriter(currentPipe, tableOid)
 		if errPipe != nil {
 			logVerbose(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, errPipe))
 		}
