@@ -27,11 +27,11 @@ func (r *RestoreReaderTestImpl) positionReader(pos uint64, oid int) error {
 }
 
 func (r *RestoreReaderTestImpl) copyData(num int64) (int64, error) {
-	return 0, errors.New("copyData Not implemented")
+	return 1, nil
 }
 
 func (r *RestoreReaderTestImpl) copyAllData() (int64, error) {
-	return 0, errors.New("copyAllData Not implemented")
+	return 1, nil
 }
 
 func (r *RestoreReaderTestImpl) getFileHandle() *os.File {
