@@ -74,15 +74,6 @@ func gpbackupHelper(helperPath string, args ...string) *exec.Cmd {
 	return command
 }
 
-func gpbackupHelperRestoreNoSingle(helperPath string, args ...string) *exec.Cmd {
-	args = append([]string{"--toc-file", tocFile, "--pipe-file", pipeFile,
-		"--content", "1", "--restore-agent", "--oid-file", restoreOidFile}, args...)
-	command := exec.Command(helperPath, args...)
-	err := command.Start()
-	Expect(err).ToNot(HaveOccurred())
-	return command
-}
-
 func buildAndInstallBinaries() string {
 	_ = os.Chdir("..")
 	command := exec.Command("make", "build")
@@ -446,8 +437,8 @@ options:
 		It("skips batches if skip file discovered single file", func() {
 			// Run helper only with restore for a few batches and skip file defined
 			//
-			files_to_delete := setupRestoreWithSkipFiles(-1, false)
-			for _, f := range files_to_delete {
+			filesToDelete := setupRestoreWithSkipFiles(-1, false)
+			for _, f := range filesToDelete {
 				defer func(filename string) {
 					os.Remove(filename)
 				}(f)
@@ -455,11 +446,6 @@ options:
 
 			By("Create restore command")
 			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath+".gz", "--on-error-continue")
-
-			pipeNames := []string{}
-			for i := 1; i <= 3; i++ {
-				pipeNames = append(pipeNames, fmt.Sprintf("%s_%d_0", pipeFile, i))
-			}
 
 			// Block here until gpbackup_helper finishes (cleaning up pipes)
 			err = helperCmd.Wait()
@@ -474,9 +460,9 @@ options:
 			homeDir := os.Getenv("HOME")
 			helperFiles, _ := path.Glob(path.Join(homeDir, "gpAdminLogs/gpbackup_helper_*"))
 
-			pattern_helper_pid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
-			helper_out, _ := exec.Command("grep", pattern_helper_pid, helperFiles[len(helperFiles)-1]).CombinedOutput()
-			helperOutput := string(helper_out)
+			patternHelperPid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
+			helperOut, _ := exec.Command("grep", patternHelperPid, helperFiles[len(helperFiles)-1]).CombinedOutput()
+			helperOutput := string(helperOut)
 
 			// Batch 0 should be processed
 			Expect(helperOutput).To(ContainSubstring(`: Skip file discovered, skipping this relation`))
@@ -488,9 +474,8 @@ options:
 		})
 		It("skips batches if skip file discovered at resize restore", func() {
 			// Run helper only with restore for a few batches and skip file defined
-			//
-			files_to_delete := setupRestoreWithSkipFiles(1, false)
-			for _, f := range files_to_delete {
+			filesToDelete := setupRestoreWithSkipFiles(1, false)
+			for _, f := range filesToDelete {
 				defer func(filename string) {
 					os.Remove(filename)
 				}(f)
@@ -514,11 +499,6 @@ options:
 			err := helperCmd.Start()
 			Expect(err).ToNot(HaveOccurred())
 
-			pipeNames := []string{}
-			for i := 1; i <= 3; i++ {
-				pipeNames = append(pipeNames, fmt.Sprintf("%s_%d_0", pipeFile, i))
-			}
-
 			// Block here until gpbackup_helper finishes (cleaning up pipes)
 			err = helperCmd.Wait()
 			Expect(err).ToNot(HaveOccurred())
@@ -534,11 +514,11 @@ options:
 
 			Expect(helperFiles).NotTo(BeEmpty())
 
-			pattern_helper_pid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
-			helper_out, _ := exec.Command("grep", pattern_helper_pid, helperFiles[len(helperFiles)-1]).CombinedOutput()
-			helperOutput := string(helper_out)
+			patternHelperPid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
+			helperOut, _ := exec.Command("grep", patternHelperPid, helperFiles[len(helperFiles)-1]).CombinedOutput()
+			helperOutput := string(helperOut)
 
-			fmt.Printf("pattern_helper_pid = %s", pattern_helper_pid)
+			fmt.Printf("pattern_helper_pid = %s", patternHelperPid)
 
 			Expect(helperOutput).ToNot(BeEmpty())
 
@@ -552,9 +532,8 @@ options:
 		})
 		It("skips batches if skip file discovered at resize with a plugin", func() {
 			// Run helper only with restore for a few batches and skip file defined
-			//
-			files_to_delete := setupRestoreWithSkipFiles(1, true)
-			for _, f := range files_to_delete {
+			filesToDelete := setupRestoreWithSkipFiles(1, true)
+			for _, f := range filesToDelete {
 				defer func(filename string) {
 					os.Remove(filename)
 				}(f)
@@ -578,11 +557,6 @@ options:
 			err := helperCmd.Start()
 			Expect(err).ToNot(HaveOccurred())
 
-			pipeNames := []string{}
-			for i := 1; i <= 3; i++ {
-				pipeNames = append(pipeNames, fmt.Sprintf("%s_%d_0", pipeFile, i))
-			}
-
 			// Block here until gpbackup_helper finishes (cleaning up pipes)
 			err = helperCmd.Wait()
 			Expect(err).ToNot(HaveOccurred())
@@ -599,11 +573,11 @@ options:
 
 			Expect(helperFiles).NotTo(BeEmpty())
 
-			pattern_helper_pid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
-			helper_out, _ := exec.Command("grep", pattern_helper_pid, helperFiles[len(helperFiles)-1]).CombinedOutput()
-			helperOutput := string(helper_out)
+			patternHelperPid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
+			helperOut, _ := exec.Command("grep", patternHelperPid, helperFiles[len(helperFiles)-1]).CombinedOutput()
+			helperOutput := string(helperOut)
 
-			fmt.Printf("pattern_helper_pid = %s", pattern_helper_pid)
+			fmt.Printf("pattern_helper_pid = %s", patternHelperPid)
 
 			Expect(helperOutput).ToNot(BeEmpty())
 
