@@ -436,7 +436,6 @@ options:
 		})
 		It("skips batches if skip file discovered single file", func() {
 			// Run helper only with restore for a few batches and skip file defined
-			//
 			filesToDelete := setupRestoreWithSkipFiles(-1, false)
 			for _, f := range filesToDelete {
 				defer func(filename string) {

@@ -213,7 +213,7 @@ func doRestoreAgent() error {
 
 	var currentPipe string
 
-	// If skip file detected for the particular tableOid, Will not process batches related to this oid
+	// If skip file is detected for the particular tableOid, will not process batches related to this oid
 	skipOid := -1
 
 	for i, oidWithBatch := range oidWithBatchList {
