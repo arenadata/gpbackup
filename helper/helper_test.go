@@ -43,61 +43,59 @@ func (r *RestoreReaderTestImpl) getReaderType() ReaderType {
 }
 
 type SkipFileTestStep struct {
-	getRestorePipeWriter_arg_expect string
-	getRestorePipeWriter_result     bool
-	check_skip_file_arg_tableoid    int
-	check_skip_file_result          bool
+	getRestorePipeWriterArgExpect string
+	getRestorePipeWriterResult    bool
+	checkSkipFileArgTableOid      int
+	checkSkipFileResult           bool
 }
 
 type RestoreMockHelperImpl struct {
-	step_no           int
-	expected_oidbatch []oidWithBatch
-	expected_steps    []SkipFileTestStep
+	stepNo           int
+	expectedOidBatch []oidWithBatch
+	expectedSteps    []SkipFileTestStep
 
-	opened_pipes_map map[string]string // Ginkgo matcher works over map value, will diplicate key here
-	restoreData      *RestoreReaderTestImpl
+	openedPipesMap map[string]string // Ginkgo matcher works over map value, will diplicate key here
+	restoreData    *RestoreReaderTestImpl
 }
 
 func (h *RestoreMockHelperImpl) opened_pipes() []string {
-
-	if h.opened_pipes_map == nil {
-		h.opened_pipes_map = make(map[string]string)
+	if h.openedPipesMap == nil {
+		h.openedPipesMap = make(map[string]string)
 
 		for k := range pipesMap {
-			h.opened_pipes_map[k] = k
+			h.openedPipesMap[k] = k
 		}
 	}
-	ret := make([]string, 0, len(h.opened_pipes_map))
-	for k := range h.opened_pipes_map {
+	ret := make([]string, 0, len(h.openedPipesMap))
+	for k := range h.openedPipesMap {
 		ret = append(ret, k)
 	}
 	return ret
 }
 
 func (h *RestoreMockHelperImpl) getCurStep() SkipFileTestStep {
-	Expect(h.step_no).To(BeNumerically("<", len(h.expected_steps)))
-	return h.expected_steps[h.step_no]
+	Expect(h.stepNo).To(BeNumerically("<", len(h.expectedSteps)))
+	return h.expectedSteps[h.stepNo]
 }
 
 func NewSkipFileTest(batches []oidWithBatch, steps []SkipFileTestStep) *RestoreMockHelperImpl {
 	var ret = new(RestoreMockHelperImpl)
-	ret.expected_oidbatch = batches
-	ret.expected_steps = steps
-	ret.opened_pipes_map = nil
+	ret.expectedOidBatch = batches
+	ret.expectedSteps = steps
+	ret.openedPipesMap = nil
 	ret.restoreData = nil
 
 	return ret
 }
 
 func (h *RestoreMockHelperImpl) getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
-	return h.expected_oidbatch, nil
+	return h.expectedOidBatch, nil
 }
 
 func (h *RestoreMockHelperImpl) checkForSkipFile(pipeFile string, tableOid int) bool {
-
 	step := h.getCurStep()
-	Expect(tableOid).To(Equal(step.check_skip_file_arg_tableoid))
-	ret := h.getCurStep().check_skip_file_result
+	Expect(tableOid).To(Equal(step.checkSkipFileArgTableOid))
+	ret := h.getCurStep().checkSkipFileResult
 	return ret
 }
 
@@ -105,15 +103,14 @@ func (h *RestoreMockHelperImpl) createPipe(pipe string) error {
 	// Check that pipe was not opened yet
 	Expect(h.opened_pipes()).ShouldNot(ContainElement(pipe))
 
-	h.opened_pipes_map[pipe] = pipe
+	h.openedPipesMap[pipe] = pipe
 	return nil
 }
 
 func (h *RestoreMockHelperImpl) flushAndCloseRestoreWriter(pipeName string, oid int) error {
-
 	// Check that we are closing pipe which is opened
 	Expect(h.opened_pipes()).To(ContainElement(pipeName))
-	delete(h.opened_pipes_map, pipeName)
+	delete(h.openedPipesMap, pipeName)
 	return nil
 }
 
@@ -125,13 +122,13 @@ func (h *RestoreMockHelperImpl) getRestoreDataReader(fileToRead string, objToc *
 }
 
 func (h *RestoreMockHelperImpl) getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
-	h.step_no++
-	Expect(currentPipe).To(Equal(h.getCurStep().getRestorePipeWriter_arg_expect))
+	h.stepNo++
+	Expect(currentPipe).To(Equal(h.getCurStep().getRestorePipeWriterArgExpect))
 
 	// The pipe should be created before
 	Expect(h.opened_pipes()).Should(ContainElement(currentPipe))
 
-	if h.getCurStep().getRestorePipeWriter_result {
+	if h.getCurStep().getRestorePipeWriterResult {
 		var writer bufio.Writer
 		return &writer, nil, nil
 	}
@@ -232,25 +229,25 @@ var _ = Describe("helper tests", func() {
 
 	Describe("doRestoreAgent Mocked unit tests", func() {
 		var (
-			save_singleDataFile  bool
-			save_content         int
-			save_oidFile         string
-			save_isResizeRestore bool
-			save_origSize        int
-			save_destSize        int
-			save_pipeFile        string
-			save_onErrorContinue bool
+			saveSingleDataFile  bool
+			saveContent         int
+			saveOidFile         string
+			saveIsResizeRestore bool
+			saveOrigSize        int
+			saveDestSize        int
+			savePipeFile        string
+			saveOnErrorContinue bool
 		)
 
 		BeforeEach(func() {
-			save_singleDataFile = *singleDataFile
-			save_content = *content
-			save_oidFile = *oidFile
-			save_isResizeRestore = *isResizeRestore
-			save_origSize = *origSize
-			save_destSize = *destSize
-			save_pipeFile = *pipeFile
-			save_onErrorContinue = *onErrorContinue
+			saveSingleDataFile = *singleDataFile
+			saveContent = *content
+			saveOidFile = *oidFile
+			saveIsResizeRestore = *isResizeRestore
+			saveOrigSize = *origSize
+			saveDestSize = *destSize
+			savePipeFile = *pipeFile
+			saveOnErrorContinue = *onErrorContinue
 
 			*singleDataFile = false
 			*content = 1
@@ -263,25 +260,25 @@ var _ = Describe("helper tests", func() {
 		})
 
 		AfterEach(func() {
-			*singleDataFile = save_singleDataFile
-			*content = save_content
-			*oidFile = save_oidFile
-			*isResizeRestore = save_isResizeRestore
-			*origSize = save_origSize
-			*destSize = save_destSize
-			*pipeFile = save_pipeFile
-			*onErrorContinue = save_onErrorContinue
+			*singleDataFile = saveSingleDataFile
+			*content = saveContent
+			*oidFile = saveOidFile
+			*isResizeRestore = saveIsResizeRestore
+			*origSize = saveOrigSize
+			*destSize = saveDestSize
+			*pipeFile = savePipeFile
+			*onErrorContinue = saveOnErrorContinue
 		})
 		It("successfully restores using a single data file when inputs are valid and no errors occur", func() {
 			*singleDataFile = true
 
-			oid_batch := []oidWithBatch{{oid: 1, batch: 1}}
+			oidBatch := []oidWithBatch{{oid: 1, batch: 1}}
 			steps := []SkipFileTestStep{
 				{},
-				{getRestorePipeWriter_arg_expect: "mock_1_1", getRestorePipeWriter_result: true, check_skip_file_arg_tableoid: 1, check_skip_file_result: false},
+				{getRestorePipeWriterArgExpect: "mock_1_1", getRestorePipeWriterResult: true, checkSkipFileArgTableOid: 1, checkSkipFileResult: false},
 			}
 
-			mockHelper := NewSkipFileTest(oid_batch, steps)
+			mockHelper := NewSkipFileTest(oidBatch, steps)
 			mockHelper.restoreData = &RestoreReaderTestImpl{}
 
 			// Prepare the toc file
@@ -314,13 +311,13 @@ var _ = Describe("helper tests", func() {
 		})
 		It("successfully restores using multiple data files when inputs are valid and no errors occur", func() {
 			// Call the function under test
-			oid_batch := []oidWithBatch{{oid: 1, batch: 1}}
+			oidBatch := []oidWithBatch{{oid: 1, batch: 1}}
 			steps := []SkipFileTestStep{
 				{},
-				{getRestorePipeWriter_arg_expect: "mock_1_1", getRestorePipeWriter_result: true, check_skip_file_arg_tableoid: 1, check_skip_file_result: false},
+				{getRestorePipeWriterArgExpect: "mock_1_1", getRestorePipeWriterResult: true, checkSkipFileArgTableOid: 1, checkSkipFileResult: false},
 			}
 
-			mockHelper := NewSkipFileTest(oid_batch, steps)
+			mockHelper := NewSkipFileTest(oidBatch, steps)
 			mockHelper.restoreData = &RestoreReaderTestImpl{}
 
 			err := doRestoreAgent_internal(mockHelper, mockHelper)
@@ -329,14 +326,14 @@ var _ = Describe("helper tests", func() {
 		})
 		It("skips batches with corresponding skip file in doRestoreAgent", func() {
 			// Test Scenario 1. Simulate 1 pass for the doRestoreAgent() function with the specified oids, batches and expected calls
-			oid_batch := []oidWithBatch{
+			oidBatch := []oidWithBatch{
 				{100, 2},
 				{200, 3},
 				{200, 4},
 				{200, 5},
 			}
 
-			expected_scenario := []SkipFileTestStep{
+			expectedScenario := []SkipFileTestStep{
 				{},                                // placeholder as steps start from 1
 				{"mock_100_2", true, -1, false},   // Can open pipe for table 100, check_skip_file shall not be called
 				{"mock_200_3", true, -1, false},   // Can open pipe for table 200, check_skip_file shall not be called
@@ -345,7 +342,7 @@ var _ = Describe("helper tests", func() {
 				{"mock_200_5", true, -1, false},   // Went to the next batch, Can open pipe for table 200, check_skip_file shall not be called
 			}
 
-			helper := NewSkipFileTest(oid_batch, expected_scenario)
+			helper := NewSkipFileTest(oidBatch, expectedScenario)
 
 			err := doRestoreAgent_internal(helper, helper)
 			Expect(err).To(BeNil())
