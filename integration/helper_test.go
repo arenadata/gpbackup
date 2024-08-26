@@ -434,7 +434,7 @@ options:
 			Expect(err).To(HaveOccurred())
 			assertErrorsHandled()
 		})
-		It("skips batches if skip file discovered single file", func() {
+		It("skips batches if skip file is discovered with single datafile config", func() {
 			// Run helper only with restore for a few batches and skip file defined
 			filesToDelete := setupRestoreWithSkipFiles(-1, false)
 			for _, f := range filesToDelete {
@@ -471,7 +471,7 @@ options:
 			Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Skip file discovered, skipping this relation`))
 			Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Opening pipe`))
 		})
-		It("skips batches if skip file discovered at resize restore", func() {
+		It("skips batches if skip file is discovered with resize restore", func() {
 			// Run helper only with restore for a few batches and skip file defined
 			filesToDelete := setupRestoreWithSkipFiles(1, false)
 			for _, f := range filesToDelete {
@@ -529,7 +529,7 @@ options:
 			Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Skip file discovered, skipping this relation`))
 			Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Opening pipe`))
 		})
-		It("skips batches if skip file discovered at resize with a plugin", func() {
+		It("skips batches if skip file is discovered widb resize sertore using a plugin", func() {
 			// Run helper only with restore for a few batches and skip file defined
 			filesToDelete := setupRestoreWithSkipFiles(1, true)
 			for _, f := range filesToDelete {
