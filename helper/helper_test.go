@@ -58,7 +58,7 @@ type RestoreMockHelperImpl struct {
 	restoreData    *RestoreReaderTestImpl
 }
 
-func (h *RestoreMockHelperImpl) opened_pipes() []string {
+func (h *RestoreMockHelperImpl) openedPipes() []string {
 	if h.openedPipesMap == nil {
 		h.openedPipesMap = make(map[string]string)
 
@@ -101,7 +101,7 @@ func (h *RestoreMockHelperImpl) checkForSkipFile(pipeFile string, tableOid int) 
 
 func (h *RestoreMockHelperImpl) createPipe(pipe string) error {
 	// Check that pipe was not opened yet
-	Expect(h.opened_pipes()).ShouldNot(ContainElement(pipe))
+	Expect(h.openedPipes()).ShouldNot(ContainElement(pipe))
 
 	h.openedPipesMap[pipe] = pipe
 	return nil
@@ -109,7 +109,7 @@ func (h *RestoreMockHelperImpl) createPipe(pipe string) error {
 
 func (h *RestoreMockHelperImpl) flushAndCloseRestoreWriter(pipeName string, oid int) error {
 	// Check that we are closing pipe which is opened
-	Expect(h.opened_pipes()).To(ContainElement(pipeName))
+	Expect(h.openedPipes()).To(ContainElement(pipeName))
 	delete(h.openedPipesMap, pipeName)
 	return nil
 }
@@ -126,7 +126,7 @@ func (h *RestoreMockHelperImpl) getRestorePipeWriter(currentPipe string) (*bufio
 	Expect(currentPipe).To(Equal(h.getCurStep().getRestorePipeWriterArgExpect))
 
 	// The pipe should be created before
-	Expect(h.opened_pipes()).Should(ContainElement(currentPipe))
+	Expect(h.openedPipes()).Should(ContainElement(currentPipe))
 
 	if h.getCurStep().getRestorePipeWriterResult {
 		var writer bufio.Writer
@@ -298,14 +298,14 @@ var _ = Describe("helper tests", func() {
     endbyte: %d
 `, dataLength+18, dataLength+18+18)
 			fToc, _ := os.Create(*tocFile)
-			_, _ = fToc.WriteString(customTOC)
+			fToc.WriteString(customTOC)
 			defer func() {
-				_ = os.Remove(*tocFile)
+				os.Remove(*tocFile)
 			}()
 
 			*dataFile = "test_data.dat"
 			// Call the function under test
-			err := doRestoreAgent_internal(mockHelper, mockHelper)
+			err := doRestoreAgentInternal(mockHelper, mockHelper)
 
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -320,7 +320,7 @@ var _ = Describe("helper tests", func() {
 			mockHelper := NewSkipFileTest(oidBatch, steps)
 			mockHelper.restoreData = &RestoreReaderTestImpl{}
 
-			err := doRestoreAgent_internal(mockHelper, mockHelper)
+			err := doRestoreAgentInternal(mockHelper, mockHelper)
 
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -344,7 +344,7 @@ var _ = Describe("helper tests", func() {
 
 			helper := NewSkipFileTest(oidBatch, expectedScenario)
 
-			err := doRestoreAgent_internal(helper, helper)
+			err := doRestoreAgentInternal(helper, helper)
 			Expect(err).To(BeNil())
 		})
 	})

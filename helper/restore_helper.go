@@ -152,7 +152,7 @@ func (RestoreHelperImpl) checkForSkipFile(pipeFile string, tableOid int) bool {
 	return utils.FileExists(fmt.Sprintf("%s_skip_%d", pipeFile, tableOid))
 }
 
-func doRestoreAgent_internal(h Helper, rh RestoreHelper) error {
+func doRestoreAgentInternal(h Helper, rh RestoreHelper) error {
 	// We need to track various values separately per content for resize restore
 	var segmentTOC map[int]*toc.SegmentTOC
 	var tocEntries map[int]map[uint]toc.SegmentDataEntry
@@ -419,7 +419,7 @@ func doRestoreAgent_internal(h Helper, rh RestoreHelper) error {
 func doRestoreAgent() error {
 	helper := new(HelperImpl)
 	restorer := new(RestoreHelperImpl)
-	return doRestoreAgent_internal(helper, restorer)
+	return doRestoreAgentInternal(helper, restorer)
 }
 
 func constructSingleTableFilename(name string, contentToRestore int, oid int) string {
