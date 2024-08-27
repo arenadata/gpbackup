@@ -511,15 +511,64 @@ options:
 			homeDir := os.Getenv("HOME")
 			helperFiles, _ := path.Glob(path.Join(homeDir, "gpAdminLogs/gpbackup_helper_*"))
 
-			Expect(helperFiles).NotTo(BeEmpty())
+			Expect(helperFiles).ToNot(BeEmpty())
 
 			patternHelperPid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
 			helperOut, _ := exec.Command("grep", patternHelperPid, helperFiles[len(helperFiles)-1]).CombinedOutput()
 			helperOutput := string(helperOut)
 
-			fmt.Printf("pattern_helper_pid = %s", patternHelperPid)
-
 			Expect(helperOutput).ToNot(BeEmpty())
+
+			// Batch 0 should be processed
+			Expect(helperOutput).To(ContainSubstring(`: Skip file discovered, skipping this relation`))
+			Expect(helperOutput).To(ContainSubstring(`Segment 1: Oid 1, Batch 0: Opening pipe`))
+
+			// Batch 2 must not be processed
+			Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Skip file discovered, skipping this relation`))
+			Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Opening pipe`))
+		})
+		It("skips batches if skip file is discovered with single datafile config using a plugin", func() {
+			filesToDelete := setupRestoreWithSkipFiles(-1, true)
+			for _, f := range filesToDelete {
+				defer func(filename string) {
+					os.Remove(filename)
+				}(f)
+			}
+			By("Create restore command")
+			args := []string{
+				"--toc-file", tocFile,
+				"--oid-file", restoreOidFile,
+				"--pipe-file", pipeFile,
+				"--content", "1",
+				"--single-data-file",
+				"--restore-agent",
+				"--plugin-config", examplePluginTestConfig,
+				"--data-file", dataFileFullPath + ".gz",
+				"--on-error-continue",
+			}
+			helperCmd := exec.Command(gpbackupHelperPath, args...)
+			err := helperCmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+
+			// Block here until gpbackup_helper finishes (cleaning up pipes)
+			err = helperCmd.Wait()
+			Expect(err).ToNot(HaveOccurred())
+
+			for _, i := range []int{1, 2, 3} {
+				currentPipe := fmt.Sprintf("%s_%d_0", pipeFile, i)
+				Expect(currentPipe).ToNot(BeAnExistingFile())
+			}
+
+			By("Check in logs that batches were not restored")
+
+			homeDir := os.Getenv("HOME")
+			helperFiles, _ := path.Glob(path.Join(homeDir, "gpAdminLogs/gpbackup_helper_*"))
+
+			Expect(helperFiles).ToNot(BeEmpty())
+
+			patternHelperPid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
+			helperOut, _ := exec.Command("grep", patternHelperPid, helperFiles[len(helperFiles)-1]).CombinedOutput()
+			helperOutput := string(helperOut)
 
 			// Batch 0 should be processed
 			Expect(helperOutput).To(ContainSubstring(`: Skip file discovered, skipping this relation`))
@@ -570,13 +619,11 @@ options:
 			homeDir := os.Getenv("HOME")
 			helperFiles, _ := path.Glob(path.Join(homeDir, "gpAdminLogs/gpbackup_helper_*"))
 
-			Expect(helperFiles).NotTo(BeEmpty())
+			Expect(helperFiles).ToNot(BeEmpty())
 
 			patternHelperPid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
 			helperOut, _ := exec.Command("grep", patternHelperPid, helperFiles[len(helperFiles)-1]).CombinedOutput()
 			helperOutput := string(helperOut)
-
-			fmt.Printf("pattern_helper_pid = %s", patternHelperPid)
 
 			Expect(helperOutput).ToNot(BeEmpty())
 
@@ -789,11 +836,8 @@ func setupRestoreWithSkipFiles(oid int, withPlugin bool) []string {
 	ret = append(ret, tocFile)
 
 	skipFile := fmt.Sprintf("%s_skip_%d", pipeFile, 1)
-	fSkip, err := os.Create(skipFile)
-	if err != nil {
-		Fail(fmt.Sprintf("%v", err))
-	}
-	fSkip.Close()
+	err = exec.Command("touch", skipFile).Run()
+	Expect(err).ToNot(HaveOccurred())
 
 	ret = append(ret, skipFile)
 	return ret
