@@ -463,6 +463,8 @@ options:
 			helperOut, _ := exec.Command("grep", patternHelperPid, helperFiles[len(helperFiles)-1]).CombinedOutput()
 			helperOutput := string(helperOut)
 
+			Expect(helperOutput).ToNot(BeEmpty())
+
 			// Batch 0 should be processed
 			Expect(helperOutput).To(ContainSubstring(`: Skip file discovered, skipping this relation`))
 			Expect(helperOutput).To(ContainSubstring(`Segment 1: Oid 1, Batch 0: Opening pipe`))
@@ -569,6 +571,8 @@ options:
 			patternHelperPid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
 			helperOut, _ := exec.Command("grep", patternHelperPid, helperFiles[len(helperFiles)-1]).CombinedOutput()
 			helperOutput := string(helperOut)
+
+			Expect(helperOutput).ToNot(BeEmpty())
 
 			// Batch 0 should be processed
 			Expect(helperOutput).To(ContainSubstring(`: Skip file discovered, skipping this relation`))
