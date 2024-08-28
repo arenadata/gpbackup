@@ -135,6 +135,28 @@ func (h *RestoreMockHelperImpl) getRestorePipeWriter(currentPipe string) (*bufio
 	return nil, nil, unix.ENXIO
 }
 
+var (
+	saveBackupAgent      bool
+	saveCompressionLevel int
+	saveCompressionType  string
+	saveContent          int
+	saveDataFile         string
+	saveOidFile          string
+	saveOnErrorContinue  bool
+	savePipeFile         string
+	savePluginConfigFile string
+	savePrintVersion     bool
+	saveRestoreAgent     bool
+	saveTocFile          string
+	saveIsFiltered       bool
+	saveCopyQueue        int
+	saveSingleDataFile   bool
+	saveIsResizeRestore  bool
+	saveOrigSize         int
+	saveDestSize         int
+	saveVerbosity        int
+)
+
 var _ = Describe("helper tests", func() {
 	var pluginConfig utils.PluginConfig
 	var isSubset bool
@@ -151,6 +173,50 @@ var _ = Describe("helper tests", func() {
 		ConfigPath:     "/tmp/my_plugin_config.yaml",
 		Options:        make(map[string]string),
 	}
+
+	BeforeEach(func() {
+		saveBackupAgent = *backupAgent
+		saveCompressionLevel = *compressionLevel
+		saveCompressionType = *compressionType
+		saveContent = *content
+		saveDataFile = *dataFile
+		saveOidFile = *oidFile
+		saveOnErrorContinue = *onErrorContinue
+		savePipeFile = *pipeFile
+		savePluginConfigFile = *pluginConfigFile
+		savePrintVersion = *printVersion
+		saveRestoreAgent = *restoreAgent
+		saveTocFile = *tocFile
+		saveIsFiltered = *isFiltered
+		saveCopyQueue = *copyQueue
+		saveSingleDataFile = *singleDataFile
+		saveIsResizeRestore = *isResizeRestore
+		saveOrigSize = *origSize
+		saveDestSize = *destSize
+		saveVerbosity = *verbosity
+	})
+
+	AfterEach(func() {
+		*backupAgent = saveBackupAgent
+		*compressionLevel = saveCompressionLevel
+		*compressionType = saveCompressionType
+		*content = saveContent
+		*dataFile = saveDataFile
+		*oidFile = saveOidFile
+		*onErrorContinue = saveOnErrorContinue
+		*pipeFile = savePipeFile
+		*pluginConfigFile = savePluginConfigFile
+		*printVersion = savePrintVersion
+		*restoreAgent = saveRestoreAgent
+		*tocFile = saveTocFile
+		*isFiltered = saveIsFiltered
+		*copyQueue = saveCopyQueue
+		*singleDataFile = saveSingleDataFile
+		*isResizeRestore = saveIsResizeRestore
+		*origSize = saveOrigSize
+		*destSize = saveDestSize
+		*verbosity = saveVerbosity
+	})
 
 	Describe("Check subset flag", func() {
 		It("when restore_subset is off, --on-error-continue is false, compression is not used", func() {
@@ -228,27 +294,8 @@ var _ = Describe("helper tests", func() {
 	})
 
 	Describe("doRestoreAgent Mocked unit tests", func() {
-		var (
-			saveSingleDataFile  bool
-			saveContent         int
-			saveOidFile         string
-			saveIsResizeRestore bool
-			saveOrigSize        int
-			saveDestSize        int
-			savePipeFile        string
-			saveOnErrorContinue bool
-		)
-
 		BeforeEach(func() {
-			saveSingleDataFile = *singleDataFile
-			saveContent = *content
-			saveOidFile = *oidFile
-			saveIsResizeRestore = *isResizeRestore
-			saveOrigSize = *origSize
-			saveDestSize = *destSize
-			savePipeFile = *pipeFile
-			saveOnErrorContinue = *onErrorContinue
-
+			// Setup mocked tests environment
 			*singleDataFile = false
 			*content = 1
 			*oidFile = "testoid.dat"
@@ -257,17 +304,6 @@ var _ = Describe("helper tests", func() {
 			*destSize = 3
 			*pipeFile = "mock"
 			*onErrorContinue = true
-		})
-
-		AfterEach(func() {
-			*singleDataFile = saveSingleDataFile
-			*content = saveContent
-			*oidFile = saveOidFile
-			*isResizeRestore = saveIsResizeRestore
-			*origSize = saveOrigSize
-			*destSize = saveDestSize
-			*pipeFile = savePipeFile
-			*onErrorContinue = saveOnErrorContinue
 		})
 		It("successfully restores using a single data file when inputs are valid and no errors occur", func() {
 			*singleDataFile = true
