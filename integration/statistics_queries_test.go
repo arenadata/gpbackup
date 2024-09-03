@@ -47,13 +47,13 @@ var _ = Describe("backup integration tests", func() {
 			 * the same schema and data.
 			 */
 			expectedStats5I := backup.AttributeStatistic{Oid: tableOid, Schema: "public", Table: "foo", AttName: "i",
-				Type: "int4", Relid: tableOid, AttNumber: 1, Inherit: false, Width: 4, Distinct: -1, Kind1: 2, Kind2: 3, Operator1: 97,
+				Type: "int4", Relid: tableOid, Inherit: false, Width: 4, Distinct: -1, Kind1: 2, Kind2: 3, Operator1: 97,
 				Operator2: 97, Numbers2: []string{"1"}, Values1: []string{"1", "2", "3", "4"}}
 			expectedStats5J := backup.AttributeStatistic{Oid: tableOid, Schema: "public", Table: "foo", AttName: "j",
-				Type: "text", Relid: tableOid, AttNumber: 2, Inherit: false, Width: 2, Distinct: -1, Kind1: 2, Kind2: 3, Operator1: 664,
+				Type: "text", Relid: tableOid, Inherit: false, Width: 2, Distinct: -1, Kind1: 2, Kind2: 3, Operator1: 664,
 				Operator2: 664, Numbers2: []string{"1"}, Values1: []string{"a", "b", "c", "d"}}
 			expectedStats5K := backup.AttributeStatistic{Oid: tableOid, Schema: "public", Table: "foo", AttName: "k",
-				Type: "bool", Relid: tableOid, AttNumber: 3, Inherit: false, Width: 1, Distinct: -0.5, Kind1: 1, Kind2: 3, Operator1: 91,
+				Type: "bool", Relid: tableOid, Inherit: false, Width: 1, Distinct: -0.5, Kind1: 1, Kind2: 3, Operator1: 91,
 				Operator2: 58, Numbers1: []string{"0.5", "0.5"}, Numbers2: []string{"0.5"}, Values1: []string{"f", "t"}}
 			if connectionPool.Version.AtLeast("7") {
 				expectedStats5J.Collation1 = 100

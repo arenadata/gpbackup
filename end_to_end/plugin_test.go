@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	path "path/filepath"
+	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
@@ -14,6 +15,7 @@ import (
 	"github.com/greenplum-db/gpbackup/testutils"
 	"github.com/greenplum-db/gpbackup/utils"
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 func copyPluginToAllHosts(conn *dbconn.DBConn, pluginPath string) {
@@ -322,6 +324,83 @@ var _ = Describe("End to End plugin tests", func() {
 					Skip("This test is only needed for the most recent backup versions")
 				}
 			})
+			It("Will not hang if gpbackup and gprestore runs with single-data-file and the helper goes down at its start", func(ctx SpecContext) {
+				copyPluginToAllHosts(backupConn, examplePluginExec)
+
+				testhelper.AssertQueryRuns(backupConn, "CREATE TABLE t0(a int);")
+				testhelper.AssertQueryRuns(backupConn, "INSERT INTO t0 SELECT i FROM generate_series(1, 10)i;")
+				defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE t0;")
+
+				output := gpbackup(gpbackupPath, backupHelperPath,
+					"--single-data-file",
+					"--plugin-config", examplePluginTestConfig)
+				timestamp := getBackupTimestamp(string(output))
+
+				backupCluster.GenerateAndExecuteCommand(
+					"Instruct plugin to fail",
+					cluster.ON_HOSTS,
+					func(contentID int) string {
+						return fmt.Sprintf("touch /tmp/GPBACKUP_PLUGIN_DIE")
+					})
+
+				defer backupCluster.GenerateAndExecuteCommand(
+					"Unset plugin instruction",
+					cluster.ON_HOSTS,
+					func(contentID int) string {
+						return fmt.Sprintf("rm /tmp/GPBACKUP_PLUGIN_DIE")
+					})
+
+				gprestoreCmd := exec.Command(gprestorePath,
+					"--timestamp", timestamp,
+					"--redirect-db", "restoredb",
+					"--plugin-config", examplePluginTestConfig)
+
+				_, err := gprestoreCmd.CombinedOutput()
+				Expect(err).To(HaveOccurred())
+
+				assertArtifactsCleaned(timestamp)
+			}, SpecTimeout(time.Second*30))
+			It("Will not hang if gprestore runs with cluster resize and the helper goes down on one of the tables", func(ctx SpecContext) {
+				copyPluginToAllHosts(backupConn, examplePluginExec)
+
+				pluginBackupDirectory := `/tmp/plugin_dest`
+				os.Mkdir(pluginBackupDirectory, 0777)
+				command := exec.Command("tar", "-xzf", fmt.Sprintf("resources/%s.tar.gz", "9-segment-db-with-plugin"), "-C", pluginBackupDirectory)
+				mustRunCommand(command)
+
+				backupCluster.GenerateAndExecuteCommand(
+					"Instruct plugin to fail",
+					cluster.ON_HOSTS,
+					func(contentID int) string {
+						return fmt.Sprintf("touch /tmp/GPBACKUP_PLUGIN_DIE")
+					})
+
+				defer backupCluster.GenerateAndExecuteCommand(
+					"Unset plugin instruction",
+					cluster.ON_HOSTS,
+					func(contentID int) string {
+						return fmt.Sprintf("rm /tmp/GPBACKUP_PLUGIN_DIE")
+					})
+
+				timestamp := "20240812201233"
+
+				gprestoreCmd := exec.Command(gprestorePath,
+					"--resize-cluster",
+					"--timestamp", timestamp,
+					"--redirect-db", "restoredb",
+					"--plugin-config", examplePluginTestConfig)
+
+				// instruct plugin to die only before restoring the last table
+				gprestoreCmd.Env = os.Environ()
+				gprestoreCmd.Env = append(gprestoreCmd.Env, "GPBACKUP_PLUGIN_DIE_ON_OID=16392")
+
+				_, err := gprestoreCmd.CombinedOutput()
+				Expect(err).To(HaveOccurred())
+
+				assertArtifactsCleaned(timestamp)
+
+				os.RemoveAll(pluginBackupDirectory)
+			}, SpecTimeout(time.Second*30))
 			It("runs gpbackup and gprestore with plugin, single-data-file, and no-compression", func() {
 				copyPluginToAllHosts(backupConn, examplePluginExec)
 
