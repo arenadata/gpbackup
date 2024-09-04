@@ -650,12 +650,11 @@ func createCustomTOCFile(fname string, dataLength int) {
 	if err != nil {
 		Fail(fmt.Sprintf("%v", err))
 	}
+	defer fToc.Close()
 
 	if _, err = fToc.WriteString(customTOC); err != nil {
 		Fail(fmt.Sprintf("%v", err))
 	}
-
-	fToc.Close()
 }
 
 /*
