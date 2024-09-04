@@ -15,6 +15,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	testDir                 = "/tmp/helper_test/20180101/20180101010101"
+	testTocFile             = fmt.Sprintf("%s/test_toc.yaml", testDir)
+	examplePluginTestConfig = "/tmp/test_example_plugin_config.yaml"
+)
+
 type RestoreReaderTestImpl struct{}
 
 func (r *RestoreReaderTestImpl) waitForPlugin() error {
@@ -83,7 +89,7 @@ func NewSkipFileTest(batches []oidWithBatch, steps []SkipFileTestStep) *RestoreM
 	ret.expectedOidBatch = batches
 	ret.expectedSteps = steps
 	ret.openedPipesMap = nil
-	ret.restoreData = nil
+	ret.restoreData = &RestoreReaderTestImpl{}
 
 	return ret
 }
@@ -194,6 +200,9 @@ var _ = Describe("helper tests", func() {
 		saveOrigSize = *origSize
 		saveDestSize = *destSize
 		saveVerbosity = *verbosity
+
+		err := os.MkdirAll(testDir, 0777)
+		Expect(err).ShouldNot(HaveOccurred())
 	})
 
 	AfterEach(func() {
@@ -315,7 +324,6 @@ var _ = Describe("helper tests", func() {
 			}
 
 			mockHelper := NewSkipFileTest(oidBatch, steps)
-			mockHelper.restoreData = &RestoreReaderTestImpl{}
 
 			// Prepare the toc file
 			testDir := "" //"/tmp/helper_test/20180101/20180101010101/"
@@ -354,7 +362,6 @@ var _ = Describe("helper tests", func() {
 			}
 
 			mockHelper := NewSkipFileTest(oidBatch, steps)
-			mockHelper.restoreData = &RestoreReaderTestImpl{}
 
 			err := doRestoreAgentInternal(mockHelper, mockHelper)
 
@@ -363,19 +370,18 @@ var _ = Describe("helper tests", func() {
 		It("skips batches with corresponding skip file in doRestoreAgent", func() {
 			// Test Scenario 1. Simulate 1 pass for the doRestoreAgent() function with the specified oids, batches and expected calls
 			oidBatch := []oidWithBatch{
-				{100, 2},
-				{200, 3},
-				{200, 4},
-				{200, 5},
+				{100, 0},
+				{200, 0},
+				{200, 1},
+				{200, 2},
 			}
 
 			expectedScenario := []SkipFileTestStep{
-				{},                                // placeholder as steps start from 1
-				{"mock_100_2", true, -1, false},   // Can open pipe for table 100, check_skip_file shall not be called
-				{"mock_200_3", true, -1, false},   // Can open pipe for table 200, check_skip_file shall not be called
-				{"mock_200_4", false, 200, false}, // Can not open pipe for table 200, check_skip_file shall be called, skip file not exists
-				{"mock_200_4", false, 200, true},  // Can not open pipe for table 200, check_skip_file shall called, skip file exists
-				{"mock_200_5", true, -1, false},   // Went to the next batch, Can open pipe for table 200, check_skip_file shall not be called
+				{},                               // placeholder as steps start from 1
+				{"mock_100_0", true, -1, false},  // Can open pipe for table 100, check_skip_file shall not be called
+				{"mock_200_0", true, -1, false},  // Can open pipe for table 200, check_skip_file shall not be called
+				{"mock_200_1", false, 200, true}, // Can not open pipe for table 200, check_skip_file shall called, skip file exists
+				{"mock_200_2", true, -1, false},  // Went to the next batch, Can open pipe for table 200, check_skip_file shall not be called
 			}
 
 			helper := NewSkipFileTest(oidBatch, expectedScenario)
@@ -383,5 +389,81 @@ var _ = Describe("helper tests", func() {
 			err := doRestoreAgentInternal(helper, helper)
 			Expect(err).To(BeNil())
 		})
+		It("skips batches if skip file is discovered with resize restore", func() {
+			*isResizeRestore = true
+			*origSize = 3
+			*destSize = 5
+
+			oidBatch := []oidWithBatch{
+				{100, 0},
+				{200, 0},
+				{200, 1},
+				{200, 2},
+			}
+
+			expectedScenario := []SkipFileTestStep{
+				{},                               // placeholder as steps start from 1
+				{"mock_100_0", true, -1, false},  // Can open pipe for table 100, check_skip_file shall not be called
+				{"mock_200_0", true, -1, false},  // Can open pipe for table 200, check_skip_file shall not be called
+				{"mock_200_1", false, 200, true}, // Can not open pipe for table 200, check_skip_file shall called, skip file exists
+				{"mock_200_2", true, -1, false},  // Went to the next batch, Can open pipe for table 200, check_skip_file shall not be called
+			}
+
+			helper := NewSkipFileTest(oidBatch, expectedScenario)
+			err := doRestoreAgentInternal(helper, helper)
+			Expect(err).To(BeNil())
+
+		})
+		It("skips batches if skip file is discovered with single datafile", func() {
+			*singleDataFile = true
+			*isResizeRestore = false
+			*tocFile = testTocFile
+
+			// Although pure concept would be to mock TOC file as well, to keep things simpler
+			// let's use real TOC file here
+			writeTestTOC(testTocFile)
+			defer func() {
+				_ = os.Remove(*tocFile)
+			}()
+
+			oidBatch := []oidWithBatch{
+				{100, 0},
+				{200, 0},
+				{200, 1},
+				{200, 2},
+			}
+
+			expectedScenario := []SkipFileTestStep{
+				{},                               // placeholder as steps start from 1
+				{"mock_100_0", true, -1, false},  // Can open pipe for table 100, check_skip_file shall not be called
+				{"mock_200_0", true, -1, false},  // Can open pipe for table 200, check_skip_file shall not be called
+				{"mock_200_1", false, 200, true}, // Can not open pipe for table 200, check_skip_file shall called, skip file exists
+				{"mock_200_2", true, -1, false},  // Went to the next batch, Can open pipe for table 200, check_skip_file shall not be called
+			}
+
+			helper := NewSkipFileTest(oidBatch, expectedScenario)
+			err := doRestoreAgentInternal(helper, helper)
+			Expect(err).To(BeNil())
+		})
 	})
 })
+
+func writeTestTOC(tocFile string) {
+	// Write test TOC. We are not going to read data using it, so dataLength is a random number
+	dataLength := 100
+	customTOC := fmt.Sprintf(`dataentries:
+1:
+    startbyte: 0
+    endbyte: 18
+2:
+    startbyte: 18
+    endbyte: %[1]d
+3:
+    startbyte: %[1]d
+    endbyte: %d
+`, dataLength+18, dataLength+18+18)
+	fToc, err := os.Create(tocFile)
+	Expect(err).ShouldNot(HaveOccurred())
+	fToc.WriteString(customTOC)
+	fToc.Close()
+}
