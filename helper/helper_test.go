@@ -120,7 +120,7 @@ func (h *RestoreMockHelperImpl) flushAndCloseRestoreWriter(pipeName string, oid 
 	return nil
 }
 
-func (h *RestoreMockHelperImpl) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (RestoreReader, error) {
+func (h *RestoreMockHelperImpl) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error) {
 	if h.restoreData != nil {
 		return h.restoreData, nil
 	}

@@ -36,14 +36,14 @@ var (
 	contentRE *regexp.Regexp
 )
 
-/* RestoreReader structure to wrap the underlying reader.
+/* IRestoreReader interface to wrap the underlying reader.
  * readerType identifies how the reader can be used
  * SEEKABLE uses seekReader. Used when restoring from uncompressed data with filters from local filesystem
  * NONSEEKABLE and SUBSET types uses bufReader.
  * SUBSET type applies when restoring using plugin(if compatible) from uncompressed data with filters
  * NONSEEKABLE type applies for every other restore scenario
  */
-type RestoreReader interface {
+type IRestoreReader interface {
 	waitForPlugin() error
 	positionReader(pos uint64, oid int) error
 	copyData(num int64) (int64, error)
@@ -52,7 +52,7 @@ type RestoreReader interface {
 	getReaderType() ReaderType
 }
 
-type RestoreReaderImpl struct {
+type RestoreReader struct {
 	fileHandle *os.File
 	bufReader  *bufio.Reader
 	seekReader io.ReadSeeker
@@ -62,7 +62,7 @@ type RestoreReaderImpl struct {
 
 // Wait for plugin process that should be already finished. This should be
 // called on every reader that used a plugin as to not leave any zombies behind.
-func (r *RestoreReaderImpl) waitForPlugin() error {
+func (r *RestoreReader) waitForPlugin() error {
 	var err error
 	if r.pluginCmd != nil && r.pluginCmd.Process != nil {
 		logVerbose(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.Process.Pid))
@@ -81,7 +81,7 @@ func (r *RestoreReaderImpl) waitForPlugin() error {
 	return err
 }
 
-func (r *RestoreReaderImpl) positionReader(pos uint64, oid int) error {
+func (r *RestoreReader) positionReader(pos uint64, oid int) error {
 	switch r.readerType {
 	case SEEKABLE:
 		seekPosition, err := r.seekReader.Seek(int64(pos), io.SeekCurrent)
@@ -103,7 +103,7 @@ func (r *RestoreReaderImpl) positionReader(pos uint64, oid int) error {
 	return nil
 }
 
-func (r *RestoreReaderImpl) copyData(num int64) (int64, error) {
+func (r *RestoreReader) copyData(num int64) (int64, error) {
 	var bytesRead int64
 	var err error
 	switch r.readerType {
@@ -115,7 +115,7 @@ func (r *RestoreReaderImpl) copyData(num int64) (int64, error) {
 	return bytesRead, err
 }
 
-func (r *RestoreReaderImpl) copyAllData() (int64, error) {
+func (r *RestoreReader) copyAllData() (int64, error) {
 	var bytesRead int64
 	var err error
 	switch r.readerType {
@@ -127,15 +127,15 @@ func (r *RestoreReaderImpl) copyAllData() (int64, error) {
 	return bytesRead, err
 }
 
-func (r *RestoreReaderImpl) getReaderType() ReaderType {
+func (r *RestoreReader) getReaderType() ReaderType {
 	return r.readerType
 }
 
-func (r *RestoreReaderImpl) getFileHandle() *os.File {
+func (r *RestoreReader) getFileHandle() *os.File {
 	return r.fileHandle
 }
 
-func closeAndDeletePipe(h Helper, tableOid int, batchNum int) {
+func closeAndDeletePipe(h IHelper, tableOid int, batchNum int) {
 	pipe := fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
 	logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, pipe))
 	errPipe := h.flushAndCloseRestoreWriter(pipe, tableOid)
@@ -155,8 +155,8 @@ type oidWithBatch struct {
 	batch int
 }
 
-type RestoreHelper interface {
-	getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (RestoreReader, error)
+type IRestoreHelper interface {
+	getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error)
 	getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error)
 	checkForSkipFile(pipeFile string, tableOid int) bool
 }
@@ -167,7 +167,13 @@ func (RestoreHelperImpl) checkForSkipFile(pipeFile string, tableOid int) bool {
 	return utils.FileExists(fmt.Sprintf("%s_skip_%d", pipeFile, tableOid))
 }
 
-func doRestoreAgentInternal(h Helper, rh RestoreHelper) error {
+func doRestoreAgent() error {
+	helper := new(Helper)
+	restorer := new(RestoreHelperImpl)
+	return doRestoreAgentInternal(helper, restorer)
+}
+
+func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 	// We need to track various values separately per content for resize restore
 	var segmentTOC map[int]*toc.SegmentTOC
 	var tocEntries map[int]map[uint]toc.SegmentDataEntry
@@ -178,7 +184,7 @@ func doRestoreAgentInternal(h Helper, rh RestoreHelper) error {
 	var bytesRead int64
 	var lastError error
 
-	readers := make(map[int]RestoreReader)
+	readers := make(map[int]IRestoreReader)
 
 	oidWithBatchList, err := h.getOidWithBatchListFromFile(*oidFile)
 	if err != nil {
@@ -442,12 +448,6 @@ func doRestoreAgentInternal(h Helper, rh RestoreHelper) error {
 	return lastError
 }
 
-func doRestoreAgent() error {
-	helper := new(HelperImpl)
-	restorer := new(RestoreHelperImpl)
-	return doRestoreAgentInternal(helper, restorer)
-}
-
 func constructSingleTableFilename(name string, contentToRestore int, oid int) string {
 	name = strings.ReplaceAll(name, fmt.Sprintf("gpbackup_%d", *content), fmt.Sprintf("gpbackup_%d", contentToRestore))
 	nameParts := strings.Split(name, ".")
@@ -467,13 +467,13 @@ func replaceContentInFilename(filename string, content int) string {
 	return contentRE.ReplaceAllString(filename, fmt.Sprintf("gpbackup_%d_", content))
 }
 
-func (RestoreHelperImpl) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (RestoreReader, error) {
+func (RestoreHelperImpl) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error) {
 	var readHandle io.Reader
 	var seekHandle io.ReadSeeker
 	var isSubset bool
 	var err error = nil
 	var pluginCmd *PluginCmd = nil
-	restoreReader := new(RestoreReaderImpl)
+	restoreReader := new(RestoreReader)
 
 	if *pluginConfigFile != "" {
 		pluginCmd, readHandle, isSubset, err = startRestorePluginCommand(fileToRead, objToc, oidList)

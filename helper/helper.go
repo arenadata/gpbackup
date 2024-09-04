@@ -212,19 +212,19 @@ func preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCo
 	}
 }
 
-type Helper interface {
+type IHelper interface {
 	getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error)
 	createPipe(pipe string) error
 	flushAndCloseRestoreWriter(pipeName string, oid int) error
 }
 
-type HelperImpl struct{}
+type Helper struct{}
 
-func (h HelperImpl) createPipe(pipe string) error {
+func (h Helper) createPipe(pipe string) error {
 	return createPipe(pipe)
 }
 
-func (h HelperImpl) getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
+func (h Helper) getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
 	oidStr, err := operating.System.ReadFile(oidFileName)
 	if err != nil {
 		logError(fmt.Sprintf("Error encountered reading oid batch list from file: %v", err))
@@ -257,7 +257,7 @@ func getOidListFromFile(oidFileName string) ([]int, error) {
 	return oidList, nil
 }
 
-func (h *HelperImpl) flushAndCloseRestoreWriter(pipeName string, oid int) error {
+func (h *Helper) flushAndCloseRestoreWriter(pipeName string, oid int) error {
 	if writer != nil {
 		writer.Write([]byte{}) // simulate writer connected in case of error
 		err := writer.Flush()
@@ -303,7 +303,7 @@ func DoCleanup() {
 			logVerbose("Encountered error closing error file: %v", err)
 		}
 	}
-	err := new(HelperImpl).flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
+	err := new(Helper).flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
 	if err != nil {
 		logVerbose("Encountered error during cleanup: %v", err)
 	}
