@@ -8,9 +8,8 @@ import (
 	"math"
 	"os"
 	"os/exec"
-
+	"path"
 	"path/filepath"
-	path "path/filepath"
 	"strings"
 	"time"
 
@@ -608,7 +607,10 @@ func createDataFile(dataFile string, dataLength int) {
 	if err != nil {
 		Fail(fmt.Sprintf("%v", err))
 	}
+	defer f.Close()
 	gzipf := gzip.NewWriter(f)
+	defer gzipf.Close()
+
 	// Named pipes can buffer, so we need to write more than the buffer size to trigger flush error
 	customData := "here is some data\n"
 
@@ -618,8 +620,6 @@ func createDataFile(dataFile string, dataLength int) {
 	if _, err := gzipf.Write([]byte(customData)); err != nil {
 		Fail(fmt.Sprintf("%v", err))
 	}
-	gzipf.Close()
-	f.Close()
 }
 
 func createOidFile(fname string, content string) {
@@ -724,7 +724,7 @@ func doTestSkipFiles(oid int, withPlugin bool, args []string) {
 	By("Check in logs that batches were not restored")
 
 	homeDir := os.Getenv("HOME")
-	helperFiles, _ := path.Glob(path.Join(homeDir, "gpAdminLogs/gpbackup_helper_*"))
+	helperFiles, _ := filepath.Glob(filepath.Join(homeDir, "gpAdminLogs/gpbackup_helper_*"))
 	Expect(helperFiles).ToNot(BeEmpty())
 
 	patternHelperPid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
