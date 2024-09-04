@@ -48,7 +48,7 @@ type IRestoreReader interface {
 	positionReader(pos uint64, oid int) error
 	copyData(num int64) (int64, error)
 	copyAllData() (int64, error)
-	getFileHandle() *os.File
+	closeFileHandle()
 	getReaderType() ReaderType
 }
 
@@ -131,8 +131,8 @@ func (r *RestoreReader) getReaderType() ReaderType {
 	return r.readerType
 }
 
-func (r *RestoreReader) getFileHandle() *os.File {
-	return r.fileHandle
+func (r *RestoreReader) closeFileHandle() {
+	r.fileHandle.Close()
 }
 
 func closeAndDeletePipe(h IHelper, tableOid int, batchNum int) {
@@ -313,7 +313,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 				// Close file before it gets overwritten. Free up these
 				// resources when the reader is not needed anymore.
 				if reader, ok := readers[contentToRestore]; ok {
-					reader.getFileHandle().Close()
+					reader.closeFileHandle()
 				}
 				// We pre-create readers above for the sake of not re-opening SDF readers.  For MDF we can't
 				// re-use them but still having them in a map simplifies overall code flow.  We repeatedly assign

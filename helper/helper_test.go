@@ -40,8 +40,7 @@ func (r *RestoreReaderTestImpl) copyAllData() (int64, error) {
 	return 1, nil
 }
 
-func (r *RestoreReaderTestImpl) getFileHandle() *os.File {
-	return nil
+func (r *RestoreReaderTestImpl) closeFileHandle() {
 }
 
 func (r *RestoreReaderTestImpl) getReaderType() ReaderType {
