@@ -135,7 +135,7 @@ func (r *RestoreReader) closeFileHandle() {
 	r.fileHandle.Close()
 }
 
-func closeAndDeletePipe(h IHelper, tableOid int, batchNum int) {
+func (h Helper) closeAndDeletePipe(tableOid int, batchNum int) {
 	pipe := fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
 	logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, pipe))
 	errPipe := h.flushAndCloseRestoreWriter(pipe, tableOid)
@@ -347,7 +347,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 						for idx := 0; idx < *copyQueue; idx++ {
 							batchToDelete := batchNum + idx
 							if batchToDelete < batches {
-								closeAndDeletePipe(h, tableOid, batchToDelete)
+								h.closeAndDeletePipe(tableOid, batchToDelete)
 							}
 						}
 						goto LoopEnd
@@ -417,7 +417,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Copied %d bytes into the pipe", tableOid, batchNum, bytesRead))
 	LoopEnd:
 		if tableOid != skipOid {
-			closeAndDeletePipe(h, tableOid, batchNum)
+			h.closeAndDeletePipe(tableOid, batchNum)
 		}
 
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))

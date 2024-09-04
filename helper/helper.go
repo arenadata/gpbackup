@@ -216,6 +216,7 @@ type IHelper interface {
 	getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error)
 	createPipe(pipe string) error
 	flushAndCloseRestoreWriter(pipeName string, oid int) error
+	closeAndDeletePipe(tableOid int, batchNum int)
 }
 
 type Helper struct{}

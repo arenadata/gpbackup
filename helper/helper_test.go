@@ -83,6 +83,9 @@ func (h *RestoreMockHelperImpl) getCurStep() SkipFileTestStep {
 	return h.expectedSteps[h.stepNo]
 }
 
+func (h *RestoreMockHelperImpl) closeAndDeletePipe(tableOid int, batchNum int) {
+}
+
 func NewSkipFileTest(batches []oidWithBatch, steps []SkipFileTestStep) *RestoreMockHelperImpl {
 	var ret = new(RestoreMockHelperImpl)
 	ret.expectedOidBatch = batches
