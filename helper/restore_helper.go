@@ -121,15 +121,15 @@ func (r *RestoreReader) copyAllData() (int64, error) {
 func closeAndDeletePipe(tableOid int, batchNum int) {
 	pipe := fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
 	logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, pipe))
-	errPipe := flushAndCloseRestoreWriter(pipe, tableOid)
-	if errPipe != nil {
-		logVerbose(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, errPipe))
+	err := flushAndCloseRestoreWriter(pipe, tableOid)
+	if err != nil {
+		logVerbose(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, err))
 	}
 
 	logVerbose(fmt.Sprintf("Oid %d, Batch %d: Attempt to delete pipe %s", tableOid, batchNum, pipe))
-	errPipe = deletePipe(pipe)
-	if errPipe != nil {
-		logError("Oid %d, Batch %d: Failed to remove pipe %s: %v", tableOid, batchNum, pipe, errPipe)
+	err = deletePipe(pipe)
+	if err != nil {
+		logError("Oid %d, Batch %d: Failed to remove pipe %s: %v", tableOid, batchNum, pipe, err)
 	}
 }
 
@@ -380,6 +380,7 @@ func doRestoreAgent() error {
 			lastByte[contentToRestore] = end[contentToRestore]
 		}
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Copied %d bytes into the pipe", tableOid, batchNum, bytesRead))
+
 	LoopEnd:
 		if tableOid != skipOid {
 			closeAndDeletePipe(tableOid, batchNum)

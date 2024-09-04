@@ -87,48 +87,6 @@ func buildAndInstallBinaries() string {
 	return fmt.Sprintf("%s/gpbackup_helper", binDir)
 }
 
-func doTestSkipFiles(oid int, withPlugin bool, args []string) {
-	filesToDelete := setupRestoreWithSkipFiles(oid, withPlugin)
-	for _, f := range filesToDelete {
-		defer func(filename string) {
-			os.Remove(filename)
-		}(f)
-	}
-
-	By("Create restore command")
-	helperCmd := exec.Command(gpbackupHelperPath, args...)
-	err := helperCmd.Start()
-	Expect(err).ToNot(HaveOccurred())
-
-	// Block here until gpbackup_helper finishes (cleaning up pipes)
-	err = helperCmd.Wait()
-	Expect(err).ToNot(HaveOccurred())
-	for _, i := range []int{1, 2, 3} {
-		currentPipe := fmt.Sprintf("%s_%d_0", pipeFile, i)
-		Expect(currentPipe).ToNot(BeAnExistingFile())
-	}
-
-	By("Check in logs that batches were not restored")
-
-	homeDir := os.Getenv("HOME")
-	helperFiles, _ := path.Glob(path.Join(homeDir, "gpAdminLogs/gpbackup_helper_*"))
-	Expect(helperFiles).ToNot(BeEmpty())
-
-	patternHelperPid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
-	helperOut, _ := exec.Command("grep", patternHelperPid, helperFiles[len(helperFiles)-1]).CombinedOutput()
-	helperOutput := string(helperOut)
-
-	Expect(helperOutput).ToNot(BeEmpty())
-
-	// Batch 0 should be processed
-	Expect(helperOutput).To(ContainSubstring(`: Skip file discovered, skipping this relation`))
-	Expect(helperOutput).To(ContainSubstring(`Segment 1: Oid 1, Batch 0: Opening pipe`))
-
-	// Batch 2 must not be processed
-	Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Skip file discovered, skipping this relation`))
-	Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Opening pipe`))
-}
-
 var _ = Describe("gpbackup_helper end to end integration tests", func() {
 	// Setup example plugin based on current working directory
 	err := os.RemoveAll(examplePluginTestDir)
@@ -532,7 +490,6 @@ options:
 				"--data-file", dataFileFullPath + ".gz",
 				"--on-error-continue",
 			}
-
 			doTestSkipFiles(1, true, args)
 		})
 		It("Continues restore process when encountering an error with flag --on-error-continue", func() {
@@ -741,6 +698,48 @@ func setupRestoreWithSkipFiles(oid int, withPlugin bool) []string {
 
 	ret = append(ret, skipFile)
 	return ret
+}
+
+func doTestSkipFiles(oid int, withPlugin bool, args []string) {
+	filesToDelete := setupRestoreWithSkipFiles(oid, withPlugin)
+	for _, f := range filesToDelete {
+		defer func(filename string) {
+			os.Remove(filename)
+		}(f)
+	}
+
+	By("Create restore command")
+	helperCmd := exec.Command(gpbackupHelperPath, args...)
+	err := helperCmd.Start()
+	Expect(err).ToNot(HaveOccurred())
+
+	// Block here until gpbackup_helper finishes (cleaning up pipes)
+	err = helperCmd.Wait()
+	Expect(err).ToNot(HaveOccurred())
+	for _, i := range []int{1, 2, 3} {
+		currentPipe := fmt.Sprintf("%s_%d_0", pipeFile, i)
+		Expect(currentPipe).ToNot(BeAnExistingFile())
+	}
+
+	By("Check in logs that batches were not restored")
+
+	homeDir := os.Getenv("HOME")
+	helperFiles, _ := path.Glob(path.Join(homeDir, "gpAdminLogs/gpbackup_helper_*"))
+	Expect(helperFiles).ToNot(BeEmpty())
+
+	patternHelperPid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
+	helperOut, _ := exec.Command("grep", patternHelperPid, helperFiles[len(helperFiles)-1]).CombinedOutput()
+	helperOutput := string(helperOut)
+
+	Expect(helperOutput).ToNot(BeEmpty())
+
+	// Batch 0 should be processed
+	Expect(helperOutput).To(ContainSubstring(`: Skip file discovered, skipping this relation`))
+	Expect(helperOutput).To(ContainSubstring(`Segment 1: Oid 1, Batch 0: Opening pipe`))
+
+	// Batch 2 must not be processed
+	Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Skip file discovered, skipping this relation`))
+	Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Opening pipe`))
 }
 
 func assertNoErrors() {
