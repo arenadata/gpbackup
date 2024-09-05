@@ -434,20 +434,19 @@ options:
 			assertErrorsHandled()
 		})
 		It("skips batches if skip file is discovered with single datafile config", func() {
-			args := []string{
+			doTestSkipFiles(-1, false,
 				"--toc-file", tocFile,
 				"--pipe-file", pipeFile,
 				"--content", "1",
 				"--single-data-file",
 				"--restore-agent",
 				"--oid-file", restoreOidFile,
-				"--data-file", dataFileFullPath + ".gz",
+				"--data-file", dataFileFullPath+".gz",
 				"--on-error-continue",
-			}
-			doTestSkipFiles(-1, false, args)
+			)
 		})
 		It("skips batches if skip file is discovered with resize restore", func() {
-			args := []string{
+			doTestSkipFiles(1, false,
 				"--toc-file", tocFile,
 				"--oid-file", restoreOidFile,
 				"--pipe-file", pipeFile,
@@ -456,13 +455,12 @@ options:
 				"--orig-seg-count", "6",
 				"--dest-seg-count", "3",
 				"--restore-agent",
-				"--data-file", dataFileFullPath + ".gz",
+				"--data-file", dataFileFullPath+".gz",
 				"--on-error-continue",
-			}
-			doTestSkipFiles(1, false, args)
+			)
 		})
 		It("skips batches if skip file is discovered with single datafile config using a plugin", func() {
-			args := []string{
+			doTestSkipFiles(-1, true,
 				"--toc-file", tocFile,
 				"--oid-file", restoreOidFile,
 				"--pipe-file", pipeFile,
@@ -470,13 +468,12 @@ options:
 				"--single-data-file",
 				"--restore-agent",
 				"--plugin-config", examplePluginTestConfig,
-				"--data-file", dataFileFullPath + ".gz",
+				"--data-file", dataFileFullPath+".gz",
 				"--on-error-continue",
-			}
-			doTestSkipFiles(-1, true, args)
+			)
 		})
 		It("skips batches if skip file is discovered with resize restore using a plugin", func() {
-			args := []string{
+			doTestSkipFiles(1, true,
 				"--toc-file", tocFile,
 				"--oid-file", restoreOidFile,
 				"--pipe-file", pipeFile,
@@ -486,10 +483,9 @@ options:
 				"--dest-seg-count", "3",
 				"--restore-agent",
 				"--plugin-config", examplePluginTestConfig,
-				"--data-file", dataFileFullPath + ".gz",
+				"--data-file", dataFileFullPath+".gz",
 				"--on-error-continue",
-			}
-			doTestSkipFiles(1, true, args)
+			)
 		})
 		It("Continues restore process when encountering an error with flag --on-error-continue", func() {
 			// Write data file
@@ -699,7 +695,7 @@ func setupRestoreWithSkipFiles(oid int, withPlugin bool) []string {
 	return ret
 }
 
-func doTestSkipFiles(oid int, withPlugin bool, args []string) {
+func doTestSkipFiles(oid int, withPlugin bool, args ...string) {
 	filesToDelete := setupRestoreWithSkipFiles(oid, withPlugin)
 	for _, f := range filesToDelete {
 		defer func(filename string) {
