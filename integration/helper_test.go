@@ -433,7 +433,7 @@ options:
 			Expect(err).To(HaveOccurred())
 			assertErrorsHandled()
 		})
-		DescribeTable("Skip files",
+		DescribeTable("Skips batches if skip file is discovered with",
 			func(oid int, withPlugin bool, args ...string) {
 				filesToDelete := setupRestoreWithSkipFiles(oid, withPlugin)
 				for _, f := range filesToDelete {
