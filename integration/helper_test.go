@@ -484,10 +484,10 @@ options:
 				Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Skip file discovered, skipping this relation`))
 				Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Opening pipe`))
 			},
-			Entry("skips batches if skip file is discovered with single datafile config", -1, false, "--single-data-file"),
-			Entry("skips batches if skip file is discovered with resize restore", 1, false, "--resize-cluster", "--orig-seg-count", "6", "--dest-seg-count", "3"),
-			Entry("skips batches if skip file is discovered with single datafile config using a plugin", -1, true, "--single-data-file", "--restore-agent", "--plugin-config", examplePluginTestConfig),
-			Entry("skips batches if skip file is discovered with resize restore using a plugin", 1, true, "--resize-cluster", "--orig-seg-count", "6", "--dest-seg-count", "3", "--restore-agent", "--plugin-config", examplePluginTestConfig),
+			Entry("single datafile config", -1, false, "--single-data-file"),
+			Entry("resize restore", 1, false, "--resize-cluster", "--orig-seg-count", "6", "--dest-seg-count", "3"),
+			Entry("single datafile config using a plugin", -1, true, "--single-data-file", "--restore-agent", "--plugin-config", examplePluginTestConfig),
+			Entry("resize restore using a plugin", 1, true, "--resize-cluster", "--orig-seg-count", "6", "--dest-seg-count", "3", "--restore-agent", "--plugin-config", examplePluginTestConfig),
 		)
 
 		It("Continues restore process when encountering an error with flag --on-error-continue", func() {
