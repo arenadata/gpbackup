@@ -118,6 +118,21 @@ func (r *RestoreReader) copyAllData() (int64, error) {
 	return bytesRead, err
 }
 
+func closeAndDeletePipe(tableOid int, batchNum int) {
+	pipe := fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
+	logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, pipe))
+	err := flushAndCloseRestoreWriter(pipe, tableOid)
+	if err != nil {
+		logVerbose(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, err))
+	}
+
+	logVerbose(fmt.Sprintf("Oid %d, Batch %d: Attempt to delete pipe %s", tableOid, batchNum, pipe))
+	err = deletePipe(pipe)
+	if err != nil {
+		logError("Oid %d, Batch %d: Failed to remove pipe %s: %v", tableOid, batchNum, pipe, err)
+	}
+}
+
 type oidWithBatch struct {
 	oid   int
 	batch int
@@ -212,6 +227,10 @@ func doRestoreAgent() error {
 	preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
 
 	var currentPipe string
+
+	// If skip file is detected for the particular tableOid, will not process batches related to this oid
+	skipOid := -1
+
 	for i, oidWithBatch := range oidWithBatchList {
 		tableOid := oidWithBatch.oid
 		batchNum := oidWithBatch.batch
@@ -226,17 +245,25 @@ func doRestoreAgent() error {
 		if i < len(oidWithBatchList)-*copyQueue {
 			nextOidWithBatch := oidWithBatchList[i+*copyQueue]
 			nextOid := nextOidWithBatch.oid
-			nextBatchNum := nextOidWithBatch.batch
-			nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
-			logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-			err := createPipe(nextPipeToCreate)
-			if err != nil {
-				logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-				// In the case this error is hit it means we have lost the
-				// ability to create pipes normally, so hard quit even if
-				// --on-error-continue is given
-				return err
+
+			if nextOid != skipOid {
+				nextBatchNum := nextOidWithBatch.batch
+				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
+				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
+				err := createPipe(nextPipeToCreate)
+				if err != nil {
+					logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
+					// In the case this error is hit it means we have lost the
+					// ability to create pipes normally, so hard quit even if
+					// --on-error-continue is given
+					return err
+				}
 			}
+		}
+
+		if tableOid == skipOid {
+			logVerbose(fmt.Sprintf("Oid %d, Batch %d: skip due to skip file\n", tableOid, batchNum))
+			goto LoopEnd
 		}
 
 		if *singleDataFile {
@@ -280,6 +307,14 @@ func doRestoreAgent() error {
 					if *onErrorContinue && utils.FileExists(fmt.Sprintf("%s_skip_%d", *pipeFile, tableOid)) {
 						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 						err = nil
+						skipOid = tableOid
+						/* Close up to *copyQueue files with this tableOid */
+						for idx := 0; idx < *copyQueue; idx++ {
+							batchToDelete := batchNum + idx
+							if batchToDelete < batches {
+								closeAndDeletePipe(tableOid, batchToDelete)
+							}
+						}
 						goto LoopEnd
 					} else {
 						// keep trying to open the pipe
@@ -347,10 +382,8 @@ func doRestoreAgent() error {
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Copied %d bytes into the pipe", tableOid, batchNum, bytesRead))
 
 	LoopEnd:
-		logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, currentPipe))
-		errPipe := flushAndCloseRestoreWriter(currentPipe, tableOid)
-		if errPipe != nil {
-			logVerbose(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, errPipe))
+		if tableOid != skipOid {
+			closeAndDeletePipe(tableOid, batchNum)
 		}
 
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
@@ -364,12 +397,6 @@ func doRestoreAgent() error {
 					err = errPlugin
 				}
 			}
-		}
-
-		logVerbose(fmt.Sprintf("Oid %d, Batch %d: Attempt to delete pipe %s", tableOid, batchNum, currentPipe))
-		errPipe = deletePipe(currentPipe)
-		if errPipe != nil {
-			logError("Oid %d, Batch %d: Failed to remove pipe %s: %v", tableOid, batchNum, currentPipe, errPipe)
 		}
 
 		if err != nil {
