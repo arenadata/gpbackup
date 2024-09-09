@@ -161,15 +161,15 @@ type IRestoreHelper interface {
 	checkForSkipFile(pipeFile string, tableOid int) bool
 }
 
-type RestoreHelperImpl struct{}
+type RestoreHelper struct{}
 
-func (RestoreHelperImpl) checkForSkipFile(pipeFile string, tableOid int) bool {
+func (RestoreHelper) checkForSkipFile(pipeFile string, tableOid int) bool {
 	return utils.FileExists(fmt.Sprintf("%s_skip_%d", pipeFile, tableOid))
 }
 
 func doRestoreAgent() error {
 	helper := new(Helper)
-	restorer := new(RestoreHelperImpl)
+	restorer := new(RestoreHelper)
 	return doRestoreAgentInternal(helper, restorer)
 }
 
@@ -467,7 +467,7 @@ func replaceContentInFilename(filename string, content int) string {
 	return contentRE.ReplaceAllString(filename, fmt.Sprintf("gpbackup_%d_", content))
 }
 
-func (RestoreHelperImpl) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error) {
+func (RestoreHelper) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error) {
 	var readHandle io.Reader
 	var seekHandle io.ReadSeeker
 	var isSubset bool
@@ -531,7 +531,7 @@ func (RestoreHelperImpl) getRestoreDataReader(fileToRead string, objToc *toc.Seg
 	return restoreReader, err
 }
 
-func (RestoreHelperImpl) getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
+func (RestoreHelper) getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
 	fileHandle, err := os.OpenFile(currentPipe, os.O_WRONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
 	if err != nil {
 		// error logging handled by calling functions
