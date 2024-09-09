@@ -433,6 +433,63 @@ options:
 			Expect(err).To(HaveOccurred())
 			assertErrorsHandled()
 		})
+		DescribeTable("Skips batches if skip file is discovered with",
+			func(oid int, withPlugin bool, args ...string) {
+				filesToDelete := setupRestoreWithSkipFiles(oid, withPlugin)
+				for _, f := range filesToDelete {
+					defer func(filename string) {
+						os.Remove(filename)
+					}(f)
+				}
+
+				args = append([]string{
+					"--toc-file", tocFile,
+					"--pipe-file", pipeFile,
+					"--content", "1",
+					"--restore-agent",
+					"--oid-file", restoreOidFile,
+					"--data-file", dataFileFullPath + ".gz",
+					"--on-error-continue",
+				}, args...)
+
+				helperCmd := exec.Command(gpbackupHelperPath, args...)
+				err := helperCmd.Start()
+				Expect(err).ToNot(HaveOccurred())
+
+				// Block here until gpbackup_helper finishes (cleaning up pipes)
+				err = helperCmd.Wait()
+				Expect(err).ToNot(HaveOccurred())
+				for _, i := range []int{1, 2, 3} {
+					currentPipe := fmt.Sprintf("%s_%d_0", pipeFile, i)
+					Expect(currentPipe).ToNot(BeAnExistingFile())
+				}
+
+				By("Check in logs that batches were not restored")
+
+				homeDir := os.Getenv("HOME")
+				helperFiles, _ := filepath.Glob(filepath.Join(homeDir, "gpAdminLogs/gpbackup_helper_*"))
+				Expect(helperFiles).ToNot(BeEmpty())
+
+				patternHelperPid := fmt.Sprintf(":%06d", helperCmd.Process.Pid)
+				helperOut, _ := exec.Command("grep", patternHelperPid, helperFiles[len(helperFiles)-1]).CombinedOutput()
+				helperOutput := string(helperOut)
+
+				Expect(helperOutput).ToNot(BeEmpty())
+
+				// Batch 0 should be processed
+				Expect(helperOutput).To(ContainSubstring(`: Skip file discovered, skipping this relation`))
+				Expect(helperOutput).To(ContainSubstring(`Segment 1: Oid 1, Batch 0: Opening pipe`))
+
+				// Batch 2 must not be processed
+				Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Skip file discovered, skipping this relation`))
+				Expect(helperOutput).ToNot(ContainSubstring(`Segment 1: Oid 1, Batch 2: Opening pipe`))
+			},
+			Entry("single datafile config", -1, false, "--single-data-file"),
+			Entry("resize restore", 1, false, "--resize-cluster", "--orig-seg-count", "6", "--dest-seg-count", "3"),
+			Entry("single datafile config using a plugin", -1, true, "--single-data-file", "--restore-agent", "--plugin-config", examplePluginTestConfig),
+			Entry("resize restore using a plugin", 1, true, "--resize-cluster", "--orig-seg-count", "6", "--dest-seg-count", "3", "--restore-agent", "--plugin-config", examplePluginTestConfig),
+		)
+
 		It("Continues restore process when encountering an error with flag --on-error-continue", func() {
 			// Write data file
 			dataFile := dataFileFullPath
@@ -541,6 +598,104 @@ func setupRestoreFiles(compressionType string, withPlugin bool) {
 
 	f, _ = os.Create(tocFile)
 	_, _ = f.WriteString(expectedTOC)
+}
+
+func createDataFile(dataFile string, dataLength int) {
+	// Write data file
+	f, err := os.Create(dataFile + ".gz")
+	if err != nil {
+		Fail(fmt.Sprintf("%v", err))
+	}
+	defer f.Close()
+	gzipf := gzip.NewWriter(f)
+	defer gzipf.Close()
+
+	// Named pipes can buffer, so we need to write more than the buffer size to trigger flush error
+	customData := "here is some data\n"
+
+	customData += strings.Repeat("a", dataLength)
+	customData += "here is some data\n"
+
+	if _, err := gzipf.Write([]byte(customData)); err != nil {
+		Fail(fmt.Sprintf("%v", err))
+	}
+}
+
+func createOidFile(fname string, content string) {
+	fOid, err := os.Create(fname)
+	if err != nil {
+		Fail(fmt.Sprintf("Could not create %s: %v", fname, err))
+	}
+	defer fOid.Close()
+
+	if _, err := fOid.WriteString(content); err != nil {
+		Fail(fmt.Sprintf("Could not write to %s: %v", fname, err))
+	}
+}
+
+func createCustomTOCFile(fname string, dataLength int) {
+	customTOC := fmt.Sprintf(`dataentries:
+  1:
+    startbyte: 0
+    endbyte: 18
+  2:
+    startbyte: 18
+    endbyte: %[1]d
+  3:
+    startbyte: %[1]d
+    endbyte: %d
+`, dataLength+18, dataLength+18+18)
+	fToc, err := os.Create(fname)
+	if err != nil {
+		Fail(fmt.Sprintf("%v", err))
+	}
+	defer fToc.Close()
+
+	if _, err = fToc.WriteString(customTOC); err != nil {
+		Fail(fmt.Sprintf("%v", err))
+	}
+}
+
+/*
+Tests with skip files and the one with flag --on-error-continue
+require a bit more complicated setup, do different setup function.
+Returns file name list which must be deleted when done.
+*/
+func setupRestoreWithSkipFiles(oid int, withPlugin bool) []string {
+	dataLength := 128*1024 + 1
+
+	ret := []string{}
+
+	fileName := dataFileFullPath
+	if withPlugin {
+		fileName = examplePluginTestDataFile
+	}
+	if oid > 0 {
+		fileName = fileName + fmt.Sprintf("_%d", oid)
+	}
+
+	createDataFile(fileName, dataLength)
+	ret = append(ret, fileName)
+
+	// Write oid file
+	createOidFile(restoreOidFile, "1,0\n1,1\n1,2\n")
+	ret = append(ret, restoreOidFile)
+
+	pipename := fmt.Sprintf("%s_%d_0", pipeFile, 1)
+	err := unix.Mkfifo(pipename, 0700)
+	if err != nil {
+		Fail(fmt.Sprintf("%v", err))
+	}
+
+	createCustomTOCFile(tocFile, dataLength)
+	ret = append(ret, tocFile)
+
+	skipFile := fmt.Sprintf("%s_skip_%d", pipeFile, 1)
+	err = exec.Command("touch", skipFile).Run()
+	Expect(err).ToNot(HaveOccurred())
+
+	ret = append(ret, skipFile)
+	return ret
 }
 
 func assertNoErrors() {
