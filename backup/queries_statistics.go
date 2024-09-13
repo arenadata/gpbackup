@@ -54,7 +54,7 @@ type AttributeStatistic struct {
 }
 
 func (as AttributeStatistic) FQType() string {
-	if as.TypeSchema == "pg_catalog" {
+	if as.TypeSchema == "pg_catalog" || as.TypeSchema == "" {
 		return as.Type
 	} else {
 		return fmt.Sprintf("%s.%s", as.TypeSchema, as.Type)
