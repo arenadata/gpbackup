@@ -2242,6 +2242,51 @@ LANGUAGE plpgsql NO SQL;`)
 				"tplain": 1000, "ths": 1000, "tht": 1000})
 		})
 	})
+	Describe("Properly hanldes user defined type if different schema used", func() {
+		BeforeEach(func() {
+			testhelper.AssertQueryRuns(backupConn, `
+			CREATE SCHEMA cdm;
+			CREATE TYPE cdm.status AS ENUM ('ACTIVATING', 'ACTIVATED', 'ERROR');
+			CREATE CAST (text AS cdm.status) WITH INOUT AS IMPLICIT;`)
+
+		})
+		AfterEach(func() {
+			testhelper.AssertQueryRuns(backupConn, `DROP CAST (text AS cdm.status);
+			DROP TYPE cdm.status CASCADE;
+			DROP SCHEMA cdm;
+			`)
+		})
+		It("restores table with enum when exporting statistics", func() {
+			testhelper.AssertQueryRuns(backupConn, `CREATE TABLE cdm.contact_status (
+															contact_id uuid NOT NULL,
+															created timestamp with time zone,
+															processed boolean DEFAULT false,
+															status cdm.status NOT NULL
+														) DISTRIBUTED BY (contact_id);
+													insert into cdm.contact_status 
+													SELECT 
+													md5(random()::text || clock_timestamp()::text)::uuid,
+													NOW(),                   
+													(array[true, false])[1 + x%2],
+													(array['ACTIVATING', 'ACTIVATED', 'ERROR'])[1 + x%3]
+													from generate_series(1,20000) x;
+													analyze cdm.contact_status;
+												`)
+
+			defer testhelper.AssertQueryRuns(backupConn, `DROP TABLE cdm.contact_status`)
+
+			output := gpbackup(gpbackupPath, backupHelperPath,
+				"--backup-dir", backupDir,
+				"--with-stats")
+			timestamp := getBackupTimestamp(string(output))
+
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
+				"--redirect-db", "restoredb",
+				"--backup-dir", backupDir)
+			assertDataRestored(restoreConn, map[string]int{
+				"cdm.contact_status": 20000})
+		})
+	})
 	Describe("Restore to a different-sized cluster", func() {
 		if useOldBackupVersion {
 			Skip("This test is not needed for old backup versions")

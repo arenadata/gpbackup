@@ -20,6 +20,7 @@ type AttributeStatistic struct {
 	Table        string
 	AttName      string
 	Type         string
+	TypeSchema   string
 	Relid        uint32         `db:"starelid"`
 	Inherit      bool           `db:"stainherit"`
 	NullFraction float64        `db:"stanullfrac"`
@@ -52,6 +53,14 @@ type AttributeStatistic struct {
 	Values5      pq.StringArray `db:"stavalues5"`
 }
 
+func (as AttributeStatistic) FQType() string {
+	if as.TypeSchema == "pg_catalog" {
+		return as.Type
+	} else {
+		return fmt.Sprintf("%s.%s", as.TypeSchema, as.Type)
+	}
+}
+
 func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table, processRow func(attStat *AttributeStatistic)) {
 	inheritClause := ""
 	statSlotClause := ""
@@ -82,6 +91,7 @@ func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table, proce
 		quote_ident(c.relname) AS table,
 		a.attname,
 		quote_ident(t.typname) AS type,
+		quote_ident(atn.nspname) AS typeschema,
 		s.starelid,
 		%s
 		s.stanullfrac,
@@ -111,6 +121,7 @@ func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table, proce
 	JOIN pg_attribute a ON a.attrelid = c.oid
 		JOIN pg_statistic s ON (c.oid = s.starelid AND a.attnum = s.staattnum)
 		JOIN pg_type t ON a.atttypid = t.oid
+		JOIN pg_namespace atn ON t.typnamespace = atn.oid
 	WHERE %s
 		AND quote_ident(n.nspname) || '.' || quote_ident(c.relname) IN (%s)
 	ORDER BY n.nspname, c.relname, a.attnum`,
