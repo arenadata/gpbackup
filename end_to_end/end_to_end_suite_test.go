@@ -2243,22 +2243,10 @@ LANGUAGE plpgsql NO SQL;`)
 		})
 	})
 	Describe("Properly hanldes user defined type if different schema used", func() {
-		BeforeEach(func() {
-			assertSchemasExist(backupConn, 3)
-			testhelper.AssertQueryRuns(backupConn, `
-			create schema cdm;
-			create type cdm.status AS ENUM ('ACTIVATING', 'ACTIVATED', 'ERROR');
-			create cast (text as cdm.status) with inout as implicit;`)
-
-		})
-		AfterEach(func() {
-			testhelper.AssertQueryRuns(backupConn, `drop cast (text as cdm.status);
-			drop type cdm.status cascade;
-			drop schema cdm;
-			`)
-			assertSchemasExist(backupConn, 3)
-		})
 		It("restores table with enum when exporting statistics", func() {
+			testhelper.AssertQueryRuns(backupConn, `create schema cdm;
+													create type cdm.status AS ENUM ('ACTIVATING', 'ACTIVATED', 'ERROR');
+													create cast (text as cdm.status) with inout as implicit;`)
 			testhelper.AssertQueryRuns(backupConn, `create table cdm.contact_status (
 															contact_id uuid not null,
 															status cdm.status not null
@@ -2271,7 +2259,12 @@ LANGUAGE plpgsql NO SQL;`)
 													analyze cdm.contact_status;
 												`)
 
-			defer testhelper.AssertQueryRuns(backupConn, `drop table cdm.contact_status`)
+			defer func() {
+				testhelper.AssertQueryRuns(backupConn, `drop table cdm.contact_status;
+														drop cast (text as cdm.status);
+														drop type cdm.status cascade;
+														drop schema cdm;`)
+			}()
 
 			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--backup-dir", backupDir,
