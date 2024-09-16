@@ -143,28 +143,6 @@ func (h *RestoreMockHelperImpl) getRestorePipeWriter(currentPipe string) (*bufio
 	return nil, nil, unix.ENXIO
 }
 
-var (
-	saveBackupAgent      bool
-	saveCompressionLevel int
-	saveCompressionType  string
-	saveContent          int
-	saveDataFile         string
-	saveOidFile          string
-	saveOnErrorContinue  bool
-	savePipeFile         string
-	savePluginConfigFile string
-	savePrintVersion     bool
-	saveRestoreAgent     bool
-	saveTocFile          string
-	saveIsFiltered       bool
-	saveCopyQueue        int
-	saveSingleDataFile   bool
-	saveIsResizeRestore  bool
-	saveOrigSize         int
-	saveDestSize         int
-	saveVerbosity        int
-)
-
 var _ = Describe("helper tests", func() {
 	var pluginConfig utils.PluginConfig
 	var isSubset bool
@@ -183,50 +161,8 @@ var _ = Describe("helper tests", func() {
 	}
 
 	BeforeEach(func() {
-		saveBackupAgent = *backupAgent
-		saveCompressionLevel = *compressionLevel
-		saveCompressionType = *compressionType
-		saveContent = *content
-		saveDataFile = *dataFile
-		saveOidFile = *oidFile
-		saveOnErrorContinue = *onErrorContinue
-		savePipeFile = *pipeFile
-		savePluginConfigFile = *pluginConfigFile
-		savePrintVersion = *printVersion
-		saveRestoreAgent = *restoreAgent
-		saveTocFile = *tocFile
-		saveIsFiltered = *isFiltered
-		saveCopyQueue = *copyQueue
-		saveSingleDataFile = *singleDataFile
-		saveIsResizeRestore = *isResizeRestore
-		saveOrigSize = *origSize
-		saveDestSize = *destSize
-		saveVerbosity = *verbosity
-
 		err := os.MkdirAll(testDir, 0777)
 		Expect(err).ShouldNot(HaveOccurred())
-	})
-
-	AfterEach(func() {
-		*backupAgent = saveBackupAgent
-		*compressionLevel = saveCompressionLevel
-		*compressionType = saveCompressionType
-		*content = saveContent
-		*dataFile = saveDataFile
-		*oidFile = saveOidFile
-		*onErrorContinue = saveOnErrorContinue
-		*pipeFile = savePipeFile
-		*pluginConfigFile = savePluginConfigFile
-		*printVersion = savePrintVersion
-		*restoreAgent = saveRestoreAgent
-		*tocFile = saveTocFile
-		*isFiltered = saveIsFiltered
-		*copyQueue = saveCopyQueue
-		*singleDataFile = saveSingleDataFile
-		*isResizeRestore = saveIsResizeRestore
-		*origSize = saveOrigSize
-		*destSize = saveDestSize
-		*verbosity = saveVerbosity
 	})
 
 	Describe("Check subset flag", func() {
@@ -327,26 +263,12 @@ var _ = Describe("helper tests", func() {
 
 			mockHelper := NewSkipFileTest(oidBatch, steps)
 
-			// Prepare the toc file
+			// Prepare and write the toc file
 			testDir := "" //"/tmp/helper_test/20180101/20180101010101/"
 			*tocFile = fmt.Sprintf("%stest_toc.yaml", testDir)
-			dataLength := 128*1024 + 1
-			// Write custom TOC
-			customTOC := fmt.Sprintf(`dataentries:
-  1:
-    startbyte: 0
-    endbyte: 18
-  2:
-    startbyte: 18
-    endbyte: %[1]d
-  3:
-    startbyte: %[1]d
-    endbyte: %d
-`, dataLength+18, dataLength+18+18)
-			fToc, _ := os.Create(*tocFile)
-			fToc.WriteString(customTOC)
+			writeTestTOC(*tocFile)
 			defer func() {
-				os.Remove(*tocFile)
+				_ = os.Remove(*tocFile)
 			}()
 
 			*dataFile = "test_data.dat"
@@ -466,6 +388,6 @@ func writeTestTOC(tocFile string) {
 `, dataLength+18, dataLength+18+18)
 	fToc, err := os.Create(tocFile)
 	Expect(err).ShouldNot(HaveOccurred())
+	defer fToc.Close()
 	fToc.WriteString(customTOC)
-	fToc.Close()
 }
