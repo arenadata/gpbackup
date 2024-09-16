@@ -2244,36 +2244,34 @@ LANGUAGE plpgsql NO SQL;`)
 	})
 	Describe("Properly hanldes user defined type if different schema used", func() {
 		BeforeEach(func() {
+			assertSchemasExist(backupConn, 3)
 			testhelper.AssertQueryRuns(backupConn, `
-			CREATE SCHEMA cdm;
-			CREATE TYPE cdm.status AS ENUM ('ACTIVATING', 'ACTIVATED', 'ERROR');
-			CREATE CAST (text AS cdm.status) WITH INOUT AS IMPLICIT;`)
+			create schema cdm;
+			create type cdm.status AS ENUM ('ACTIVATING', 'ACTIVATED', 'ERROR');
+			create cast (text as cdm.status) with inout as implicit;`)
 
 		})
 		AfterEach(func() {
-			testhelper.AssertQueryRuns(backupConn, `DROP CAST (text AS cdm.status);
-			DROP TYPE cdm.status CASCADE;
-			DROP SCHEMA cdm;
+			testhelper.AssertQueryRuns(backupConn, `drop cast (text as cdm.status);
+			drop type cdm.status cascade;
+			drop schema cdm;
 			`)
+			assertSchemasExist(backupConn, 3)
 		})
 		It("restores table with enum when exporting statistics", func() {
-			testhelper.AssertQueryRuns(backupConn, `CREATE TABLE cdm.contact_status (
-															contact_id uuid NOT NULL,
-															created timestamp with time zone,
-															processed boolean DEFAULT false,
-															status cdm.status NOT NULL
-														) DISTRIBUTED BY (contact_id);
+			testhelper.AssertQueryRuns(backupConn, `create table cdm.contact_status (
+															contact_id uuid not null,
+															status cdm.status not null
+														) distributed by (contact_id);
 													insert into cdm.contact_status 
-													SELECT 
-													md5(random()::text || clock_timestamp()::text)::uuid,
-													NOW(),                   
-													(array[true, false])[1 + x%2],
+													select 
+													md5(random()::text)::uuid,
 													(array['ACTIVATING', 'ACTIVATED', 'ERROR'])[1 + x%3]
 													from generate_series(1,20000) x;
 													analyze cdm.contact_status;
 												`)
 
-			defer testhelper.AssertQueryRuns(backupConn, `DROP TABLE cdm.contact_status`)
+			defer testhelper.AssertQueryRuns(backupConn, `drop table cdm.contact_status`)
 
 			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--backup-dir", backupDir,
