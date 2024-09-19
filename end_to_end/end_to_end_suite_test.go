@@ -2260,14 +2260,8 @@ LANGUAGE plpgsql NO SQL;`)
 												`)
 
 			defer func() {
-				testhelper.AssertQueryRuns(backupConn, `drop table cdm.contact_status;
-														drop cast (text as cdm.status);
-														drop type cdm.status cascade;
-														drop schema cdm cascade;`)
-				testhelper.AssertQueryRuns(restoreConn, `drop table cdm.contact_status;
-														drop cast (text as cdm.status);
-														drop type cdm.status cascade;
-														drop schema cdm cascade;`)
+				testhelper.AssertQueryRuns(backupConn, `drop schema cdm cascade;`)
+				testhelper.AssertQueryRuns(restoreConn, `drop schema cdm cascade;`)
 			}()
 
 			type StatData struct {
