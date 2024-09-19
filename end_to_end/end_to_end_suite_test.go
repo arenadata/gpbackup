@@ -2263,8 +2263,21 @@ LANGUAGE plpgsql NO SQL;`)
 				testhelper.AssertQueryRuns(backupConn, `drop table cdm.contact_status;
 														drop cast (text as cdm.status);
 														drop type cdm.status cascade;
-														drop schema cdm;`)
+														drop schema cdm cascade;`)
 			}()
+
+			type StatData struct {
+				N_distinct  int
+				Correlation float64
+			}
+
+			statQuery := `select n_distinct, correlation from pg_stats where 
+							schemaname = 'cdm' and attname = 'status'`
+
+			backupStats := make([]StatData, 0)
+
+			backupErr := backupConn.Select(&backupStats, statQuery)
+			Expect(backupErr).ToNot(HaveOccurred())
 
 			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--backup-dir", backupDir,
@@ -2273,9 +2286,21 @@ LANGUAGE plpgsql NO SQL;`)
 
 			gprestore(gprestorePath, restoreHelperPath, timestamp,
 				"--redirect-db", "restoredb",
-				"--backup-dir", backupDir)
+				"--backup-dir", backupDir,
+				"--with-stats",
+			)
 			assertDataRestored(restoreConn, map[string]int{
 				"cdm.contact_status": 20000})
+
+			restoreStats := make([]StatData, 0)
+			restoreErr := restoreConn.Select(&restoreStats, statQuery)
+			Expect(restoreErr).ToNot(HaveOccurred())
+
+			Expect(len(restoreStats)).To(Equal(1))
+			Expect(restoreStats).To(Equal(backupStats))
+
+			Expect(restoreStats[0].N_distinct).To(Equal(3))
+			Expect(restoreStats[0].Correlation).Should(BeNumerically(">", 0.1))
 		})
 	})
 	Describe("Restore to a different-sized cluster", func() {
