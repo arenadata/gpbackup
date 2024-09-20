@@ -2245,19 +2245,11 @@ LANGUAGE plpgsql NO SQL;`)
 	Describe("Properly hanldes user defined type if different schema used", func() {
 		It("restores table with enum when exporting statistics", func() {
 			testhelper.AssertQueryRuns(backupConn, `create schema cdm;
-													create type cdm.status AS ENUM ('ACTIVATING', 'ACTIVATED', 'ERROR');
-													create cast (text as cdm.status) with inout as implicit;`)
-			testhelper.AssertQueryRuns(backupConn, `create table cdm.contact_status (
-															contact_id uuid not null,
-															status cdm.status not null
-														) distributed by (contact_id);
-													insert into cdm.contact_status 
-													select 
-													md5(random()::text)::uuid,
-													(array['ACTIVATING', 'ACTIVATED', 'ERROR'])[1 + x%3]
-													from generate_series(1,20000) x;
-													analyze cdm.contact_status;
-												`)
+													create type cdm.ct as (a text);
+													create table cdm.t (a int, b cdm.ct) distributed by (a);
+													insert into cdm.t select x, cast ('(' || x::text || ')' as cdm.ct)
+														from generate_series(1, 10) x;
+													analyze cdm.t;`)
 
 			defer func() {
 				testhelper.AssertQueryRuns(backupConn, `drop schema cdm cascade;`)
@@ -2265,12 +2257,12 @@ LANGUAGE plpgsql NO SQL;`)
 			}()
 
 			type StatData struct {
-				N_distinct  int
+				Avg_width   int
 				Correlation float64
 			}
 
-			statQuery := `select n_distinct, correlation from pg_stats where 
-							schemaname = 'cdm' and attname = 'status'`
+			statQuery := `select avg_width, correlation from pg_stats where 
+							schemaname = 'cdm' and attname = 'b'`
 
 			backupStats := make([]StatData, 0)
 
@@ -2288,7 +2280,7 @@ LANGUAGE plpgsql NO SQL;`)
 				"--with-stats",
 			)
 			assertDataRestored(restoreConn, map[string]int{
-				"cdm.contact_status": 20000})
+				"cdm.t": 10})
 
 			restoreStats := make([]StatData, 0)
 			restoreErr := restoreConn.Select(&restoreStats, statQuery)
@@ -2297,7 +2289,7 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(len(restoreStats)).To(Equal(1))
 			Expect(restoreStats).To(Equal(backupStats))
 
-			Expect(restoreStats[0].N_distinct).To(Equal(3))
+			Expect(restoreStats[0].Avg_width).Should(BeNumerically(">", 2))
 			Expect(restoreStats[0].Correlation).Should(BeNumerically(">", 0.1))
 		})
 	})
