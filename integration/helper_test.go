@@ -506,7 +506,7 @@ options:
 
 			// Write oid file
 			fOid, _ := os.Create(restoreOidFile)
-			_, _ = fOid.WriteString("1,0\n2,0\n3,0\n")
+			_, _ = fOid.WriteString("1,1\n2,1\n3,1\n")
 			defer func() {
 				_ = os.Remove(restoreOidFile)
 			}()
