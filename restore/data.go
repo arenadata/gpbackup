@@ -220,13 +220,11 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		oidList := make([]string, 0)
 		for _, entry := range dataEntries {
 			if entry.IsReplicated {
-				oidList = append(oidList, fmt.Sprintf("%d,0", entry.Oid))
+				oidList = append(oidList, fmt.Sprintf("%d,1", entry.Oid))
 				continue
 			}
 
-			for b := 0; b < batches; b++ {
-				oidList = append(oidList, fmt.Sprintf("%d,%d", entry.Oid, b))
-			}
+			oidList = append(oidList, fmt.Sprintf("%d,%d", entry.Oid, batches))
 		}
 
 		utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, "oid")
