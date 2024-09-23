@@ -678,7 +678,7 @@ func setupRestoreWithSkipFiles(oid int, withPlugin bool) []string {
 	ret = append(ret, fileName)
 
 	// Write oid file
-	createOidFile(restoreOidFile, "1,0\n1,1\n1,2\n")
+	createOidFile(restoreOidFile, "1,2\n")
 	ret = append(ret, restoreOidFile)
 
 	pipename := fmt.Sprintf("%s_%d_0", pipeFile, 1)
