@@ -572,7 +572,7 @@ func setupRestoreFiles(compressionType string, withPlugin bool) {
 	}
 
 	f, _ := os.Create(restoreOidFile)
-	_, _ = f.WriteString("1,0\n3,0\n")
+	_, _ = f.WriteString("1,1\n3,1\n")
 
 	err := unix.Mkfifo(fmt.Sprintf("%s_%d_0", pipeFile, 1), 0700)
 	if err != nil {

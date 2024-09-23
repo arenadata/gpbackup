@@ -234,7 +234,7 @@ func doRestoreAgent() error {
 				nextOid := nextOidWithBatch.oid
 
 				if nextOid != skipOid {
-					nextBatchNum := nextOidWithBatch.batch
+					nextBatchNum := 0
 					nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
 					logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 					err := createPipe(nextPipeToCreate)
