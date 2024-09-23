@@ -221,6 +221,25 @@ func doRestoreAgent() error {
 	for i, oidWithBatch := range oidWithBatchList {
 		tableOid := oidWithBatch.oid
 
+		if i < len(oidWithBatchList)-*copyQueue {
+			nextOidWithBatch := oidWithBatchList[i+*copyQueue]
+			nextOid := nextOidWithBatch.oid
+
+			if nextOid != skipOid {
+				nextBatchNum := 0
+				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
+				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
+				err := createPipe(nextPipeToCreate)
+				if err != nil {
+					logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
+					// In the case this error is hit it means we have lost the
+					// ability to create pipes normally, so hard quit even if
+					// --on-error-continue is given
+					return err
+				}
+			}
+		}
+
 		for batchNum := 0; batchNum < oidWithBatch.batch; batchNum++ {
 			contentToRestore := *content + (*destSize * batchNum)
 			if wasTerminated {
@@ -229,12 +248,12 @@ func doRestoreAgent() error {
 			}
 
 			currentPipe = fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
-			if i < len(oidWithBatchList)-*copyQueue {
-				nextOidWithBatch := oidWithBatchList[i+*copyQueue]
-				nextOid := nextOidWithBatch.oid
+
+			if batchNum < batches-1 {
+				nextOid := tableOid
 
 				if nextOid != skipOid {
-					nextBatchNum := 0
+					nextBatchNum := batchNum + 1
 					nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
 					logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 					err := createPipe(nextPipeToCreate)
