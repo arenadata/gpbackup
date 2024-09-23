@@ -222,8 +222,7 @@ func doRestoreAgent() error {
 		tableOid := oidWithBatch.oid
 
 		if i < len(oidWithBatchList)-*copyQueue {
-			nextOidWithBatch := oidWithBatchList[i+*copyQueue]
-			nextOid := nextOidWithBatch.oid
+			nextOid := oidWithBatchList[i+*copyQueue].oid
 
 			if nextOid != skipOid {
 				nextBatchNum := 0
