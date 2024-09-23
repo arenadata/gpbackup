@@ -2242,6 +2242,57 @@ LANGUAGE plpgsql NO SQL;`)
 				"tplain": 1000, "ths": 1000, "tht": 1000})
 		})
 	})
+	Describe("Properly hanldes user defined type if different schema used", func() {
+		It("restores table with enum when exporting statistics", func() {
+			testhelper.AssertQueryRuns(backupConn, `create schema cdm;
+													create type cdm.ct as (a text);
+													create table cdm.t (a int, b cdm.ct) distributed by (a);
+													insert into cdm.t select x, cast ('(' || x::text || ')' as cdm.ct)
+														from generate_series(1, 10) x;
+													analyze cdm.t;`)
+
+			defer func() {
+				testhelper.AssertQueryRuns(backupConn, `drop schema cdm cascade;`)
+				testhelper.AssertQueryRuns(restoreConn, `drop schema cdm cascade;`)
+			}()
+
+			type StatData struct {
+				Avg_width   int
+				Correlation float64
+			}
+
+			statQuery := `select avg_width, correlation from pg_stats where 
+							schemaname = 'cdm' and attname = 'b'`
+
+			backupStats := make([]StatData, 0)
+
+			backupErr := backupConn.Select(&backupStats, statQuery)
+			Expect(backupErr).ToNot(HaveOccurred())
+
+			output := gpbackup(gpbackupPath, backupHelperPath,
+				"--backup-dir", backupDir,
+				"--with-stats")
+			timestamp := getBackupTimestamp(string(output))
+
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
+				"--redirect-db", "restoredb",
+				"--backup-dir", backupDir,
+				"--with-stats",
+			)
+			assertDataRestored(restoreConn, map[string]int{
+				"cdm.t": 10})
+
+			restoreStats := make([]StatData, 0)
+			restoreErr := restoreConn.Select(&restoreStats, statQuery)
+			Expect(restoreErr).ToNot(HaveOccurred())
+
+			Expect(len(restoreStats)).To(Equal(1))
+			Expect(restoreStats).To(Equal(backupStats))
+
+			Expect(restoreStats[0].Avg_width).Should(BeNumerically(">", 2))
+			Expect(restoreStats[0].Correlation).Should(BeNumerically(">", 0.1))
+		})
+	})
 	Describe("Restore to a different-sized cluster", func() {
 		if useOldBackupVersion {
 			Skip("This test is not needed for old backup versions")

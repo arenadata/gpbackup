@@ -163,10 +163,10 @@ func generateAttributeSlotsQuery7(attStat AttributeStatistic) string {
 			realValues(attStat.Numbers3),
 			realValues(attStat.Numbers4),
 			realValues(attStat.Numbers5),
-			AnyValues(attStat.Values1, attStat.Type),
-			AnyValues(attStat.Values2, attStat.Type),
-			AnyValues(attStat.Values3, attStat.Type),
-			AnyValues(attStat.Values4, attStat.Type),
+			AnyValues(attStat.Values1, attStat.FQType()),
+			AnyValues(attStat.Values2, attStat.FQType()),
+			AnyValues(attStat.Values3, attStat.FQType()),
+			AnyValues(attStat.Values4, attStat.FQType()),
 			// Hyperloglog data structure for STATISTIC_KIND_HLL and
 			// STATISTIC_KIND_FULLHLL is converted into a bytea and
 			// always stored in last slot
@@ -234,10 +234,10 @@ func generateAttributeSlotsQuery6(attStat AttributeStatistic) string {
 			realValues(attStat.Numbers3),
 			realValues(attStat.Numbers4),
 			realValues(attStat.Numbers5),
-			AnyValues(attStat.Values1, attStat.Type),
-			AnyValues(attStat.Values2, attStat.Type),
-			AnyValues(attStat.Values3, attStat.Type),
-			AnyValues(attStat.Values4, attStat.Type),
+			AnyValues(attStat.Values1, attStat.FQType()),
+			AnyValues(attStat.Values2, attStat.FQType()),
+			AnyValues(attStat.Values3, attStat.FQType()),
+			AnyValues(attStat.Values4, attStat.FQType()),
 			// Hyperloglog data structure for STATISTIC_KIND_HLL and
 			// STATISTIC_KIND_FULLHLL is converted into a bytea and
 			// always stored in last slot
