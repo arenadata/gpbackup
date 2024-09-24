@@ -244,7 +244,7 @@ func doRestoreAgent() error {
 
 			currentPipe = fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
 
-			if batchNum < batches-1 {
+			if batchNum < oidWithBatch.batch-1 {
 				nextOid := tableOid
 				nextBatchNum := batchNum + 1
 				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
@@ -301,7 +301,7 @@ func doRestoreAgent() error {
 							logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 							err = nil
 							skip = true
-							if batchNum < batches-1 {
+							if batchNum < oidWithBatch.batch-1 {
 								batchToDelete := batchNum + 1
 								closeAndDeletePipe(tableOid, batchToDelete)
 							}
