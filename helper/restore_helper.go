@@ -215,29 +215,25 @@ func doRestoreAgent() error {
 
 	var currentPipe string
 
-	// If skip file is detected for the particular tableOid, will not process batches related to this oid
-	skipOid := -1
-
 	for i, oidWithBatch := range oidWithBatchList {
 		tableOid := oidWithBatch.oid
 
 		if i < len(oidWithBatchList)-*copyQueue {
 			nextOid := oidWithBatchList[i+*copyQueue].oid
-
-			if nextOid != skipOid {
-				nextBatchNum := 0
-				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
-				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-				err := createPipe(nextPipeToCreate)
-				if err != nil {
-					logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-					// In the case this error is hit it means we have lost the
-					// ability to create pipes normally, so hard quit even if
-					// --on-error-continue is given
-					return err
-				}
+			nextBatchNum := 0
+			nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
+			logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
+			err := createPipe(nextPipeToCreate)
+			if err != nil {
+				logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
+				// In the case this error is hit it means we have lost the
+				// ability to create pipes normally, so hard quit even if
+				// --on-error-continue is given
+				return err
 			}
 		}
+
+		skip := false
 
 		for batchNum := 0; batchNum < oidWithBatch.batch; batchNum++ {
 			contentToRestore := *content + (*destSize * batchNum)
@@ -250,25 +246,17 @@ func doRestoreAgent() error {
 
 			if batchNum < batches-1 {
 				nextOid := tableOid
-
-				if nextOid != skipOid {
-					nextBatchNum := batchNum + 1
-					nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
-					logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-					err := createPipe(nextPipeToCreate)
-					if err != nil {
-						logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-						// In the case this error is hit it means we have lost the
-						// ability to create pipes normally, so hard quit even if
-						// --on-error-continue is given
-						return err
-					}
+				nextBatchNum := batchNum + 1
+				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
+				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
+				err := createPipe(nextPipeToCreate)
+				if err != nil {
+					logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
+					// In the case this error is hit it means we have lost the
+					// ability to create pipes normally, so hard quit even if
+					// --on-error-continue is given
+					return err
 				}
-			}
-
-			if tableOid == skipOid {
-				logVerbose(fmt.Sprintf("Oid %d, Batch %d: skip due to skip file\n", tableOid, batchNum))
-				goto LoopEnd
 			}
 
 			if *singleDataFile {
@@ -312,13 +300,10 @@ func doRestoreAgent() error {
 						if *onErrorContinue && utils.FileExists(fmt.Sprintf("%s_skip_%d", *pipeFile, tableOid)) {
 							logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 							err = nil
-							skipOid = tableOid
-							/* Close up to *copyQueue files with this tableOid */
-							for idx := 0; idx < *copyQueue; idx++ {
-								batchToDelete := batchNum + idx
-								if batchToDelete < batches {
-									closeAndDeletePipe(tableOid, batchToDelete)
-								}
+							skip = true
+							if batchNum < batches-1 {
+								batchToDelete := batchNum + 1
+								closeAndDeletePipe(tableOid, batchToDelete)
 							}
 							goto LoopEnd
 						} else {
@@ -387,9 +372,7 @@ func doRestoreAgent() error {
 			logInfo(fmt.Sprintf("Oid %d, Batch %d: Copied %d bytes into the pipe", tableOid, batchNum, bytesRead))
 
 		LoopEnd:
-			if tableOid != skipOid {
-				closeAndDeletePipe(tableOid, batchNum)
-			}
+			closeAndDeletePipe(tableOid, batchNum)
 
 			logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
 
@@ -409,10 +392,13 @@ func doRestoreAgent() error {
 				if *onErrorContinue {
 					lastError = err
 					err = nil
-					continue
 				} else {
 					return err
 				}
+			}
+
+			if skip {
+				break
 			}
 		}
 	}
