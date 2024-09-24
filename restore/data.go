@@ -203,6 +203,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		return 0
 	}
 
+	initialPipes := connectionPool.NumConns
 	origSize, destSize, resizeCluster, batches := GetResizeClusterInfo()
 	if backupConfig.SingleDataFile || resizeCluster {
 		msg := ""
@@ -228,7 +229,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		}
 
 		utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, "oid")
-		initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo)
+		initialPipes = CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo)
 		if wasTerminated {
 			return 0
 		}
@@ -262,7 +263,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		utils.StartHelperChecker(globalCluster, globalFPInfo, cancel)
 	}
 
-	for i := 0; i < connectionPool.NumConns; i++ {
+	for i := 0; i < initialPipes; i++ {
 		workerPool.Add(1)
 		go func(whichConn int) {
 			defer func() {
