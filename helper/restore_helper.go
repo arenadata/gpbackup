@@ -213,11 +213,7 @@ func doRestoreAgent() error {
 
 	preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
 
-	var currentPipe string
-
 	for i, oidWithBatch := range oidWithBatchList {
-		tableOid := oidWithBatch.oid
-
 		if i < len(oidWithBatchList)-*copyQueue {
 			nextOid := oidWithBatchList[i+*copyQueue].oid
 			nextBatchNum := 0
@@ -242,7 +238,8 @@ func doRestoreAgent() error {
 				return errors.New("Terminated due to user request")
 			}
 
-			currentPipe = fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
+			tableOid := oidWithBatch.oid
+			currentPipe := fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
 
 			if batchNum < oidWithBatch.batch-1 {
 				nextOid := tableOid
