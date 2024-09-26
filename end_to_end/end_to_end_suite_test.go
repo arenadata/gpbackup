@@ -2119,6 +2119,31 @@ LANGUAGE plpgsql NO SQL;`)
 				Expect(contents).To(ContainSubstring(`GRANT SELECT (a) ON TABLE public.t1 TO user2;`))
 				Expect(contents).To(ContainSubstring(`GRANT SELECT (a) ON TABLE public.t1 TO "user, 3 ";`))
 			})
+			It("backup empty db with statistics", func() {
+				testutils.SkipIfBefore6(backupConn)
+
+				err := exec.Command("createdb", "emptydb").Run()
+				if err != nil {
+					Fail(fmt.Sprintf("Could not create emptydb: %v", err))
+				}
+				DeferCleanup(func() {
+					err = exec.Command("dropdb", "emptydb").Run()
+					if err != nil {
+						fmt.Printf("Could not drop emptydb: %v\n", err)
+					}
+				})
+
+				output := gpbackup(gpbackupPath, backupHelperPath,
+					"--dbname", "emptydb",
+					"--backup-dir", backupDir,
+					"--with-stats")
+				timestamp := getBackupTimestamp(string(output))
+
+				gprestore(gprestorePath, restoreHelperPath, timestamp,
+					"--redirect-db", "restoredb",
+					"--backup-dir", backupDir,
+					"--with-stats")
+			})
 		})
 	})
 	Describe("Properly handles enum type as distribution or partition key", func() {
