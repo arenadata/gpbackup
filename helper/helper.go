@@ -207,7 +207,7 @@ func preloadCreatedPipesForBackup(oidList []int, queuedPipeCount int) {
 
 func preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int) {
 	for i := 0; i < queuedPipeCount; i++ {
-		pipeName := fmt.Sprintf("%s_%d_%d", *pipeFile, oidWithBatchList[i].oid, 0)
+		pipeName := fmt.Sprintf("%s_%d_0", *pipeFile, oidWithBatchList[i].oid)
 		pipesMap[pipeName] = true
 	}
 }
