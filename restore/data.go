@@ -203,7 +203,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		return 0
 	}
 
-	initialPipes := connectionPool.NumConns
+	numConns := connectionPool.NumConns
 	origSize, destSize, resizeCluster, batches := GetResizeClusterInfo()
 	if backupConfig.SingleDataFile || resizeCluster {
 		msg := ""
@@ -229,7 +229,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		}
 
 		utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, "oid")
-		initialPipes = CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo)
+		numConns = CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo)
 		if wasTerminated {
 			return 0
 		}
@@ -241,7 +241,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		if backupConfig.Compressed {
 			compressStr = fmt.Sprintf(" --compression-type %s ", utils.GetPipeThroughProgram().Name)
 		}
-		utils.StartGpbackupHelpers(globalCluster, fpInfo, "--restore-agent", MustGetFlagString(options.PLUGIN_CONFIG), compressStr, MustGetFlagBool(options.ON_ERROR_CONTINUE), isFilter, &wasTerminated, initialPipes, backupConfig.SingleDataFile, resizeCluster, origSize, destSize, gplog.GetVerbosity())
+		utils.StartGpbackupHelpers(globalCluster, fpInfo, "--restore-agent", MustGetFlagString(options.PLUGIN_CONFIG), compressStr, MustGetFlagBool(options.ON_ERROR_CONTINUE), isFilter, &wasTerminated, numConns, backupConfig.SingleDataFile, resizeCluster, origSize, destSize, gplog.GetVerbosity())
 	}
 	/*
 	 * We break when an interrupt is received and rely on
@@ -263,7 +263,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		utils.StartHelperChecker(globalCluster, globalFPInfo, cancel)
 	}
 
-	for i := 0; i < initialPipes; i++ {
+	for i := 0; i < numConns; i++ {
 		workerPool.Add(1)
 		go func(whichConn int) {
 			defer func() {
