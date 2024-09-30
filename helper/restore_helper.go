@@ -118,6 +118,16 @@ func (r *RestoreReader) copyAllData() (int64, error) {
 	return bytesRead, err
 }
 
+func createNextPipe(pipeFile string, tableOid int, batchNum int) error {
+	nextPipeToCreate := fmt.Sprintf("%s_%d_%d", pipeFile, tableOid, batchNum)
+	logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", tableOid, batchNum, nextPipeToCreate))
+	err := createPipe(nextPipeToCreate)
+	if err != nil {
+		logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", tableOid, batchNum, nextPipeToCreate))
+	}
+	return err
+}
+
 func closeAndDeletePipe(tableOid int, batchNum int) {
 	pipe := fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
 	logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, pipe))
@@ -216,12 +226,8 @@ func doRestoreAgent() error {
 	for i, oidWithBatch := range oidWithBatchList {
 		if i < len(oidWithBatchList)-*copyQueue {
 			nextOid := oidWithBatchList[i+*copyQueue].oid
-			nextBatchNum := 0
-			nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
-			logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-			err := createPipe(nextPipeToCreate)
+			err := createNextPipe(*pipeFile, nextOid, 0)
 			if err != nil {
-				logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 				// In the case this error is hit it means we have lost the
 				// ability to create pipes normally, so hard quit even if
 				// --on-error-continue is given
@@ -243,12 +249,8 @@ func doRestoreAgent() error {
 
 			nextBatchNum := batchNum + 1
 			if nextBatchNum < oidWithBatch.batch {
-				nextOid := tableOid
-				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
-				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-				err := createPipe(nextPipeToCreate)
+				err := createNextPipe(*pipeFile, tableOid, nextBatchNum)
 				if err != nil {
-					logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 					// In the case this error is hit it means we have lost the
 					// ability to create pipes normally, so hard quit even if
 					// --on-error-continue is given
