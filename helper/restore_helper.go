@@ -230,6 +230,7 @@ func doRestoreAgent() error {
 		}
 
 		skip := false
+		tableOid := oidWithBatch.oid
 
 		for batchNum := 0; batchNum < oidWithBatch.batch; batchNum++ {
 			contentToRestore := *content + (*destSize * batchNum)
@@ -238,7 +239,6 @@ func doRestoreAgent() error {
 				return errors.New("Terminated due to user request")
 			}
 
-			tableOid := oidWithBatch.oid
 			currentPipe := fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
 
 			if batchNum < oidWithBatch.batch-1 {
