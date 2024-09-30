@@ -2122,15 +2122,9 @@ LANGUAGE plpgsql NO SQL;`)
 			It("backup empty db with statistics", func() {
 				testutils.SkipIfBefore6(backupConn)
 
-				err := exec.Command("createdb", "emptydb").Run()
-				if err != nil {
-					Fail(fmt.Sprintf("Could not create emptydb: %v", err))
-				}
+				mustRunCommand(exec.Command("createdb", "emptydb"))
 				DeferCleanup(func() {
-					err = exec.Command("dropdb", "emptydb").Run()
-					if err != nil {
-						fmt.Printf("Could not drop emptydb: %v\n", err)
-					}
+					mustRunCommand(exec.Command("dropdb", "emptydb"))
 				})
 
 				output := gpbackup(gpbackupPath, backupHelperPath,
