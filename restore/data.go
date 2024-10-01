@@ -202,12 +202,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		gplog.Verbose("No data to restore for timestamp = %s", fpInfo.Timestamp)
 		return 0
 	}
-	var maxPipes int
-	if connectionPool.NumConns < totalTables {
-		maxPipes = connectionPool.NumConns
-	} else {
-		maxPipes = totalTables
-	}
+
 	origSize, destSize, resizeCluster, batches := GetResizeClusterInfo()
 	if backupConfig.SingleDataFile || resizeCluster {
 		msg := ""
@@ -223,8 +218,10 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		var maxHelpers int
 		if backupConfig.SingleDataFile {
 			maxHelpers = 1
-		} else if resizeCluster {
-			maxHelpers = maxPipes
+		} else if connectionPool.NumConns < totalTables {
+			maxHelpers = connectionPool.NumConns
+		} else {
+			maxHelpers = totalTables
 		}
 
 		for j := 0; j < maxHelpers; j++ {
@@ -282,7 +279,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		utils.StartHelperChecker(globalCluster, globalFPInfo, cancel)
 	}
 
-	for i := 0; i < maxPipes; i++ {
+	for i := 0; i < connectionPool.NumConns; i++ {
 		workerPool.Add(1)
 		go func(whichConn int) {
 			defer func() {
