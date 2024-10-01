@@ -2340,7 +2340,6 @@ LANGUAGE plpgsql NO SQL;`)
 					gprestoreArgs = append(gprestoreArgs, "--include-schema", "schematwo")
 				}
 				if size > 1 {
-					Fail(fmt.Sprintf("isSingleDataFileRestore = %v, %d", isSingleDataFileRestore, size))
 					if isSingleDataFileRestore {
 						gprestoreArgs = append(gprestoreArgs, "--copy-queue-size", fmt.Sprintf("%d", size))
 					} else {
