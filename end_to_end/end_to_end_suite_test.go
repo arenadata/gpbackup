@@ -2340,6 +2340,7 @@ LANGUAGE plpgsql NO SQL;`)
 					gprestoreArgs = append(gprestoreArgs, "--include-schema", "schematwo")
 				}
 				if size > 1 {
+					Fail(fmt.Sprintf("isSingleDataFileRestore = %v, %d", isSingleDataFileRestore, size))
 					if isSingleDataFileRestore {
 						gprestoreArgs = append(gprestoreArgs, "--copy-queue-size", fmt.Sprintf("%d", size))
 					} else {
@@ -2403,7 +2404,7 @@ LANGUAGE plpgsql NO SQL;`)
 			Entry("Can backup a 2-segment cluster and restore to current cluster single data file and filter", "20220908150223", "", "2-segment-db-single-data-file-filter", false, true, true, false, 1),
 			Entry("Can backup a 2-segment cluster and restore to current cluster single data file", "20220908150159", "", "2-segment-db-single-data-file", false, false, true, false, 1),
 			Entry("Can backup a 2-segment cluster and restore to current cluster with filter", "20220908150238", "", "2-segment-db-filter", false, true, false, false, 1),
-			Entry("Can backup a 2-segment cluster and restore to current cluster with incremental backups and a single data file", "20220909150612", "20220909150622", "2-segment-db-incremental", true, false, false, false, 1),
+			Entry("Can backup a 2-segment cluster and restore to current cluster with incremental backups and a single data file", "20220909150612", "20220909150622", "2-segment-db-incremental", true, false, true, false, 1),
 			Entry("Can backup a 1-segment cluster and restore to current cluster", "20220908150735", "", "1-segment-db", false, false, false, false, 1),
 			Entry("Can backup a 1-segment cluster and restore to current cluster with single data file", "20220908150752", "", "1-segment-db-single-data-file", false, false, true, false, 1),
 			Entry("Can backup a 1-segment cluster and restore to current cluster with a filter", "20220908150804", "", "1-segment-db-filter", false, true, false, false, 1),
@@ -2429,7 +2430,7 @@ LANGUAGE plpgsql NO SQL;`)
 			Entry("Can backup a 2-segment cluster and restore to current cluster single data file and filter with copy-queue-size", "20220908150223", "", "2-segment-db-single-data-file-filter", false, true, true, false, 3),
 			Entry("Can backup a 2-segment cluster and restore to current cluster single data file with copy-queue-size", "20220908150159", "", "2-segment-db-single-data-file", false, false, true, false, 3),
 			Entry("Can backup a 2-segment cluster and restore to current cluster with filter with jobs", "20220908150238", "", "2-segment-db-filter", false, true, false, false, 3),
-			Entry("Can backup a 2-segment cluster and restore to current cluster with incremental backups and a single data file with copy-queue-size", "20220909150612", "20220909150622", "2-segment-db-incremental", true, false, false, false, 3),
+			Entry("Can backup a 2-segment cluster and restore to current cluster with incremental backups and a single data file with copy-queue-size", "20220909150612", "20220909150622", "2-segment-db-incremental", true, false, true, false, 3),
 			Entry("Can backup a 1-segment cluster and restore to current cluster with jobs", "20220908150735", "", "1-segment-db", false, false, false, false, 3),
 			Entry("Can backup a 1-segment cluster and restore to current cluster with single data file with copy-queue-size", "20220908150752", "", "1-segment-db-single-data-file", false, false, true, false, 3),
 			Entry("Can backup a 1-segment cluster and restore to current cluster with a filter with jobs", "20220908150804", "", "1-segment-db-filter", false, true, false, false, 3),
