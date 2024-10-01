@@ -25,15 +25,15 @@ var _ = Describe("agent remote", func() {
 	})
 	Describe("WriteOidListToSegments()", func() {
 		It("writes oids to a temp file and copies it to all segments", func() {
-			utils.WriteOidListToSegments(oidList, testCluster, filePath, "oid")
+			utils.WriteOidListToSegments(oidList, testCluster, filePath, "oid_0")
 
 			remoteOutput := testCluster.GenerateAndExecuteCommand("ensure oid file was written to segments", cluster.ON_SEGMENTS, func(contentID int) string {
-				remoteOidFile := filePath.GetSegmentHelperFilePath(contentID, "oid")
+				remoteOidFile := filePath.GetSegmentHelperFilePath(contentID, "oid_0")
 				return fmt.Sprintf("cat %s", remoteOidFile)
 			})
 			defer func() {
 				remoteOutputRemoval := testCluster.GenerateAndExecuteCommand("ensure oid file removed", cluster.ON_SEGMENTS, func(contentID int) string {
-					remoteOidFile := filePath.GetSegmentHelperFilePath(contentID, "oid")
+					remoteOidFile := filePath.GetSegmentHelperFilePath(contentID, "oid_0")
 					return fmt.Sprintf("rm %s", remoteOidFile)
 				})
 				testCluster.CheckClusterError(remoteOutputRemoval, "Could not remove oid file", func(contentID int) string {
