@@ -364,7 +364,9 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionPool *dbconn.DBConn, fpInfo filepath.FilePathInfo) int {
 	// Create min(connections, tables) segment pipes on each host
 	var maxPipes int
-	if connectionPool.NumConns < len(oidList) {
+	if !backupConfig.SingleDataFile {
+		maxPipes = 1
+	} else if connectionPool.NumConns < len(oidList) {
 		maxPipes = connectionPool.NumConns
 	} else {
 		maxPipes = len(oidList)
