@@ -11,9 +11,11 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/greenplum-db/gp-common-go-libs/operating"
 	"github.com/greenplum-db/gpbackup/toc"
 	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/klauspost/compress/zstd"
@@ -33,7 +35,9 @@ const (
 )
 
 var (
-	contentRE *regexp.Regexp
+	writeHandle *os.File
+	writer      *bufio.Writer
+	contentRE   *regexp.Regexp
 )
 
 /* IRestoreReader interface to wrap the underlying reader.
@@ -130,10 +134,10 @@ func (r *RestoreReader) closeFileHandle() {
 	r.fileHandle.Close()
 }
 
-func (h Helper) closeAndDeletePipe(tableOid int, batchNum int) {
+func (rh RestoreHelper) closeAndDeletePipe(tableOid int, batchNum int) {
 	pipe := fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
 	logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, pipe))
-	err := h.flushAndCloseRestoreWriter(pipe, tableOid)
+	err := rh.flushAndCloseRestoreWriter(pipe, tableOid)
 	if err != nil {
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, err))
 	}
@@ -151,6 +155,9 @@ type oidWithBatch struct {
 }
 
 type IRestoreHelper interface {
+	getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error)
+	flushAndCloseRestoreWriter(pipeName string, oid int) error
+	closeAndDeletePipe(tableOid int, batchNum int)
 	getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error)
 	getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error)
 	checkForSkipFile(pipeFile string, tableOid int) bool
@@ -181,7 +188,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 
 	readers := make(map[int]IRestoreReader)
 
-	oidWithBatchList, err := h.getOidWithBatchListFromFile(*oidFile)
+	oidWithBatchList, err := rh.getOidWithBatchListFromFile(*oidFile)
 	if err != nil {
 		return err
 	}
@@ -342,7 +349,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 						for idx := 0; idx < *copyQueue; idx++ {
 							batchToDelete := batchNum + idx
 							if batchToDelete < batches {
-								h.closeAndDeletePipe(tableOid, batchToDelete)
+								rh.closeAndDeletePipe(tableOid, batchToDelete)
 							}
 						}
 						goto LoopEnd
@@ -412,7 +419,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Copied %d bytes into the pipe", tableOid, batchNum, bytesRead))
 	LoopEnd:
 		if tableOid != skipOid {
-			h.closeAndDeletePipe(tableOid, batchNum)
+			rh.closeAndDeletePipe(tableOid, batchNum)
 		}
 
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
@@ -443,6 +450,29 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 	return lastError
 }
 
+func (rh *RestoreHelper) flushAndCloseRestoreWriter(pipeName string, oid int) error {
+	if writer != nil {
+		writer.Write([]byte{}) // simulate writer connected in case of error
+		err := writer.Flush()
+		if err != nil {
+			logError("Oid %d: Failed to flush pipe %s", oid, pipeName)
+			return err
+		}
+		writer = nil
+		logVerbose("Oid %d: Successfully flushed pipe %s", oid, pipeName)
+	}
+	if writeHandle != nil {
+		err := writeHandle.Close()
+		if err != nil {
+			logError("Oid %d: Failed to close pipe handle", oid)
+			return err
+		}
+		writeHandle = nil
+		logVerbose("Oid %d: Successfully closed pipe handle", oid)
+	}
+	return nil
+}
+
 func constructSingleTableFilename(name string, contentToRestore int, oid int) string {
 	name = strings.ReplaceAll(name, fmt.Sprintf("gpbackup_%d", *content), fmt.Sprintf("gpbackup_%d", contentToRestore))
 	nameParts := strings.Split(name, ".")
@@ -460,6 +490,24 @@ func replaceContentInFilename(filename string, content int) string {
 		contentRE = regexp.MustCompile("gpbackup_([0-9]+)_")
 	}
 	return contentRE.ReplaceAllString(filename, fmt.Sprintf("gpbackup_%d_", content))
+}
+
+func (h RestoreHelper) getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
+	oidStr, err := operating.System.ReadFile(oidFileName)
+	if err != nil {
+		logError(fmt.Sprintf("Error encountered reading oid batch list from file: %v", err))
+		return nil, err
+	}
+	oidStrList := strings.Split(strings.TrimSpace(fmt.Sprintf("%s", oidStr)), "\n")
+	oidList := make([]oidWithBatch, len(oidStrList))
+	for i, entry := range oidStrList {
+		oidWithBatchEntry := strings.Split(entry, ",")
+		oidNum, _ := strconv.Atoi(oidWithBatchEntry[0])
+		batchNum, _ := strconv.Atoi(oidWithBatchEntry[1])
+
+		oidList[i] = oidWithBatch{oid: oidNum, batch: batchNum}
+	}
+	return oidList, nil
 }
 
 func (RestoreHelper) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error) {

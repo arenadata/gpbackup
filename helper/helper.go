@@ -1,7 +1,6 @@
 package helper
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -26,8 +25,6 @@ var (
 	CleanupGroup  *sync.WaitGroup
 	version       string
 	wasTerminated bool
-	writeHandle   *os.File
-	writer        *bufio.Writer
 	pipesMap      map[string]bool
 )
 
@@ -213,34 +210,13 @@ func preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCo
 }
 
 type IHelper interface {
-	getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error)
 	createPipe(pipe string) error
-	flushAndCloseRestoreWriter(pipeName string, oid int) error
-	closeAndDeletePipe(tableOid int, batchNum int)
 }
 
 type Helper struct{}
 
 func (h Helper) createPipe(pipe string) error {
 	return createPipe(pipe)
-}
-
-func (h Helper) getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
-	oidStr, err := operating.System.ReadFile(oidFileName)
-	if err != nil {
-		logError(fmt.Sprintf("Error encountered reading oid batch list from file: %v", err))
-		return nil, err
-	}
-	oidStrList := strings.Split(strings.TrimSpace(fmt.Sprintf("%s", oidStr)), "\n")
-	oidList := make([]oidWithBatch, len(oidStrList))
-	for i, entry := range oidStrList {
-		oidWithBatchEntry := strings.Split(entry, ",")
-		oidNum, _ := strconv.Atoi(oidWithBatchEntry[0])
-		batchNum, _ := strconv.Atoi(oidWithBatchEntry[1])
-
-		oidList[i] = oidWithBatch{oid: oidNum, batch: batchNum}
-	}
-	return oidList, nil
 }
 
 func getOidListFromFile(oidFileName string) ([]int, error) {
@@ -256,29 +232,6 @@ func getOidListFromFile(oidFileName string) ([]int, error) {
 		oidList[i] = num
 	}
 	return oidList, nil
-}
-
-func (h *Helper) flushAndCloseRestoreWriter(pipeName string, oid int) error {
-	if writer != nil {
-		writer.Write([]byte{}) // simulate writer connected in case of error
-		err := writer.Flush()
-		if err != nil {
-			logError("Oid %d: Failed to flush pipe %s", oid, pipeName)
-			return err
-		}
-		writer = nil
-		logVerbose("Oid %d: Successfully flushed pipe %s", oid, pipeName)
-	}
-	if writeHandle != nil {
-		err := writeHandle.Close()
-		if err != nil {
-			logError("Oid %d: Failed to close pipe handle", oid)
-			return err
-		}
-		writeHandle = nil
-		logVerbose("Oid %d: Successfully closed pipe handle", oid)
-	}
-	return nil
 }
 
 /*
@@ -304,7 +257,7 @@ func DoCleanup() {
 			logVerbose("Encountered error closing error file: %v", err)
 		}
 	}
-	err := new(Helper).flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
+	err := new(RestoreHelper).flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
 	if err != nil {
 		logVerbose("Encountered error during cleanup: %v", err)
 	}
