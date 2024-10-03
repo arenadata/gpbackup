@@ -228,8 +228,8 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 			// During a larger-to-smaller restore, we need to do multiple passes of
 			// data loading so we assign the batches here.
 			oidList := make([]string, 0)
-			for i, entry := range dataEntries {
-				if i%maxHelpers != helperIdx {
+			for entryIdx, entry := range dataEntries {
+				if entryIdx%maxHelpers != helperIdx {
 					continue
 				}
 
