@@ -229,7 +229,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 			// data loading so we assign the batches here.
 			oidList := make([]string, 0)
 			for entryIdx, entry := range dataEntries {
-				if entryIdx%maxHelpers != helperIdx {
+				if (entryIdx % maxHelpers) != helperIdx {
 					continue
 				}
 
