@@ -35,6 +35,8 @@ const (
 )
 
 var (
+	Restorer IRestoreHelper = new(RestoreHelper)
+
 	writeHandle *os.File
 	writer      *bufio.Writer
 	contentRE   *regexp.Regexp
@@ -171,8 +173,7 @@ func (RestoreHelper) checkForSkipFile(pipeFile string, tableOid int) bool {
 
 func doRestoreAgent() error {
 	helper := new(Helper)
-	restorer := new(RestoreHelper)
-	return doRestoreAgentInternal(helper, restorer)
+	return doRestoreAgentInternal(helper, Restorer)
 }
 
 func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
