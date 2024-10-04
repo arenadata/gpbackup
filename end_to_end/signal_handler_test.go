@@ -14,11 +14,27 @@ import (
 )
 
 func CreateOutput(cmd *exec.Cmd) (*bufio.Scanner, strings.Builder) {
-	outPile, _ := cmd.StdoutPipe()
-	outScanner := bufio.NewScanner(outPile)
+	outPipe, err := cmd.StdoutPipe()
+	Expect(err).ToNot(HaveOccurred())
+	outScanner := bufio.NewScanner(outPipe)
 	var output strings.Builder
 	cmd.Stderr = &output
 	return outScanner, output
+}
+
+func waitForOutput(scanner *bufio.Scanner, output *strings.Builder) {
+	if !scanner.Scan() || scanner.Err() != nil {
+		Fail("no output from process")
+	}
+	output.WriteString(output.String())
+	output.WriteByte('\n')
+}
+
+func getOutput(scanner *bufio.Scanner, output *strings.Builder) {
+	for scanner.Scan() {
+		output.WriteString(scanner.Text())
+		output.WriteByte('\n')
+	}
 }
 
 var _ = Describe("Signal handler tests", func() {
@@ -43,12 +59,7 @@ var _ = Describe("Signal handler tests", func() {
 			outScanner, output := CreateOutput(cmd)
 
 			go func() {
-				// Wait for the first line on stdout
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				/*
 				* We use a random delay for the sleep in this test (between
@@ -60,12 +71,10 @@ var _ = Describe("Signal handler tests", func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
@@ -88,12 +97,7 @@ var _ = Describe("Signal handler tests", func() {
 			outScanner, output := CreateOutput(cmd)
 
 			go func() {
-				// Wait for the first line on stdout
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				/*
 				* We use a random delay for the sleep in this test (between
@@ -105,12 +109,10 @@ var _ = Describe("Signal handler tests", func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
@@ -141,11 +143,7 @@ var _ = Describe("Signal handler tests", func() {
 			// Once blocked, we send a SIGINT to cancel gpbackup.
 			var beforeLockCount int
 			go func() {
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				iterations := 50
 				for iterations > 0 {
@@ -159,12 +157,10 @@ var _ = Describe("Signal handler tests", func() {
 				}
 				_ = cmd.Process.Signal(unix.SIGINT)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 			Expect(beforeLockCount).To(Equal(1))
 
 			// After gpbackup has been canceled, we should no longer see a blocked SQL
@@ -204,11 +200,7 @@ var _ = Describe("Signal handler tests", func() {
 			// Once blocked, we send a SIGINT to cancel gpbackup.
 			var beforeLockCount int
 			go func() {
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				iterations := 50
 				for iterations > 0 {
@@ -222,12 +214,10 @@ var _ = Describe("Signal handler tests", func() {
 				}
 				_ = cmd.Process.Signal(unix.SIGINT)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 			Expect(beforeLockCount).To(Equal(1))
 
 			// After gpbackup has been canceled, we should no longer see a blocked SQL
@@ -262,12 +252,7 @@ var _ = Describe("Signal handler tests", func() {
 			outScanner, output := CreateOutput(cmd)
 
 			go func() {
-				// Wait for the first line on stdout
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				/*
 				* We use a random delay for the sleep in this test (between
@@ -279,12 +264,10 @@ var _ = Describe("Signal handler tests", func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting restore process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
@@ -309,12 +292,7 @@ var _ = Describe("Signal handler tests", func() {
 			outScanner, output := CreateOutput(cmd)
 
 			go func() {
-				// Wait for the first line on stdout
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				/*
 				* We use a random delay for the sleep in this test (between
@@ -326,12 +304,10 @@ var _ = Describe("Signal handler tests", func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 			stdoutRes := output.String()
 			Expect(stdoutRes).To(ContainSubstring("Received an interrupt signal, aborting restore process"))
 			Expect(stdoutRes).To(ContainSubstring("Cleanup complete"))
@@ -352,12 +328,7 @@ var _ = Describe("Signal handler tests", func() {
 			outScanner, output := CreateOutput(cmd)
 
 			go func() {
-				// Wait for the first line on stdout
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				/*
 				* We use a random delay for the sleep in this test (between
@@ -369,12 +340,10 @@ var _ = Describe("Signal handler tests", func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
@@ -397,12 +366,7 @@ var _ = Describe("Signal handler tests", func() {
 			outScanner, output := CreateOutput(cmd)
 
 			go func() {
-				// Wait for the first line on stdout
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				/*
 				* We use a random delay for the sleep in this test (between
@@ -414,12 +378,10 @@ var _ = Describe("Signal handler tests", func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
@@ -450,12 +412,7 @@ var _ = Describe("Signal handler tests", func() {
 			// Once blocked, we send a SIGTERM to cancel gpbackup.
 			var beforeLockCount int
 			go func() {
-				// Wait for the first line on stdout
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				iterations := 50
 				for iterations > 0 {
@@ -469,12 +426,10 @@ var _ = Describe("Signal handler tests", func() {
 				}
 				_ = cmd.Process.Signal(unix.SIGTERM)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 			Expect(beforeLockCount).To(Equal(1))
 
 			// After gpbackup has been canceled, we should no longer see a blocked SQL
@@ -514,12 +469,7 @@ var _ = Describe("Signal handler tests", func() {
 			// Once blocked, we send a SIGTERM to cancel gpbackup.
 			var beforeLockCount int
 			go func() {
-				// Wait for the first line on stdout
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				iterations := 50
 				for iterations > 0 {
@@ -533,12 +483,10 @@ var _ = Describe("Signal handler tests", func() {
 				}
 				_ = cmd.Process.Signal(unix.SIGTERM)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 			Expect(beforeLockCount).To(Equal(1))
 
 			// After gpbackup has been canceled, we should no longer see a blocked SQL
@@ -572,12 +520,7 @@ var _ = Describe("Signal handler tests", func() {
 			outScanner, output := CreateOutput(cmd)
 
 			go func() {
-				// Wait for the first line on stdout
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				/*
 				* We use a random delay for the sleep in this test (between
@@ -589,12 +532,10 @@ var _ = Describe("Signal handler tests", func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 			stdoutRes := output.String()
 			Expect(stdoutRes).To(ContainSubstring("Received a termination signal, aborting restore process"))
 			Expect(stdoutRes).To(ContainSubstring("Cleanup complete"))
@@ -619,12 +560,7 @@ var _ = Describe("Signal handler tests", func() {
 			outScanner, output := CreateOutput(cmd)
 
 			go func() {
-				// Wait for the first line on stdout
-				if !outScanner.Scan() {
-					return
-				}
-				output.WriteString(outScanner.Text())
-				output.WriteByte('\n')
+				waitForOutput(outScanner, &output)
 
 				/*
 				* We use a random delay for the sleep in this test (between
@@ -636,12 +572,10 @@ var _ = Describe("Signal handler tests", func() {
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
 
-				for outScanner.Scan() {
-					output.WriteString(outScanner.Text())
-					output.WriteByte('\n')
-				}
+				getOutput(outScanner, &output)
 			}()
-			_ = cmd.Run()
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
 
 			stdoutRes := output.String()
 			Expect(stdoutRes).To(ContainSubstring("Received a termination signal, aborting restore process"))
