@@ -13,13 +13,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func CreateOutput(cmd *exec.Cmd) (*bufio.Scanner, strings.Builder) {
+func CreateCombinedOutput(cmd *exec.Cmd) *bufio.Scanner {
 	outPipe, err := cmd.StdoutPipe()
 	Expect(err).ToNot(HaveOccurred())
 	outScanner := bufio.NewScanner(outPipe)
-	var output strings.Builder
-	cmd.Stderr = &output
-	return outScanner, output
+	cmd.Stderr = cmd.Stdout
+	return outScanner
 }
 
 func waitForOutput(scanner *bufio.Scanner, output *strings.Builder) {
@@ -56,8 +55,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--single-data-file",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
-			outScanner, output := CreateOutput(cmd)
-
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 			go func() {
 				waitForOutput(outScanner, &output)
 
@@ -94,7 +93,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--copy-queue-size", "4",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
-			outScanner, output := CreateOutput(cmd)
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 
 			go func() {
 				waitForOutput(outScanner, &output)
@@ -137,7 +137,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--backup-dir", backupDir,
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
-			outScanner, output := CreateOutput(cmd)
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 
 			// Wait up to 5 seconds for gpbackup to block on acquiring AccessShareLock.
 			// Once blocked, we send a SIGINT to cancel gpbackup.
@@ -194,7 +195,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--single-data-file",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
-			outScanner, output := CreateOutput(cmd)
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 
 			// Wait up to 5 seconds for gpbackup to block on acquiring AccessShareLock.
 			// Once blocked, we send a SIGINT to cancel gpbackup.
@@ -249,7 +251,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--backup-dir", backupDir,
 				"--verbose"}
 			cmd := exec.Command(gprestorePath, args...)
-			outScanner, output := CreateOutput(cmd)
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 
 			go func() {
 				waitForOutput(outScanner, &output)
@@ -289,7 +292,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--verbose",
 				"--copy-queue-size", "4"}
 			cmd := exec.Command(gprestorePath, args...)
-			outScanner, output := CreateOutput(cmd)
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 
 			go func() {
 				waitForOutput(outScanner, &output)
@@ -325,7 +329,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--single-data-file",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
-			outScanner, output := CreateOutput(cmd)
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 
 			go func() {
 				waitForOutput(outScanner, &output)
@@ -363,7 +368,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--copy-queue-size", "4",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
-			outScanner, output := CreateOutput(cmd)
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 
 			go func() {
 				waitForOutput(outScanner, &output)
@@ -406,7 +412,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--backup-dir", backupDir,
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
-			outScanner, output := CreateOutput(cmd)
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 
 			// Wait up to 5 seconds for gpbackup to block on acquiring AccessShareLock.
 			// Once blocked, we send a SIGTERM to cancel gpbackup.
@@ -463,7 +470,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--single-data-file",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
-			outScanner, output := CreateOutput(cmd)
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 
 			// Wait up to 5 seconds for gpbackup to block on acquiring AccessShareLock.
 			// Once blocked, we send a SIGTERM to cancel gpbackup.
@@ -517,7 +525,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--backup-dir", backupDir,
 				"--verbose"}
 			cmd := exec.Command(gprestorePath, args...)
-			outScanner, output := CreateOutput(cmd)
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 
 			go func() {
 				waitForOutput(outScanner, &output)
@@ -557,7 +566,8 @@ var _ = Describe("Signal handler tests", func() {
 				"--verbose",
 				"--copy-queue-size", "4"}
 			cmd := exec.Command(gprestorePath, args...)
-			outScanner, output := CreateOutput(cmd)
+			outScanner := CreateCombinedOutput(cmd)
+			var output strings.Builder
 
 			go func() {
 				waitForOutput(outScanner, &output)
