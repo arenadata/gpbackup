@@ -26,7 +26,7 @@ func waitOutputLine(scanner *bufio.Scanner, output *strings.Builder) {
 	if !scanner.Scan() || scanner.Err() != nil {
 		Fail("no output from process")
 	}
-	output.WriteString(output.String())
+	output.WriteString(scanner.Text())
 	output.WriteByte('\n')
 }
 
