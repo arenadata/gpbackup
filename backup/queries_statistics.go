@@ -62,6 +62,10 @@ func (as AttributeStatistic) FQType() string {
 }
 
 func GetAttributeStatistics(connectionPool *dbconn.DBConn, tables []Table, processRow func(attStat *AttributeStatistic)) {
+	if len(tables) == 0 {
+		return
+	}
+
 	inheritClause := ""
 	statSlotClause := ""
 	if connectionPool.Version.AtLeast("6") {
@@ -148,6 +152,10 @@ type TupleStatistic struct {
 }
 
 func GetTupleStatistics(connectionPool *dbconn.DBConn, tables []Table, processRow func(tupleStat *TupleStatistic)) {
+	if len(tables) == 0 {
+		return
+	}
+
 	tablenames := make([]string, 0)
 	for _, table := range tables {
 		tablenames = append(tablenames, table.FQN())
