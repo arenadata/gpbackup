@@ -215,7 +215,7 @@ type IHelper interface {
 
 type Helper struct{}
 
-func (h Helper) createPipe(pipe string) error {
+func (Helper) createPipe(pipe string) error {
 	return createPipe(pipe)
 }
 

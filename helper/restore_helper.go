@@ -62,7 +62,7 @@ type RestoreReader struct {
 	fileHandle *os.File
 	bufReader  *bufio.Reader
 	seekReader io.ReadSeeker
-	pluginCmd  PluginCmd
+	pluginCmd  IPluginCmd
 	readerType ReaderType
 }
 
@@ -172,8 +172,7 @@ func (RestoreHelper) checkForSkipFile(pipeFile string, tableOid int) bool {
 }
 
 func doRestoreAgent() error {
-	helper := new(Helper)
-	return doRestoreAgentInternal(helper, Restorer)
+	return doRestoreAgentInternal(new(Helper), Restorer)
 }
 
 func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
@@ -493,7 +492,7 @@ func replaceContentInFilename(filename string, content int) string {
 	return contentRE.ReplaceAllString(filename, fmt.Sprintf("gpbackup_%d_", content))
 }
 
-func (h RestoreHelper) getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
+func (RestoreHelper) getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
 	oidStr, err := operating.System.ReadFile(oidFileName)
 	if err != nil {
 		logError(fmt.Sprintf("Error encountered reading oid batch list from file: %v", err))
@@ -516,7 +515,7 @@ func (RestoreHelper) getRestoreDataReader(fileToRead string, objToc *toc.Segment
 	var seekHandle io.ReadSeeker
 	var isSubset bool
 	var err error = nil
-	var pluginCmd PluginCmd
+	var pluginCmd IPluginCmd
 	restoreReader := new(RestoreReader)
 
 	if *pluginConfigFile != "" {
@@ -612,27 +611,27 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 
 // pluginCmd is needed to keep track of readable stderr and whether the command
 // has already been ended.
-type PluginCmd interface {
+type IPluginCmd interface {
 	hasProcess() bool
 	Pid() int
 	Wait() error
 	errLog()
 }
 
-type PluginCmdImpl struct {
+type PluginCmd struct {
 	*exec.Cmd
 	errBuf bytes.Buffer
 }
 
-func (p PluginCmdImpl) hasProcess() bool {
+func (p PluginCmd) hasProcess() bool {
 	return p.Process != nil
 }
 
-func (p PluginCmdImpl) Pid() int {
+func (p PluginCmd) Pid() int {
 	return p.Process.Pid
 }
 
-func (p PluginCmdImpl) errLog() {
+func (p PluginCmd) errLog() {
 	errLog := strings.Trim(p.errBuf.String(), "\x00")
 	if len(errLog) != 0 {
 		logWarn(fmt.Sprintf("Plugin log: %s", errLog))
@@ -641,7 +640,7 @@ func (p PluginCmdImpl) errLog() {
 	}
 }
 
-func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (PluginCmd, io.Reader, bool, error) {
+func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IPluginCmd, io.Reader, bool, error) {
 	isSubset := false
 	pluginConfig, err := utils.ReadPluginConfig(*pluginConfigFile)
 	if err != nil {
@@ -668,7 +667,7 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 	}
 	logVerbose(cmdStr)
 
-	pluginCmd := &PluginCmdImpl{}
+	pluginCmd := &PluginCmd{}
 	pluginCmd.Cmd = exec.Command("bash", "-c", cmdStr)
 	pluginCmd.Stderr = &pluginCmd.errBuf
 
