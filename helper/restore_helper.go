@@ -35,8 +35,6 @@ const (
 )
 
 var (
-	Restorer IRestoreHelper = new(RestoreHelper)
-
 	writeHandle *os.File
 	writer      *bufio.Writer
 	contentRE   *regexp.Regexp
@@ -172,7 +170,7 @@ func (RestoreHelper) checkForSkipFile(pipeFile string, tableOid int) bool {
 }
 
 func doRestoreAgent() error {
-	return doRestoreAgentInternal(new(Helper), Restorer)
+	return doRestoreAgentInternal(new(Helper), new(RestoreHelper))
 }
 
 func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
@@ -450,7 +448,11 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 	return lastError
 }
 
-func (rh *RestoreHelper) flushAndCloseRestoreWriter(pipeName string, oid int) error {
+func (RestoreHelper) flushAndCloseRestoreWriter(pipeName string, oid int) error {
+	return FlushAndCloseRestoreWriter(pipeName, oid)
+}
+
+func FlushAndCloseRestoreWriter(pipeName string, oid int) error {
 	if writer != nil {
 		writer.Write([]byte{}) // simulate writer connected in case of error
 		err := writer.Flush()

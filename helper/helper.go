@@ -257,7 +257,7 @@ func DoCleanup() {
 			logVerbose("Encountered error closing error file: %v", err)
 		}
 	}
-	err := Restorer.flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
+	err := FlushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
 	if err != nil {
 		logVerbose("Encountered error during cleanup: %v", err)
 	}
