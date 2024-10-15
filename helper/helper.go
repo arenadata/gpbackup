@@ -1,7 +1,6 @@
 package helper
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -26,8 +25,6 @@ var (
 	CleanupGroup  *sync.WaitGroup
 	version       string
 	wasTerminated bool
-	writeHandle   *os.File
-	writer        *bufio.Writer
 	pipesMap      map[string]bool
 )
 
@@ -212,22 +209,14 @@ func preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCo
 	}
 }
 
-func getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
-	oidStr, err := operating.System.ReadFile(oidFileName)
-	if err != nil {
-		logError(fmt.Sprintf("Error encountered reading oid batch list from file: %v", err))
-		return nil, err
-	}
-	oidStrList := strings.Split(strings.TrimSpace(fmt.Sprintf("%s", oidStr)), "\n")
-	oidList := make([]oidWithBatch, len(oidStrList))
-	for i, entry := range oidStrList {
-		oidWithBatchEntry := strings.Split(entry, ",")
-		oidNum, _ := strconv.Atoi(oidWithBatchEntry[0])
-		batchNum, _ := strconv.Atoi(oidWithBatchEntry[1])
+type IHelper interface {
+	createPipe(pipe string) error
+}
 
-		oidList[i] = oidWithBatch{oid: oidNum, batch: batchNum}
-	}
-	return oidList, nil
+type Helper struct{}
+
+func (Helper) createPipe(pipe string) error {
+	return createPipe(pipe)
 }
 
 func getOidListFromFile(oidFileName string) ([]int, error) {
@@ -243,29 +232,6 @@ func getOidListFromFile(oidFileName string) ([]int, error) {
 		oidList[i] = num
 	}
 	return oidList, nil
-}
-
-func flushAndCloseRestoreWriter(pipeName string, oid int) error {
-	if writer != nil {
-		writer.Write([]byte{}) // simulate writer connected in case of error
-		err := writer.Flush()
-		if err != nil {
-			logError("Oid %d: Failed to flush pipe %s", oid, pipeName)
-			return err
-		}
-		writer = nil
-		logVerbose("Oid %d: Successfully flushed pipe %s", oid, pipeName)
-	}
-	if writeHandle != nil {
-		err := writeHandle.Close()
-		if err != nil {
-			logError("Oid %d: Failed to close pipe handle", oid)
-			return err
-		}
-		writeHandle = nil
-		logVerbose("Oid %d: Successfully closed pipe handle", oid)
-	}
-	return nil
 }
 
 /*
@@ -291,7 +257,7 @@ func DoCleanup() {
 			logVerbose("Encountered error closing error file: %v", err)
 		}
 	}
-	err := flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
+	err := FlushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
 	if err != nil {
 		logVerbose("Encountered error during cleanup: %v", err)
 	}
