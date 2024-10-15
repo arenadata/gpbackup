@@ -49,39 +49,52 @@ func (r *restoreReaderTestImpl) getReaderType() ReaderType {
 }
 
 type helperTestStep struct {
-	getRestorePipeWriterArgExpect string
-	getRestorePipeWriterResult    bool
-	checkSkipFileArgTableOid      int
-	checkSkipFileResult           bool
+	restorePipeWriterArgExpect string
+	restorePipeWriterResult    bool
+	skipFileArgTableOid        int
+	skipFileResult             bool
 }
 
 type restoreMockHelperImpl struct {
-	stepNo           int
+	currentStep      int
+	started          bool
 	expectedOidBatch []oidWithBatch
 	expectedSteps    []helperTestStep
 
-	openedPipesMap map[string]string // Ginkgo matcher works over map value, will diplicate key here
-	restoreData    *restoreReaderTestImpl
+	pipesMap    map[string]string // Ginkgo matcher works over map value, will diplicate key here
+	restoreData *restoreReaderTestImpl
 }
 
 func (h *restoreMockHelperImpl) openedPipes() []string {
-	if h.openedPipesMap == nil {
-		h.openedPipesMap = make(map[string]string)
+	if h.pipesMap == nil {
+		h.pipesMap = make(map[string]string)
 
 		for k := range pipesMap {
-			h.openedPipesMap[k] = k
+			h.pipesMap[k] = k
 		}
 	}
-	ret := make([]string, 0, len(h.openedPipesMap))
-	for k := range h.openedPipesMap {
+	ret := make([]string, 0, len(h.pipesMap))
+	for k := range h.pipesMap {
 		ret = append(ret, k)
 	}
 	return ret
 }
 
+func (h *restoreMockHelperImpl) makeStep() helperTestStep {
+	if !h.started {
+		h.started = true
+	} else {
+		h.currentStep++
+	}
+
+	Expect(h.currentStep).To(BeNumerically("<", len(h.expectedSteps)))
+	ret := h.expectedSteps[h.currentStep]
+	return ret
+}
+
 func (h *restoreMockHelperImpl) getCurStep() helperTestStep {
-	Expect(h.stepNo).To(BeNumerically("<", len(h.expectedSteps)))
-	return h.expectedSteps[h.stepNo]
+	Expect(h.currentStep).To(BeNumerically("<", len(h.expectedSteps)))
+	return h.expectedSteps[h.currentStep]
 }
 
 func (h *restoreMockHelperImpl) closeAndDeletePipe(tableOid int, batchNum int) {
@@ -91,7 +104,7 @@ func newHelperTest(batches []oidWithBatch, steps []helperTestStep) *restoreMockH
 	var ret = new(restoreMockHelperImpl)
 	ret.expectedOidBatch = batches
 	ret.expectedSteps = steps
-	ret.openedPipesMap = nil
+	ret.pipesMap = nil
 	ret.restoreData = &restoreReaderTestImpl{}
 
 	return ret
@@ -103,8 +116,8 @@ func (h *restoreMockHelperImpl) getOidWithBatchListFromFile(oidFileName string) 
 
 func (h *restoreMockHelperImpl) checkForSkipFile(pipeFile string, tableOid int) bool {
 	step := h.getCurStep()
-	Expect(tableOid).To(Equal(step.checkSkipFileArgTableOid))
-	ret := h.getCurStep().checkSkipFileResult
+	Expect(tableOid).To(Equal(step.skipFileArgTableOid))
+	ret := step.skipFileResult
 	return ret
 }
 
@@ -112,32 +125,30 @@ func (h *restoreMockHelperImpl) createPipe(pipe string) error {
 	// Check that pipe was not opened yet
 	Expect(h.openedPipes()).ShouldNot(ContainElement(pipe))
 
-	h.openedPipesMap[pipe] = pipe
+	h.pipesMap[pipe] = pipe
 	return nil
 }
 
 func (h *restoreMockHelperImpl) flushAndCloseRestoreWriter(pipeName string, oid int) error {
 	// Check that we are closing pipe which is opened
 	Expect(h.openedPipes()).To(ContainElement(pipeName))
-	delete(h.openedPipesMap, pipeName)
+	delete(h.pipesMap, pipeName)
 	return nil
 }
 
 func (h *restoreMockHelperImpl) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error) {
-	if h.restoreData != nil {
-		return h.restoreData, nil
-	}
-	return nil, errors.New("getRestoreDataReader Not implemented")
+	Expect(h.restoreData).ToNot(BeNil())
+	return h.restoreData, nil
 }
 
 func (h *restoreMockHelperImpl) getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
-	h.stepNo++
-	Expect(currentPipe).To(Equal(h.getCurStep().getRestorePipeWriterArgExpect))
+	step := h.makeStep()
+	Expect(currentPipe).To(Equal(step.restorePipeWriterArgExpect))
 
 	// The pipe should be created before
 	Expect(h.openedPipes()).Should(ContainElement(currentPipe))
 
-	if h.getCurStep().getRestorePipeWriterResult {
+	if step.restorePipeWriterResult {
 		var writer bufio.Writer
 		return &writer, nil, nil
 	}
@@ -283,14 +294,13 @@ var _ = Describe("helper tests", func() {
 
 			oidBatch := []oidWithBatch{{oid: 1, batch: 1}}
 			steps := []helperTestStep{
-				{},
-				{getRestorePipeWriterArgExpect: "mock_1_1", getRestorePipeWriterResult: true, checkSkipFileArgTableOid: 1, checkSkipFileResult: false},
+				{restorePipeWriterArgExpect: "mock_1_1", restorePipeWriterResult: true, skipFileArgTableOid: 1, skipFileResult: false},
 			}
 
 			mockHelper := newHelperTest(oidBatch, steps)
 
 			// Prepare and write the toc file
-			testDir := "" //"/tmp/helper_test/20180101/20180101010101/"
+			testDir := "" // Use local directory for the TOC file instead of default onr
 			*tocFile = fmt.Sprintf("%stest_toc.yaml", testDir)
 			writeTestTOC(*tocFile)
 			defer func() {
@@ -307,8 +317,12 @@ var _ = Describe("helper tests", func() {
 			// Call the function under test
 			oidBatch := []oidWithBatch{{oid: 1, batch: 1}}
 			steps := []helperTestStep{
-				{},
-				{getRestorePipeWriterArgExpect: "mock_1_1", getRestorePipeWriterResult: true, checkSkipFileArgTableOid: 1, checkSkipFileResult: false},
+				{
+					restorePipeWriterArgExpect: "mock_1_1",
+					restorePipeWriterResult:    true,
+					skipFileArgTableOid:        1,
+					skipFileResult:             false,
+				},
 			}
 
 			mockHelper := newHelperTest(oidBatch, steps)
@@ -327,7 +341,6 @@ var _ = Describe("helper tests", func() {
 			}
 
 			expectedScenario := []helperTestStep{
-				{},                               // placeholder as steps start from 1
 				{"mock_100_0", true, -1, false},  // Can open pipe for table 100, check_skip_file shall not be called
 				{"mock_200_0", true, -1, false},  // Can open pipe for table 200, check_skip_file shall not be called
 				{"mock_200_1", false, 200, true}, // Can not open pipe for table 200, check_skip_file shall called, skip file exists
@@ -352,7 +365,6 @@ var _ = Describe("helper tests", func() {
 			}
 
 			expectedScenario := []helperTestStep{
-				{},                               // placeholder as steps start from 1
 				{"mock_100_0", true, -1, false},  // Can open pipe for table 100, check_skip_file shall not be called
 				{"mock_200_0", true, -1, false},  // Can open pipe for table 200, check_skip_file shall not be called
 				{"mock_200_1", false, 200, true}, // Can not open pipe for table 200, check_skip_file shall called, skip file exists
@@ -384,7 +396,6 @@ var _ = Describe("helper tests", func() {
 			}
 
 			expectedScenario := []helperTestStep{
-				{},                               // placeholder as steps start from 1
 				{"mock_100_0", true, -1, false},  // Can open pipe for table 100, check_skip_file shall not be called
 				{"mock_200_0", true, -1, false},  // Can open pipe for table 200, check_skip_file shall not be called
 				{"mock_200_1", false, 200, true}, // Can not open pipe for table 200, check_skip_file shall called, skip file exists
@@ -408,7 +419,7 @@ var _ = Describe("helper tests", func() {
 			}()
 
 			oidBatch := []oidWithBatch{{100, 0}}
-			expectedScenario := []helperTestStep{{}, {"mock_100_0", true, -1, false}} // Some pipe shall be created, out of interest for this test although
+			expectedScenario := []helperTestStep{{"mock_100_0", true, -1, false}} // Some pipe shall be created, out of interest for this test although
 			helper := newHelperTest(oidBatch, expectedScenario)
 
 			err := doRestoreAgentInternal(helper, helper)
@@ -421,7 +432,7 @@ var _ = Describe("helper tests", func() {
 			*singleDataFile = false
 
 			oidBatch := []oidWithBatch{{100, 0}}
-			expectedScenario := []helperTestStep{{}, {"mock_100_0", true, -1, false}} // Some pipe shall be created, out of interest for this test although
+			expectedScenario := []helperTestStep{{"mock_100_0", true, -1, false}} // Some pipe shall be created, out of interest for this test although
 
 			helper := newHelperTest(oidBatch, expectedScenario)
 
@@ -436,7 +447,7 @@ var _ = Describe("helper tests", func() {
 			*destSize, *origSize = *origSize, *destSize
 
 			oidBatch := []oidWithBatch{{100, 0}}
-			expectedScenario := []helperTestStep{{}, {"mock_100_0", true, -1, false}} // Some pipe shall be created, out of interest for this test although
+			expectedScenario := []helperTestStep{{"mock_100_0", true, -1, false}} // Some pipe shall be created, out of interest for this test although
 
 			helper := newHelperTest(oidBatch, expectedScenario)
 
