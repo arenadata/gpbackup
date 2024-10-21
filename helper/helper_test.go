@@ -429,7 +429,7 @@ var _ = Describe("helper tests", func() {
 			Expect(helper.restoreData.waitCount).To(Equal(1))
 		})
 		It("calls waitForPlugin doRestoreAgent for resize and no single data file ", func() {
-			*singleDataFile = false
+			Expect(*singleDataFile).To(Equal(false))
 
 			oidBatch := []oidWithBatch{{100, 0}}
 			expectedScenario := []helperTestStep{{"mock_100_0", true, -1, false}} // Some pipe shall be created, out of interest for this test although
@@ -443,7 +443,7 @@ var _ = Describe("helper tests", func() {
 			Expect(helper.restoreData.waitCount).To(Equal(1))
 		})
 		It("calls waitForPlugin doRestoreAgent for reduce cluster and no single data file ", func() {
-			*singleDataFile = false
+			Expect(*singleDataFile).To(Equal(false))
 			*destSize, *origSize = *origSize, *destSize
 
 			oidBatch := []oidWithBatch{{100, 0}}
