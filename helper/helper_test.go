@@ -53,6 +53,7 @@ type helperTestStep struct {
 	restorePipeWriterResult    bool
 	skipFileArgTableOid        int
 	skipFileResult             bool
+	comment                    string
 }
 
 type restoreMockHelperImpl struct {
@@ -61,16 +62,16 @@ type restoreMockHelperImpl struct {
 	expectedOidBatch []oidWithBatch
 	expectedSteps    []helperTestStep
 
-	pipesMap    map[string]string // Ginkgo matcher works over map value, will diplicate key here
+	pipesMap    map[string]bool
 	restoreData *restoreReaderTestImpl
 }
 
 func (h *restoreMockHelperImpl) openedPipes() []string {
 	if h.pipesMap == nil {
-		h.pipesMap = make(map[string]string)
+		h.pipesMap = make(map[string]bool)
 
 		for k := range pipesMap {
-			h.pipesMap[k] = k
+			h.pipesMap[k] = true
 		}
 	}
 	ret := make([]string, 0, len(h.pipesMap))
@@ -89,6 +90,7 @@ func (h *restoreMockHelperImpl) makeStep() helperTestStep {
 
 	Expect(h.currentStep).To(BeNumerically("<", len(h.expectedSteps)))
 	ret := h.expectedSteps[h.currentStep]
+	fmt.Printf("Step: %s", ret.comment)
 	return ret
 }
 
@@ -125,7 +127,7 @@ func (h *restoreMockHelperImpl) createPipe(pipe string) error {
 	// Check that pipe was not opened yet
 	Expect(h.openedPipes()).ShouldNot(ContainElement(pipe))
 
-	h.pipesMap[pipe] = pipe
+	h.pipesMap[pipe] = true
 	return nil
 }
 
@@ -341,10 +343,10 @@ var _ = Describe("helper tests", func() {
 			}
 
 			expectedScenario := []helperTestStep{
-				{"mock_100_0", true, -1, false},  // Can open pipe for table 100, check_skip_file shall not be called
-				{"mock_200_0", true, -1, false},  // Can open pipe for table 200, check_skip_file shall not be called
-				{"mock_200_1", false, 200, true}, // Can not open pipe for table 200, check_skip_file shall called, skip file exists
-				{"mock_200_2", true, -1, false},  // Went to the next batch, Can open pipe for table 200, check_skip_file shall not be called
+				{"mock_100_0", true, -1, false, "Can open pipe for table 100, check_skip_file shall not be called"},
+				{"mock_200_0", true, -1, false, "Can open pipe for table 200, check_skip_file shall not be called"},
+				{"mock_200_1", false, 200, true, "Can not open pipe for table 200, check_skip_file shall called, skip file exists"},
+				{"mock_200_2", true, -1, false, "Went to the next batch, Can open pipe for table 200, check_skip_file shall not be called"},
 			}
 
 			helper := newHelperTest(oidBatch, expectedScenario)
@@ -365,10 +367,10 @@ var _ = Describe("helper tests", func() {
 			}
 
 			expectedScenario := []helperTestStep{
-				{"mock_100_0", true, -1, false},  // Can open pipe for table 100, check_skip_file shall not be called
-				{"mock_200_0", true, -1, false},  // Can open pipe for table 200, check_skip_file shall not be called
-				{"mock_200_1", false, 200, true}, // Can not open pipe for table 200, check_skip_file shall called, skip file exists
-				{"mock_200_2", true, -1, false},  // Went to the next batch, Can open pipe for table 200, check_skip_file shall not be called
+				{"mock_100_0", true, -1, false, "Can open pipe for table 100, check_skip_file shall not be called"},
+				{"mock_200_0", true, -1, false, "Can open pipe for table 200, check_skip_file shall not be called"},
+				{"mock_200_1", false, 200, true, "Can not open pipe for table 200, check_skip_file shall called, skip file exists"},
+				{"mock_200_2", true, -1, false, "Went to the next batch, Can open pipe for table 200, check_skip_file shall not be called"},
 			}
 
 			helper := newHelperTest(oidBatch, expectedScenario)
@@ -396,10 +398,10 @@ var _ = Describe("helper tests", func() {
 			}
 
 			expectedScenario := []helperTestStep{
-				{"mock_100_0", true, -1, false},  // Can open pipe for table 100, check_skip_file shall not be called
-				{"mock_200_0", true, -1, false},  // Can open pipe for table 200, check_skip_file shall not be called
-				{"mock_200_1", false, 200, true}, // Can not open pipe for table 200, check_skip_file shall called, skip file exists
-				{"mock_200_2", true, -1, false},  // Went to the next batch, Can open pipe for table 200, check_skip_file shall not be called
+				{"mock_100_0", true, -1, false, "Can open pipe for table 100, check_skip_file shall not be called"},
+				{"mock_200_0", true, -1, false, "Can open pipe for table 200, check_skip_file shall not be called"},
+				{"mock_200_1", false, 200, true, "Can not open pipe for table 200, check_skip_file shall called, skip file exists"},
+				{"mock_200_2", true, -1, false, "Went to the next batch, Can open pipe for table 200, check_skip_file shall not be called"},
 			}
 
 			helper := newHelperTest(oidBatch, expectedScenario)
@@ -419,7 +421,9 @@ var _ = Describe("helper tests", func() {
 			}()
 
 			oidBatch := []oidWithBatch{{100, 0}}
-			expectedScenario := []helperTestStep{{"mock_100_0", true, -1, false}} // Some pipe shall be created, out of interest for this test although
+			expectedScenario := []helperTestStep{
+				{"mock_100_0", true, -1, false, "Some pipe shall be created, out of interest for this test although"},
+			}
 			helper := newHelperTest(oidBatch, expectedScenario)
 
 			err := doRestoreAgentInternal(helper, helper)
@@ -432,7 +436,9 @@ var _ = Describe("helper tests", func() {
 			Expect(*singleDataFile).To(Equal(false))
 
 			oidBatch := []oidWithBatch{{100, 0}}
-			expectedScenario := []helperTestStep{{"mock_100_0", true, -1, false}} // Some pipe shall be created, out of interest for this test although
+			expectedScenario := []helperTestStep{
+				{"mock_100_0", true, -1, false, "Some pipe shall be created, out of interest for this test although"},
+			}
 
 			helper := newHelperTest(oidBatch, expectedScenario)
 
@@ -447,7 +453,9 @@ var _ = Describe("helper tests", func() {
 			*destSize, *origSize = *origSize, *destSize
 
 			oidBatch := []oidWithBatch{{100, 0}}
-			expectedScenario := []helperTestStep{{"mock_100_0", true, -1, false}} // Some pipe shall be created, out of interest for this test although
+			expectedScenario := []helperTestStep{
+				{"mock_100_0", true, -1, false, "Some pipe shall be created, out of interest for this test although"},
+			}
 
 			helper := newHelperTest(oidBatch, expectedScenario)
 
