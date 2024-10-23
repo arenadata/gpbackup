@@ -66,17 +66,13 @@ type restoreMockHelperImpl struct {
 	restoreData *restoreReaderTestImpl
 }
 
-func (h *restoreMockHelperImpl) openedPipes() []string {
-	if h.pipesMap == nil {
-		h.pipesMap = make(map[string]bool)
+func (h *restoreMockHelperImpl) isPipeOpened(pipe string) bool {
+	Expect(h.pipesMap).ToNot(BeNil())
 
-		for k := range pipesMap {
-			h.pipesMap[k] = true
-		}
-	}
-	ret := make([]string, 0, len(h.pipesMap))
-	for k := range h.pipesMap {
-		ret = append(ret, k)
+	ret, ok := h.pipesMap[pipe]
+
+	if !ok {
+		return false
 	}
 	return ret
 }
@@ -125,15 +121,27 @@ func (h *restoreMockHelperImpl) checkForSkipFile(pipeFile string, tableOid int) 
 
 func (h *restoreMockHelperImpl) createPipe(pipe string) error {
 	// Check that pipe was not opened yet
-	Expect(h.openedPipes()).ShouldNot(ContainElement(pipe))
+	Expect(h.isPipeOpened(pipe)).To(Equal(false))
 
 	h.pipesMap[pipe] = true
 	return nil
 }
 
+func (h *restoreMockHelperImpl) preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int) {
+
+	Expect(h.pipesMap).To(BeNil())
+
+	h.pipesMap = make(map[string]bool)
+
+	for i := 0; i < queuedPipeCount; i++ {
+		pipeName := fmt.Sprintf("%s_%d_%d", *pipeFile, oidWithBatchList[i].oid, oidWithBatchList[i].batch)
+		h.pipesMap[pipeName] = true
+	}
+}
+
 func (h *restoreMockHelperImpl) flushAndCloseRestoreWriter(pipeName string, oid int) error {
 	// Check that we are closing pipe which is opened
-	Expect(h.openedPipes()).To(ContainElement(pipeName))
+	Expect(h.isPipeOpened(pipeName)).To(Equal(true))
 	delete(h.pipesMap, pipeName)
 	return nil
 }
@@ -148,7 +156,7 @@ func (h *restoreMockHelperImpl) getRestorePipeWriter(currentPipe string) (*bufio
 	Expect(currentPipe).To(Equal(step.restorePipeWriterArgExpect))
 
 	// The pipe should be created before
-	Expect(h.openedPipes()).Should(ContainElement(currentPipe))
+	Expect(h.isPipeOpened(currentPipe)).To(Equal(true))
 
 	if step.restorePipeWriterResult {
 		var writer bufio.Writer

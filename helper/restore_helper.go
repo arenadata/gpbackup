@@ -259,7 +259,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 		}
 	}
 
-	preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
+	h.preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
 
 	var currentPipe string
 
