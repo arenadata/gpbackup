@@ -173,7 +173,7 @@ func doRestoreAgent() error {
 	return doRestoreAgentInternal(new(Helper), new(RestoreHelper))
 }
 
-func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
+func doRestoreAgentInternal(helper IHelper, restoreHelper IRestoreHelper) error {
 	// We need to track various values separately per content for resize restore
 	var segmentTOC map[int]*toc.SegmentTOC
 	var tocEntries map[int]map[uint]toc.SegmentDataEntry
@@ -186,7 +186,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 
 	readers := make(map[int]IRestoreReader)
 
-	oidWithBatchList, err := rh.getOidWithBatchListFromFile(*oidFile)
+	oidWithBatchList, err := restoreHelper.getOidWithBatchListFromFile(*oidFile)
 	if err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 			tocEntries[contentToRestore] = segmentTOC[contentToRestore].DataEntries
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
-			readers[contentToRestore], err = rh.getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
+			readers[contentToRestore], err = restoreHelper.getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
 			if readers[contentToRestore] != nil {
 				// NOTE: If we reach here with batches > 1, there will be
 				// *origSize / *destSize (N old segments / N new segments)
@@ -259,7 +259,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 		}
 	}
 
-	h.preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
+	helper.preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
 
 	var currentPipe string
 
@@ -285,7 +285,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 				nextBatchNum := nextOidWithBatch.batch
 				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
 				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-				err := h.createPipe(nextPipeToCreate)
+				err := helper.createPipe(nextPipeToCreate)
 				if err != nil {
 					logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 					// In the case this error is hit it means we have lost the
@@ -318,7 +318,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 				// We pre-create readers above for the sake of not re-opening SDF readers.  For MDF we can't
 				// re-use them but still having them in a map simplifies overall code flow.  We repeatedly assign
 				// to a map entry here intentionally.
-				readers[contentToRestore], err = rh.getRestoreDataReader(filename, nil, nil)
+				readers[contentToRestore], err = restoreHelper.getRestoreDataReader(filename, nil, nil)
 				if err != nil {
 					logError(fmt.Sprintf("Oid: %d, Batch %d: Error encountered getting restore data reader: %v", tableOid, batchNum, err))
 					return err
@@ -328,7 +328,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Opening pipe %s", tableOid, batchNum, currentPipe))
 		for {
-			writer, writeHandle, err = rh.getRestorePipeWriter(currentPipe)
+			writer, writeHandle, err = restoreHelper.getRestorePipeWriter(currentPipe)
 			if err != nil {
 				if errors.Is(err, unix.ENXIO) {
 					// COPY (the pipe reader) has not tried to access the pipe yet so our restore_helper
@@ -339,7 +339,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 					// might be good to have a GPDB version check here. However, the restore helper should
 					// not contain a database connection so the version should be passed through the helper
 					// invocation from gprestore (e.g. create a --db-version flag option).
-					if *onErrorContinue && rh.checkForSkipFile(*pipeFile, tableOid) {
+					if *onErrorContinue && restoreHelper.checkForSkipFile(*pipeFile, tableOid) {
 						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 						err = nil
 						skipOid = tableOid
@@ -347,7 +347,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 						for idx := 0; idx < *copyQueue; idx++ {
 							batchToDelete := batchNum + idx
 							if batchToDelete < batches {
-								rh.closeAndDeletePipe(tableOid, batchToDelete)
+								restoreHelper.closeAndDeletePipe(tableOid, batchToDelete)
 							}
 						}
 						goto LoopEnd
@@ -417,7 +417,7 @@ func doRestoreAgentInternal(h IHelper, rh IRestoreHelper) error {
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Copied %d bytes into the pipe", tableOid, batchNum, bytesRead))
 	LoopEnd:
 		if tableOid != skipOid {
-			rh.closeAndDeletePipe(tableOid, batchNum)
+			restoreHelper.closeAndDeletePipe(tableOid, batchNum)
 		}
 
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))

@@ -123,7 +123,6 @@ func (h *restoreMockHelperImpl) createPipe(pipe string) error {
 }
 
 func (h *restoreMockHelperImpl) preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int) {
-
 	Expect(h.pipesMap).To(BeNil())
 
 	h.pipesMap = make(map[string]bool)
@@ -379,7 +378,6 @@ var _ = Describe("helper tests", func() {
 			helper := newHelperTest(oidBatch, expectedScenario)
 			err := doRestoreAgentInternal(helper, helper)
 			Expect(err).To(BeNil())
-
 		})
 		It("skips batches if skip file is discovered with single datafile", func() {
 			*singleDataFile = true
@@ -485,7 +483,6 @@ var _ = Describe("helper tests", func() {
 			err = test_reader.waitForPlugin()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(test_cmd2.waitCount).To(Equal(0))
-
 		})
 		It("waitForPlugin error in Wait happened", func() {
 			msg := "Expected test error"
