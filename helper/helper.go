@@ -202,24 +202,6 @@ func preloadCreatedPipesForBackup(oidList []int, queuedPipeCount int) {
 	}
 }
 
-func (h *Helper) preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int) {
-	for i := 0; i < queuedPipeCount; i++ {
-		pipeName := fmt.Sprintf("%s_%d_%d", *pipeFile, oidWithBatchList[i].oid, oidWithBatchList[i].batch)
-		pipesMap[pipeName] = true
-	}
-}
-
-type IHelper interface {
-	createPipe(pipe string) error
-	preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int)
-}
-
-type Helper struct{}
-
-func (Helper) createPipe(pipe string) error {
-	return createPipe(pipe)
-}
-
 func getOidListFromFile(oidFileName string) ([]int, error) {
 	oidStr, err := operating.System.ReadFile(oidFileName)
 	if err != nil {

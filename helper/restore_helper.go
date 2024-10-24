@@ -134,6 +134,10 @@ func (r *RestoreReader) closeFileHandle() {
 	r.fileHandle.Close()
 }
 
+func (RestoreHelper) createPipe(pipe string) error {
+	return createPipe(pipe)
+}
+
 func (rh RestoreHelper) closeAndDeletePipe(tableOid int, batchNum int) {
 	pipe := fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
 	logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, pipe))
@@ -157,10 +161,14 @@ type oidWithBatch struct {
 type IRestoreHelper interface {
 	getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error)
 	flushAndCloseRestoreWriter(pipeName string, oid int) error
+
+	createPipe(pipe string) error
 	closeAndDeletePipe(tableOid int, batchNum int)
+
 	getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error)
 	getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error)
 	checkForSkipFile(pipeFile string, tableOid int) bool
+	preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int)
 }
 
 type RestoreHelper struct{}
@@ -169,11 +177,18 @@ func (RestoreHelper) checkForSkipFile(pipeFile string, tableOid int) bool {
 	return utils.FileExists(fmt.Sprintf("%s_skip_%d", pipeFile, tableOid))
 }
 
-func doRestoreAgent() error {
-	return doRestoreAgentInternal(new(Helper), new(RestoreHelper))
+func (h *RestoreHelper) preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int) {
+	for i := 0; i < queuedPipeCount; i++ {
+		pipeName := fmt.Sprintf("%s_%d_%d", *pipeFile, oidWithBatchList[i].oid, oidWithBatchList[i].batch)
+		pipesMap[pipeName] = true
+	}
 }
 
-func doRestoreAgentInternal(helper IHelper, restoreHelper IRestoreHelper) error {
+func doRestoreAgent() error {
+	return doRestoreAgentInternal(new(RestoreHelper))
+}
+
+func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 	// We need to track various values separately per content for resize restore
 	var segmentTOC map[int]*toc.SegmentTOC
 	var tocEntries map[int]map[uint]toc.SegmentDataEntry
@@ -259,7 +274,7 @@ func doRestoreAgentInternal(helper IHelper, restoreHelper IRestoreHelper) error 
 		}
 	}
 
-	helper.preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
+	restoreHelper.preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
 
 	var currentPipe string
 
@@ -285,7 +300,7 @@ func doRestoreAgentInternal(helper IHelper, restoreHelper IRestoreHelper) error 
 				nextBatchNum := nextOidWithBatch.batch
 				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
 				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-				err := helper.createPipe(nextPipeToCreate)
+				err := restoreHelper.createPipe(nextPipeToCreate)
 				if err != nil {
 					logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 					// In the case this error is hit it means we have lost the

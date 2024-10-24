@@ -313,7 +313,7 @@ var _ = Describe("helper tests", func() {
 
 			*dataFile = "test_data.dat"
 			// Call the function under test
-			err := doRestoreAgentInternal(mockHelper, mockHelper)
+			err := doRestoreAgentInternal(mockHelper)
 
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -331,7 +331,7 @@ var _ = Describe("helper tests", func() {
 
 			mockHelper := newHelperTest(oidBatch, steps)
 
-			err := doRestoreAgentInternal(mockHelper, mockHelper)
+			err := doRestoreAgentInternal(mockHelper)
 
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -353,7 +353,7 @@ var _ = Describe("helper tests", func() {
 
 			helper := newHelperTest(oidBatch, expectedScenario)
 
-			err := doRestoreAgentInternal(helper, helper)
+			err := doRestoreAgentInternal(helper)
 			Expect(err).To(BeNil())
 		})
 		It("skips batches if skip file is discovered with resize restore", func() {
@@ -376,7 +376,7 @@ var _ = Describe("helper tests", func() {
 			}
 
 			helper := newHelperTest(oidBatch, expectedScenario)
-			err := doRestoreAgentInternal(helper, helper)
+			err := doRestoreAgentInternal(helper)
 			Expect(err).To(BeNil())
 		})
 		It("skips batches if skip file is discovered with single datafile", func() {
@@ -406,7 +406,7 @@ var _ = Describe("helper tests", func() {
 			}
 
 			helper := newHelperTest(oidBatch, expectedScenario)
-			err := doRestoreAgentInternal(helper, helper)
+			err := doRestoreAgentInternal(helper)
 			Expect(err).To(BeNil())
 		})
 		It("calls Wait in waitForPlugin doRestoreAgent for single data file", func() {
@@ -427,7 +427,7 @@ var _ = Describe("helper tests", func() {
 			}
 			helper := newHelperTest(oidBatch, expectedScenario)
 
-			err := doRestoreAgentInternal(helper, helper)
+			err := doRestoreAgentInternal(helper)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Check that plugin command's Wait was acually called and only once
@@ -443,7 +443,7 @@ var _ = Describe("helper tests", func() {
 
 			helper := newHelperTest(oidBatch, expectedScenario)
 
-			err := doRestoreAgentInternal(helper, helper)
+			err := doRestoreAgentInternal(helper)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Check that plugin command's Wait was acually called and only once
@@ -460,7 +460,7 @@ var _ = Describe("helper tests", func() {
 
 			helper := newHelperTest(oidBatch, expectedScenario)
 
-			err := doRestoreAgentInternal(helper, helper)
+			err := doRestoreAgentInternal(helper)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Check that plugin command's Wait was acually called and only once
