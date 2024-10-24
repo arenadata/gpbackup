@@ -69,12 +69,7 @@ type restoreMockHelperImpl struct {
 func (h *restoreMockHelperImpl) isPipeOpened(pipe string) bool {
 	Expect(h.pipesMap).ToNot(BeNil())
 
-	ret, ok := h.pipesMap[pipe]
-
-	if !ok {
-		return false
-	}
-	return ret
+	return h.pipesMap[pipe]
 }
 
 func (h *restoreMockHelperImpl) makeStep() helperTestStep {
