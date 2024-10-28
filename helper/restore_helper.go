@@ -69,7 +69,7 @@ type RestoreReader struct {
 func (r *RestoreReader) waitForPlugin() error {
 	var err error
 	if r.pluginCmd != nil && r.pluginCmd.hasProcess() {
-		logVerbose(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.Pid()))
+		logVerbose(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.pid()))
 		err = r.pluginCmd.Wait()
 		if err != nil {
 			logError(fmt.Sprintf("Plugin process exited with an error: %s", err))
