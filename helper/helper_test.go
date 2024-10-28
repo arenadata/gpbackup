@@ -169,7 +169,7 @@ func (tp *testPluginCmd) hasProcess() bool {
 	return tp.hasProcess_
 }
 
-func (pt *testPluginCmd) Pid() int {
+func (pt *testPluginCmd) pid() int {
 	return 42
 }
 
@@ -298,13 +298,13 @@ var _ = Describe("helper tests", func() {
 
 			oidBatch := []oidWithBatch{{oid: 1, batch: 1}}
 			steps := []helperTestStep{
-				{restorePipeWriterArgExpect: "mock_1_1", restorePipeWriterResult: true, skipFileArgTableOid: 1, skipFileResult: false},
+				{"mock_1_1", true, 1, false, "Can open single data file"},
 			}
 
 			mockHelper := newHelperTest(oidBatch, steps)
 
 			// Prepare and write the toc file
-			testDir := "" // Use local directory for the TOC file instead of default onr
+			testDir := "" // Use local directory for the TOC file instead of default
 			*tocFile = fmt.Sprintf("%stest_toc.yaml", testDir)
 			writeTestTOC(*tocFile)
 			defer func() {
@@ -321,12 +321,7 @@ var _ = Describe("helper tests", func() {
 			// Call the function under test
 			oidBatch := []oidWithBatch{{oid: 1, batch: 1}}
 			steps := []helperTestStep{
-				{
-					restorePipeWriterArgExpect: "mock_1_1",
-					restorePipeWriterResult:    true,
-					skipFileArgTableOid:        1,
-					skipFileResult:             false,
-				},
+				{"mock_1_1", true, 1, false, "restores using multiple data files"},
 			}
 
 			mockHelper := newHelperTest(oidBatch, steps)

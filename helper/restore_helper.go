@@ -41,7 +41,7 @@ var (
 )
 
 /* IRestoreReader interface to wrap the underlying reader.
- * readerType identifies how the reader can be used
+ * getReaderType() identifies how the reader can be used
  * SEEKABLE uses seekReader. Used when restoring from uncompressed data with filters from local filesystem
  * NONSEEKABLE and SUBSET types uses bufReader.
  * SUBSET type applies when restoring using plugin(if compatible) from uncompressed data with filters
@@ -564,7 +564,7 @@ func (RestoreHelper) getRestoreDataReader(fileToRead string, objToc *toc.Segment
 		return nil, err
 	}
 	if pluginCmd != nil {
-		logVerbose(fmt.Sprintf("Started plugin process (%d)", pluginCmd.Pid()))
+		logVerbose(fmt.Sprintf("Started plugin process (%d)", pluginCmd.pid()))
 	}
 
 	// Set the underlying stream reader in restoreReader
@@ -626,11 +626,11 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 	return true
 }
 
-// pluginCmd is needed to keep track of readable stderr and whether the command
+// IPluginCmd is needed to keep track of readable stderr and whether the command
 // has already been ended.
 type IPluginCmd interface {
 	hasProcess() bool
-	Pid() int
+	pid() int
 	Wait() error
 	errLog()
 }
@@ -644,7 +644,7 @@ func (p PluginCmd) hasProcess() bool {
 	return p.Process != nil
 }
 
-func (p PluginCmd) Pid() int {
+func (p PluginCmd) pid() int {
 	return p.Process.Pid
 }
 
