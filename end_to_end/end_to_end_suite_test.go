@@ -2617,6 +2617,21 @@ LANGUAGE plpgsql NO SQL;`)
 			assertArtifactsCleaned("20240502095933")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
 		})
+		It("Will continue after error during restore with jobs", func() {
+			command := exec.Command("tar", "-xzf", "resources/2-segment-db-error.tar.gz", "-C", backupDir)
+			mustRunCommand(command)
+			gprestoreCmd := exec.Command(gprestorePath,
+				"--timestamp", "20240502095933",
+				"--redirect-db", "restoredb",
+				"--backup-dir", path.Join(backupDir, "2-segment-db-error"),
+				"--resize-cluster", "--jobs", "3", "--on-error-continue")
+			output, err := gprestoreCmd.CombinedOutput()
+			Expect(err).To(HaveOccurred())
+			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t1`))
+			Expect(string(output)).ToNot(ContainSubstring(`Error loading data into table public.t2`))
+			assertArtifactsCleaned("20240502095933")
+			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
+		})
 		It("Will not hang after error during single data file restore", func() {
 			command := exec.Command("tar", "-xzf", "resources/3-segment-db-single-data-file.tar.gz", "-C", backupDir)
 			mustRunCommand(command)
