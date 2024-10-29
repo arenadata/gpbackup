@@ -362,7 +362,7 @@ func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionP
 	// Create min(connections, tables) segment pipes on each host
 	var maxPipes int
 	if !backupConfig.SingleDataFile {
-		maxPipes = 1
+		maxPipes = 1 // Create single initial pipe for the first oid in the restore oids list for non --single-data-file data file restore.
 	} else if connectionPool.NumConns < len(oidList) {
 		maxPipes = connectionPool.NumConns
 	} else {
