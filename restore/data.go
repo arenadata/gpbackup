@@ -107,7 +107,12 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		// was expected to set up
 		if backupConfig.SingleDataFile || resizeCluster {
 			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
-			gplog.FatalOnError(agentErr)
+			if agentErr != nil {
+				gplog.Error(agentErr.Error())
+				if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
+					return agentErr
+				}
+			}
 		}
 
 		partialRowsRestored, copyErr := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)

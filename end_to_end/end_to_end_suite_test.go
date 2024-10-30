@@ -2613,7 +2613,13 @@ LANGUAGE plpgsql NO SQL;`)
 			output, err := gprestoreCmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t1`))
-			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t2`))
+			Expect(string(output)).To(ContainSubstring(`is out of range for type smallint`))
+			assertDataRestored(restoreConn, map[string]int{
+				"public.t0": 0,
+				"public.t1": 0,
+				"public.t2": 0,
+				"public.t3": 0,
+				"public.t4": 0})
 			assertArtifactsCleaned("20240502095933")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
 		})
@@ -2628,7 +2634,14 @@ LANGUAGE plpgsql NO SQL;`)
 			output, err := gprestoreCmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t1`))
-			Expect(string(output)).ToNot(ContainSubstring(`Error loading data into table public.t2`))
+			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t3`))
+			Expect(string(output)).To(ContainSubstring(`is out of range for type smallint`))
+			assertDataRestored(restoreConn, map[string]int{
+				"public.t0": 1000000,
+				"public.t1": 0,
+				"public.t2": 1000000,
+				"public.t3": 0,
+				"public.t4": 1000000})
 			assertArtifactsCleaned("20240502095933")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
 		})
