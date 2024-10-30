@@ -108,9 +108,13 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		if backupConfig.SingleDataFile || resizeCluster {
 			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
 			if agentErr != nil {
-				gplog.Error(agentErr.Error())
-				if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
-					return agentErr
+				if connectionPool.NumConns > 1 {
+					gplog.Error(agentErr.Error())
+					if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
+						return agentErr
+					}
+				} else {
+					gplog.Fatal(agentErr, "")
 				}
 			}
 		}
