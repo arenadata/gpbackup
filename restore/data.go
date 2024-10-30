@@ -228,18 +228,14 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 			// During a larger-to-smaller restore, we need to do multiple passes of
 			// data loading so we assign the batches here.
 			oidList := make([]string, 0)
-			for entryIdx, entry := range dataEntries {
-				if (entryIdx % maxHelpers) != helperIdx {
-					continue
-				}
-
-				if entry.IsReplicated {
-					oidList = append(oidList, fmt.Sprintf("%d,0", entry.Oid))
+			for entryIdx := helperIdx; entryIdx < totalTables; entryIdx += maxHelpers {
+				if dataEntries[entryIdx].IsReplicated {
+					oidList = append(oidList, fmt.Sprintf("%d,0", dataEntries[entryIdx].Oid))
 					continue
 				}
 
 				for b := 0; b < batches; b++ {
-					oidList = append(oidList, fmt.Sprintf("%d,%d", entry.Oid, b))
+					oidList = append(oidList, fmt.Sprintf("%d,%d", dataEntries[entryIdx].Oid, b))
 				}
 			}
 
