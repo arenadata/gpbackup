@@ -2726,7 +2726,7 @@ LANGUAGE plpgsql NO SQL;`)
 				"--backup-dir", path.Join(backupDir, "4-segment-db-single-backup-dir"),
 				"--resize-cluster", "--on-error-continue")
 			output, _ := gprestoreCmd.CombinedOutput()
-			Expect(string(output)).To(ContainSubstring(`[CRITICAL]:-Encountered errors with 1 helper agent(s)`))
+			Expect(string(output)).To(ContainSubstring(`[ERROR]:-Encountered errors with 1 helper agent(s)`))
 			assertArtifactsCleaned("20240730085053")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d;")
 		})
