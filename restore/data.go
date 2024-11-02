@@ -269,6 +269,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		go func(whichConn int) {
 			defer func() {
 				if panicErr := recover(); panicErr != nil {
+					cancel()
 					panicChan <- fmt.Errorf("%v", panicErr)
 				}
 			}()

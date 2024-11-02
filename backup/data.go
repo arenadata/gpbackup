@@ -206,6 +206,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 		go func(whichConn int) {
 			defer func() {
 				if panicErr := recover(); panicErr != nil {
+					cancel()
 					panicChan <- fmt.Errorf("%v", panicErr)
 				}
 			}()
@@ -306,6 +307,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 	go func() {
 		defer func() {
 			if panicErr := recover(); panicErr != nil {
+				cancel()
 				panicChan <- fmt.Errorf("%v", panicErr)
 			}
 		}()
