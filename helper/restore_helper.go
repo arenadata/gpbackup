@@ -181,6 +181,8 @@ func doRestoreAgent() error {
 		}
 	}
 
+	preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
+
 	if *singleDataFile {
 		contentToRestore := *content
 		segmentTOC = make(map[int]*toc.SegmentTOC)
@@ -223,8 +225,6 @@ func doRestoreAgent() error {
 			contentToRestore += *destSize
 		}
 	}
-
-	preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
 
 	var currentPipe string
 
