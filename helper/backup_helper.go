@@ -123,6 +123,7 @@ func getBackupPipeReader(currentPipe string) (io.Reader, io.ReadCloser, error) {
 	// Once this bug is fixed, the call to Fd() can be removed
 	readHandle.Fd()
 	reader := bufio.NewReader(readHandle)
+	pipesMap[currentPipe] = true
 	return reader, readHandle, nil
 }
 

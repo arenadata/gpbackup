@@ -512,6 +512,8 @@ func getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
 	// scenarios with --on-error-continue.
 	pipeWriter := bufio.NewWriter(struct{ io.WriteCloser }{fileHandle})
 
+	pipesMap[currentPipe] = true
+
 	return pipeWriter, fileHandle, nil
 }
 
