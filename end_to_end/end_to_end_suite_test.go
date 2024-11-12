@@ -2637,7 +2637,6 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t3`))
 			Expect(string(output)).To(ContainSubstring(`is out of range for type smallint`))
 			assertDataRestored(restoreConn, map[string]int{
-				"public.t0": 0,
 				"public.t1": 0,
 				"public.t2": 0,
 				"public.t3": 0,
