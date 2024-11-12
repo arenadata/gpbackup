@@ -192,7 +192,7 @@ func deletePipe(pipe string) error {
 		var err error
 		var handle *os.File
 		if *backupAgent {
-			handle, err = os.OpenFile(pipe, os.O_RDONLY, os.ModeNamedPipe)
+			handle, err = os.OpenFile(pipe, os.O_RDONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
 		} else {
 			handle, err = os.OpenFile(pipe, os.O_WRONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
 		}
