@@ -296,6 +296,14 @@ func DoCleanup() {
 		logVerbose("Encountered error during cleanup: %v", err)
 	}
 
+	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
+	for _, pipe := range pipeFiles {
+		err = utils.OpenClosePipeIfExists(pipe, *backupAgent, *restoreAgent)
+		if err != nil {
+			logVerbose("Encountered error during cleanup pipe files: %v", err)
+		}
+	}
+
 	for pipeName, _ := range pipesMap {
 		logVerbose("Removing pipe %s", pipeName)
 		err = deletePipe(pipeName)
