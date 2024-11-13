@@ -503,6 +503,7 @@ func getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
 		// error logging handled by calling functions
 		return nil, nil, err
 	}
+	pipesMap[currentPipe] = true
 
 	// At the moment (Golang 1.15), the copy_file_range system call from the os.File
 	// ReadFrom method is only supported for Linux platforms. Furthermore, cross-filesystem
@@ -511,8 +512,6 @@ func getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
 	// Close() for the pipe to avoid an extra buffer read that can happen in error
 	// scenarios with --on-error-continue.
 	pipeWriter := bufio.NewWriter(struct{ io.WriteCloser }{fileHandle})
-
-	pipesMap[currentPipe] = true
 
 	return pipeWriter, fileHandle, nil
 }
