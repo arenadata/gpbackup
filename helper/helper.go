@@ -183,28 +183,11 @@ func createPipe(pipe string) error {
 		return err
 	}
 
-	pipesMap[pipe] = false
+	pipesMap[pipe] = true
 	return nil
 }
 
 func deletePipe(pipe string) error {
-	if utils.FileExists(pipe) && !pipesMap[pipe] {
-		flag := unix.O_NONBLOCK
-		if *backupAgent {
-			flag |= os.O_RDONLY
-		} else {
-			flag |= os.O_WRONLY
-		}
-		handle, err := os.OpenFile(pipe, flag, os.ModeNamedPipe)
-		if err != nil {
-			logVerbose("Encountered error opening pipe file: %v", err)
-		}
-		err = handle.Close()
-		if err != nil {
-			logVerbose("Encountered error closing pipe file: %v", err)
-		}
-	}
-
 	err := utils.RemoveFileIfExists(pipe)
 	if err != nil {
 		return err
@@ -218,14 +201,14 @@ func deletePipe(pipe string) error {
 func preloadCreatedPipesForBackup(oidList []int, queuedPipeCount int) {
 	for i := 0; i < queuedPipeCount; i++ {
 		pipeName := fmt.Sprintf("%s_%d", *pipeFile, oidList[i])
-		pipesMap[pipeName] = false
+		pipesMap[pipeName] = true
 	}
 }
 
 func preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int) {
 	for i := 0; i < queuedPipeCount; i++ {
 		pipeName := fmt.Sprintf("%s_%d_%d", *pipeFile, oidWithBatchList[i].oid, oidWithBatchList[i].batch)
-		pipesMap[pipeName] = false
+		pipesMap[pipeName] = true
 	}
 }
 

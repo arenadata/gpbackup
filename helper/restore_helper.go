@@ -181,8 +181,6 @@ func doRestoreAgent() error {
 		}
 	}
 
-	preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
-
 	if *singleDataFile {
 		contentToRestore := *content
 		segmentTOC = make(map[int]*toc.SegmentTOC)
@@ -225,6 +223,8 @@ func doRestoreAgent() error {
 			contentToRestore += *destSize
 		}
 	}
+
+	preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
 
 	var currentPipe string
 
@@ -503,7 +503,6 @@ func getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
 		// error logging handled by calling functions
 		return nil, nil, err
 	}
-	pipesMap[currentPipe] = true
 
 	// At the moment (Golang 1.15), the copy_file_range system call from the os.File
 	// ReadFrom method is only supported for Linux platforms. Furthermore, cross-filesystem

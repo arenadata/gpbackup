@@ -119,7 +119,6 @@ func getBackupPipeReader(currentPipe string) (io.Reader, io.ReadCloser, error) {
 		// error logging handled by calling functions
 		return nil, nil, err
 	}
-	pipesMap[currentPipe] = true
 	// This is a workaround for https://github.com/golang/go/issues/24164.
 	// Once this bug is fixed, the call to Fd() can be removed
 	readHandle.Fd()
