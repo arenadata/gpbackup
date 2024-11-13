@@ -189,15 +189,15 @@ func createPipe(pipe string) error {
 
 func deletePipe(pipe string) error {
 	if utils.FileExists(pipe) && !pipesMap[pipe] {
-		var err error
-		var handle *os.File
+		flag := unix.O_NONBLOCK
 		if *backupAgent {
-			handle, err = os.OpenFile(pipe, os.O_RDONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
+			flag |= os.O_RDONLY
 		} else {
-			handle, err = os.OpenFile(pipe, os.O_WRONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
+			flag |= os.O_WRONLY
 		}
+		handle, err := os.OpenFile(pipe, flag, os.ModeNamedPipe)
 		if err != nil {
-			logVerbose("Encountered error creating pipe file: %v", err)
+			logVerbose("Encountered error opening pipe file: %v", err)
 		}
 		err = handle.Close()
 		if err != nil {
