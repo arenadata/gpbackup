@@ -56,26 +56,6 @@ func RemoveFileIfExists(filename string) error {
 	return nil
 }
 
-func OpenClosePipeIfExists(filename string, backupAgent bool, restoreAgent bool) error {
-	if FileExists(filename) {
-		flag := unix.O_NONBLOCK
-		if backupAgent {
-			flag |= os.O_RDONLY
-		} else if restoreAgent {
-			flag |= os.O_WRONLY
-		}
-		handle, err := os.OpenFile(filename, flag, os.ModeNamedPipe)
-		if err != nil {
-			gplog.Debug("Encountered error opening pipe file: %v", err)
-		}
-		err = handle.Close()
-		if err != nil {
-			gplog.Debug("Encountered error closing pipe file: %v", err)
-		}
-	}
-	return nil
-}
-
 func OpenFileForWrite(filename string) (*os.File, error) {
 	baseFilename := path.Base(filename)
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)

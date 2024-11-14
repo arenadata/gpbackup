@@ -28,7 +28,6 @@ var (
 	wasTerminated bool
 	writeHandle   *os.File
 	writer        *bufio.Writer
-	pipesMap      map[string]bool
 )
 
 /*
@@ -129,8 +128,6 @@ func InitializeGlobals() {
 	}
 	operating.InitializeSystemFunctions()
 
-	pipesMap = make(map[string]bool, 0)
-
 	gplog.InitializeLogging("gpbackup_helper", "")
 	gplog.SetLogFileVerbosity(*verbosity)
 }
@@ -183,7 +180,6 @@ func createPipe(pipe string) error {
 		return err
 	}
 
-	pipesMap[pipe] = true
 	return nil
 }
 
@@ -193,23 +189,25 @@ func deletePipe(pipe string) error {
 		return err
 	}
 
-	delete(pipesMap, pipe)
 	return nil
 }
 
-// Gpbackup creates the first n pipes. Record these pipes.
-func preloadCreatedPipesForBackup(oidList []int, queuedPipeCount int) {
-	for i := 0; i < queuedPipeCount; i++ {
-		pipeName := fmt.Sprintf("%s_%d", *pipeFile, oidList[i])
-		pipesMap[pipeName] = true
+func openClosePipe(filename string) error {
+	flag := unix.O_NONBLOCK
+	if *backupAgent {
+		flag |= os.O_RDONLY
+	} else if *restoreAgent {
+		flag |= os.O_WRONLY
 	}
-}
-
-func preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int) {
-	for i := 0; i < queuedPipeCount; i++ {
-		pipeName := fmt.Sprintf("%s_%d_%d", *pipeFile, oidWithBatchList[i].oid, oidWithBatchList[i].batch)
-		pipesMap[pipeName] = true
+	handle, err := os.OpenFile(filename, flag, os.ModeNamedPipe)
+	if err != nil {
+		gplog.Debug("Encountered error opening pipe file: %v", err)
 	}
+	err = handle.Close()
+	if err != nil {
+		gplog.Debug("Encountered error closing pipe file: %v", err)
+	}
+	return nil
 }
 
 func getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
@@ -297,14 +295,12 @@ func DoCleanup() {
 	}
 
 	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
-	for _, pipe := range pipeFiles {
-		err = utils.OpenClosePipeIfExists(pipe, *backupAgent, *restoreAgent)
+	for _, pipeName := range pipeFiles {
+		logVerbose("Opening/closing pipe %s", pipeName)
+		err = openClosePipe(pipeName)
 		if err != nil {
-			logVerbose("Encountered error during cleanup pipe files: %v", err)
+			logVerbose("Encountered error opening/closing pipe %s: %v", pipeName, err)
 		}
-	}
-
-	for pipeName, _ := range pipesMap {
 		logVerbose("Removing pipe %s", pipeName)
 		err = deletePipe(pipeName)
 		if err != nil {
