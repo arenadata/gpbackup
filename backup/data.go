@@ -172,7 +172,6 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 	 */
 	tasks := make(chan Table, len(tables))
 	var oidMap sync.Map
-	var isErroredBackup atomic.Bool
 	var workerPool sync.WaitGroup
 	// Record and track tables in a hashmap of oids and table states (preloaded with value Unknown).
 	// The tables are loaded into the tasks channel for the subsequent goroutines to work on.
@@ -212,7 +211,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 			 * transaction commits and the locks are released.
 			 */
 			for table := range tasks {
-				if wasTerminated || isErroredBackup.Load() {
+				if wasTerminated {
 					counters.ProgressBar.(*pb.ProgressBar).NotPrint = true
 					return
 				}
@@ -233,7 +232,6 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 				err := LockTableNoWait(table, whichConn)
 				if err != nil {
 					if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code != PG_LOCK_NOT_AVAILABLE {
-						isErroredBackup.Store(true)
 						err = connectionPool.Rollback(whichConn)
 						if err != nil {
 							gplog.Warn("Worker %d: %s", whichConn, err)
@@ -266,7 +264,6 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 					// if copy isn't working, skip remaining backups, and let downstream panic
 					// handling deal with it
 					counters.ProgressBar.(*pb.ProgressBar).NotPrint = true
-					isErroredBackup.Store(true)
 					gplog.Fatal(err, "")
 				} else {
 					oidMap.Store(table.Oid, Complete)
@@ -294,7 +291,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 		}()
 		for _, table := range tables {
 			for {
-				if wasTerminated || isErroredBackup.Load() {
+				if wasTerminated {
 					return
 				}
 				state, _ := oidMap.Load(table.Oid)
@@ -303,7 +300,6 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 				} else if state.(int) == Deferred {
 					err := BackupSingleTableData(table, rowsCopiedMaps[0], &counters, 0)
 					if err != nil {
-						isErroredBackup.Store(true)
 						gplog.Fatal(err, "")
 					}
 					oidMap.Store(table.Oid, Complete)
@@ -334,7 +330,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 	if backupSnapshot == "" {
 		allWorkersTerminatedLogged := false
 		for _, table := range tables {
-			if wasTerminated || isErroredBackup.Load() {
+			if wasTerminated {
 				counters.ProgressBar.(*pb.ProgressBar).NotPrint = true
 				break
 			}
