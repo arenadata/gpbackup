@@ -240,14 +240,10 @@ func DoCleanup() {
 			logVerbose("Encountered error closing error file: %v", err)
 		}
 	}
-	err := FlushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
-	if err != nil {
-		logVerbose("Encountered error during cleanup: %v", err)
-	}
 
 	for pipeName, _ := range pipesMap {
 		logVerbose("Removing pipe %s", pipeName)
-		err = deletePipe(pipeName)
+		err := deletePipe(pipeName)
 		if err != nil {
 			logVerbose("Encountered error removing pipe %s: %v", pipeName, err)
 		}
@@ -255,7 +251,7 @@ func DoCleanup() {
 
 	skipFiles, _ := filepath.Glob(fmt.Sprintf("%s_skip_*", *pipeFile))
 	for _, skipFile := range skipFiles {
-		err = utils.RemoveFileIfExists(skipFile)
+		err := utils.RemoveFileIfExists(skipFile)
 		if err != nil {
 			logVerbose("Encountered error during cleanup skip files: %v", err)
 		}

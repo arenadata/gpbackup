@@ -161,6 +161,7 @@ type oidWithBatch struct {
 type IRestoreHelper interface {
 	getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error)
 	flushAndCloseRestoreWriter(pipeName string, oid int) error
+	doRestoreAgentCleanup()
 
 	createPipe(pipe string) error
 	closeAndDeletePipe(tableOid int, batchNum int)
@@ -205,6 +206,8 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 	if err != nil {
 		return err
 	}
+
+	defer restoreHelper.doRestoreAgentCleanup()
 
 	// During a larger-to-smaller restore, we need to do multiple passes for each oid, so the table
 	// restore goes into another nested for loop below.  In the normal or smaller-to-larger cases,
@@ -463,11 +466,14 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 	return lastError
 }
 
-func (RestoreHelper) flushAndCloseRestoreWriter(pipeName string, oid int) error {
-	return FlushAndCloseRestoreWriter(pipeName, oid)
+func (rh *RestoreHelper) doRestoreAgentCleanup() {
+	err := rh.flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
+	if err != nil {
+		logVerbose("Encountered error during cleanup: %v", err)
+	}
 }
 
-func FlushAndCloseRestoreWriter(pipeName string, oid int) error {
+func (RestoreHelper) flushAndCloseRestoreWriter(pipeName string, oid int) error {
 	if writer != nil {
 		writer.Write([]byte{}) // simulate writer connected in case of error
 		err := writer.Flush()
