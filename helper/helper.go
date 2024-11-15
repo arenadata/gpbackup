@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -193,6 +192,24 @@ func deletePipe(pipe string) error {
 	return nil
 }
 
+func openClosePipe(filename string) error {
+	flag := unix.O_NONBLOCK
+	if *backupAgent {
+		flag |= os.O_RDONLY
+	} else if *restoreAgent {
+		flag |= os.O_WRONLY
+	}
+	handle, err := os.OpenFile(filename, flag, os.ModeNamedPipe)
+	if err != nil {
+		gplog.Debug("Encountered error opening pipe file: %v", err)
+	}
+	err = handle.Close()
+	if err != nil {
+		gplog.Debug("Encountered error closing pipe file: %v", err)
+	}
+	return nil
+}
+
 func getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
 	oidStr, err := operating.System.ReadFile(oidFileName)
 	if err != nil {
@@ -279,11 +296,10 @@ func DoCleanup() {
 
 	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
 	for _, pipeName := range pipeFiles {
-		out, err := exec.Command("pkill", "-SIGPIPE", "-efx", fmt.Sprintf("cat %s", pipeName)).CombinedOutput()
+		logVerbose("Opening/closing pipe %s", pipeName)
+		err = openClosePipe(pipeName)
 		if err != nil {
-			gplog.Debug("Cannot signal to pipe %s: %s: %v", pipeName, string(out), err)
-		} else {
-			gplog.Debug("Pipe %s signalled: %s", pipeName, string(out))
+			logVerbose("Encountered error opening/closing pipe %s: %v", pipeName, err)
 		}
 		logVerbose("Removing pipe %s", pipeName)
 		err = deletePipe(pipeName)

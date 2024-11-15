@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
@@ -303,6 +304,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					atomic.AddInt32(&numErrors, 1)
 					if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 						dataProgressBar.(*pb.ProgressBar).NotPrint = true
+						time.Sleep(1 * time.Second)
 						cancel()
 						return
 					}
