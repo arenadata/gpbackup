@@ -193,16 +193,6 @@ func deletePipe(pipe string) error {
 	return nil
 }
 
-func signalPipe(filename string) error {
-	out, err := exec.Command("pkill", "-SIGPIPE", "-efx", fmt.Sprintf("cat %s", filename)).CombinedOutput()
-	if err != nil {
-		gplog.Debug("Cannot pkill %s: %v: %v", filename, string(out), err)
-	} else {
-		gplog.Debug("Can pkill %s: %v", filename, string(out))
-	}
-	return nil
-}
-
 func getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
 	oidStr, err := operating.System.ReadFile(oidFileName)
 	if err != nil {
@@ -289,10 +279,11 @@ func DoCleanup() {
 
 	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
 	for _, pipeName := range pipeFiles {
-		logVerbose("Signaling pipe %s", pipeName)
-		err = signalPipe(pipeName)
+		out, err := exec.Command("pkill", "-SIGPIPE", "-efx", fmt.Sprintf("cat %s", pipeName)).CombinedOutput()
 		if err != nil {
-			logVerbose("Encountered error signaling pipe %s: %v", pipeName, err)
+			gplog.Debug("Cannot signal to pipe %s: %s: %v", pipeName, string(out), err)
+		} else {
+			gplog.Debug("Pipe %s signalled: %s", pipeName, string(out))
 		}
 		logVerbose("Removing pipe %s", pipeName)
 		err = deletePipe(pipeName)
