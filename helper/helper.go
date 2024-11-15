@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -192,20 +193,12 @@ func deletePipe(pipe string) error {
 	return nil
 }
 
-func openClosePipe(filename string) error {
-	flag := unix.O_NONBLOCK
-	if *backupAgent {
-		flag |= os.O_RDONLY
-	} else if *restoreAgent {
-		flag |= os.O_WRONLY
-	}
-	handle, err := os.OpenFile(filename, flag, os.ModeNamedPipe)
+func signalPipe(filename string) error {
+	out, err := exec.Command("pkill", "-SIGPIPE", "-efx", fmt.Sprintf("cat %s", filename)).CombinedOutput()
 	if err != nil {
-		gplog.Debug("Encountered error opening pipe file: %v", err)
-	}
-	err = handle.Close()
-	if err != nil {
-		gplog.Debug("Encountered error closing pipe file: %v", err)
+		gplog.Debug("Cannot pkill %s: %v: %v", filename, string(out), err)
+	} else {
+		gplog.Debug("Can pkill %s: %v", filename, string(out))
 	}
 	return nil
 }
@@ -296,10 +289,10 @@ func DoCleanup() {
 
 	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
 	for _, pipeName := range pipeFiles {
-		logVerbose("Opening/closing pipe %s", pipeName)
-		err = openClosePipe(pipeName)
+		logVerbose("Signaling pipe %s", pipeName)
+		err = signalPipe(pipeName)
 		if err != nil {
-			logVerbose("Encountered error opening/closing pipe %s: %v", pipeName, err)
+			logVerbose("Encountered error signaling pipe %s: %v", pipeName, err)
 		}
 		logVerbose("Removing pipe %s", pipeName)
 		err = deletePipe(pipeName)
