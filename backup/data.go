@@ -5,6 +5,7 @@ package backup
  */
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -62,7 +63,7 @@ type BackupProgressCounters struct {
 	ProgressBar    utils.ProgressBar
 }
 
-func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite string, connNum int) (int64, error) {
+func CopyTableOut(queryContext context.Context, connectionPool *dbconn.DBConn, table Table, destinationToWrite string, connNum int) (int64, error) {
 	if wasTerminated {
 		return -1, nil
 	}
@@ -112,7 +113,7 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 	} else {
 		utils.LogProgress(`%sExecuting "%s" on master`, workerInfo, query)
 	}
-	result, err := connectionPool.Exec(query, connNum)
+	result, err := connectionPool.ExecContext(queryContext, query, connNum)
 	if err != nil {
 		return 0, err
 	}
@@ -121,7 +122,7 @@ func CopyTableOut(connectionPool *dbconn.DBConn, table Table, destinationToWrite
 	return numRows, nil
 }
 
-func BackupSingleTableData(table Table, rowsCopiedMap map[uint32]int64, counters *BackupProgressCounters, whichConn int) error {
+func BackupSingleTableData(queryContext context.Context, table Table, rowsCopiedMap map[uint32]int64, counters *BackupProgressCounters, whichConn int) error {
 	workerInfo := ""
 	if gplog.GetVerbosity() >= gplog.LOGVERBOSE {
 		workerInfo = fmt.Sprintf("Worker %d: ", whichConn)
@@ -137,7 +138,7 @@ func BackupSingleTableData(table Table, rowsCopiedMap map[uint32]int64, counters
 	} else {
 		destinationToWrite = globalFPInfo.GetTableBackupFilePathForCopyCommand(table.Oid, utils.GetPipeThroughProgram().Extension, false)
 	}
-	rowsCopied, err := CopyTableOut(connectionPool, table, destinationToWrite, whichConn)
+	rowsCopied, err := CopyTableOut(queryContext, connectionPool, table, destinationToWrite, whichConn)
 	if err != nil {
 		return err
 	}
@@ -181,6 +182,9 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 		tasks <- table
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Make sure it's called to release resources even if no errors
+
 	/*
 	 * Worker 0 is a special database connection that
 	 * 	1) Exports the database snapshot if the feature is supported
@@ -196,6 +200,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 		go func(whichConn int) {
 			defer func() {
 				if panicErr := recover(); panicErr != nil {
+					cancel()
 					panicChan <- fmt.Errorf("%v", panicErr)
 				}
 			}()
@@ -212,8 +217,15 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 			 * transaction commits and the locks are released.
 			 */
 			for table := range tasks {
+				// Check if any error occurred in any other goroutines:
+				select {
+				case <-ctx.Done():
+					return // Error somewhere, terminate
+				default: // Default is must to avoid blocking
+				}
 				if wasTerminated || isErroredBackup.Load() {
 					counters.ProgressBar.(*pb.ProgressBar).NotPrint = true
+					cancel()
 					return
 				}
 				if backupSnapshot != "" && connectionPool.Tx[whichConn] == nil {
@@ -261,7 +273,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 						break
 					}
 				}
-				err = BackupSingleTableData(table, rowsCopiedMaps[whichConn], &counters, whichConn)
+				err = BackupSingleTableData(ctx, table, rowsCopiedMaps[whichConn], &counters, whichConn)
 				if err != nil {
 					// if copy isn't working, skip remaining backups, and let downstream panic
 					// handling deal with it
@@ -289,19 +301,27 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 	go func() {
 		defer func() {
 			if panicErr := recover(); panicErr != nil {
+				cancel()
 				panicChan <- fmt.Errorf("%v", panicErr)
 			}
 		}()
 		for _, table := range tables {
 			for {
+				// Check if any error occurred in any other goroutines:
+				select {
+				case <-ctx.Done():
+					return // Error somewhere, terminate
+				default: // Default is must to avoid blocking
+				}
 				if wasTerminated || isErroredBackup.Load() {
+					cancel()
 					return
 				}
 				state, _ := oidMap.Load(table.Oid)
 				if state.(int) == Unknown {
 					time.Sleep(time.Millisecond * 50)
 				} else if state.(int) == Deferred {
-					err := BackupSingleTableData(table, rowsCopiedMaps[0], &counters, 0)
+					err := BackupSingleTableData(ctx, table, rowsCopiedMaps[0], &counters, 0)
 					if err != nil {
 						isErroredBackup.Store(true)
 						gplog.Fatal(err, "")
