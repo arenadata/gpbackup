@@ -196,9 +196,9 @@ func deletePipe(pipe string) error {
 func signalPipe(filename string) error {
 	out, err := exec.Command("pkill", "-SIGPIPE", "-efx", fmt.Sprintf("cat %s", filename)).CombinedOutput()
 	if err != nil {
-		gplog.Debug("Cannot pkill %s: %v: %v", filename, string(out), err)
+		gplog.Debug("Cannot signal %s: %s: %v", filename, string(out), err)
 	} else {
-		gplog.Debug("Can pkill %s: %v", filename, string(out))
+		gplog.Debug("Can signal %s: %s", filename, string(out))
 	}
 	return nil
 }
