@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -295,7 +294,6 @@ func DoCleanup() {
 		logVerbose("Encountered error during cleanup: %v", err)
 	}
 
-	time.Sleep(1 * time.Second)
 	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
 	for _, pipeName := range pipeFiles {
 		logVerbose("Opening/closing pipe %s", pipeName)
