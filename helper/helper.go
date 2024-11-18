@@ -175,15 +175,6 @@ func InitializeSignalHandler() {
  * Shared functions
  */
 
-func createPipe(pipe string) error {
-	err := unix.Mkfifo(pipe, 0700)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func deletePipe(pipe string) error {
 	err := utils.RemoveFileIfExists(pipe)
 	if err != nil {

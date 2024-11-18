@@ -229,7 +229,7 @@ func doRestoreAgent() error {
 	// If skip file is detected for the particular tableOid, will not process batches related to this oid
 	skipOid := -1
 
-	for i, oidWithBatch := range oidWithBatchList {
+	for _, oidWithBatch := range oidWithBatchList {
 		tableOid := oidWithBatch.oid
 		batchNum := oidWithBatch.batch
 
@@ -240,24 +240,6 @@ func doRestoreAgent() error {
 		}
 
 		currentPipe = fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
-		if i < len(oidWithBatchList)-*copyQueue {
-			nextOidWithBatch := oidWithBatchList[i+*copyQueue]
-			nextOid := nextOidWithBatch.oid
-
-			if nextOid != skipOid {
-				nextBatchNum := nextOidWithBatch.batch
-				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
-				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-				err := createPipe(nextPipeToCreate)
-				if err != nil {
-					logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-					// In the case this error is hit it means we have lost the
-					// ability to create pipes normally, so hard quit even if
-					// --on-error-continue is given
-					return err
-				}
-			}
-		}
 
 		if tableOid == skipOid {
 			logVerbose(fmt.Sprintf("Oid %d, Batch %d: skip due to skip file\n", tableOid, batchNum))
@@ -293,7 +275,7 @@ func doRestoreAgent() error {
 		for {
 			writer, writeHandle, err = getRestorePipeWriter(currentPipe)
 			if err != nil {
-				if errors.Is(err, unix.ENXIO) {
+				if errors.Is(err, unix.ENXIO) || errors.Is(err, unix.ENOENT) {
 					// COPY (the pipe reader) has not tried to access the pipe yet so our restore_helper
 					// process will get ENXIO error on its nonblocking open call on the pipe. We loop in
 					// here while looking to see if gprestore has created a skip file for this restore entry.

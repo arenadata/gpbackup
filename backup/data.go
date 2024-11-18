@@ -77,7 +77,7 @@ func CopyTableOut(queryContext context.Context, connectionPool *dbconn.DBConn, t
 		 * drive.  It will be copied to a user-specified directory, if any, once all
 		 * of the data is backed up.
 		 */
-		checkPipeExistsCommand = fmt.Sprintf("(test -p \"%s\" || (echo \"Pipe not found %s\">&2; exit 1)) && ", destinationToWrite, destinationToWrite)
+		checkPipeExistsCommand = fmt.Sprintf("mkfifo -m 0700 %s && ", destinationToWrite)
 		customPipeThroughCommand = utils.DefaultPipeThroughProgram
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		sendToDestinationCommand = fmt.Sprintf("| %s backup_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
