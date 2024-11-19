@@ -8,15 +8,8 @@ export TEST_OS="$ID"
 # 7x has additional tests with de_DE locale. Install the missing.
 # 6x has no such package and following commands are excessive, but it's not an error.
 case "$TEST_OS" in
-	centos*|rocky*)
-		yum install -y glibc-locale-source || true
-		;;
-	ubuntu*)
-		apt-get install -y locales
-		;;
-	*)
-		echo "Unknown OS: '$OS'"
-		exit 1
+	rocky*)
+		yum install -y glibc-locale-source
 		;;
 esac
 localedef -i de_DE -f UTF-8 de_DE
