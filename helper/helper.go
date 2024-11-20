@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -202,11 +201,11 @@ func openClosePipe(filename string) error {
 	}
 	handle, err := os.OpenFile(filename, flag, os.ModeNamedPipe)
 	if err != nil {
-		gplog.Debug("Encountered error opening pipe file: %v", err)
+		return err
 	}
 	err = handle.Close()
 	if err != nil {
-		gplog.Debug("Encountered error closing pipe file: %v", err)
+		return err
 	}
 	return nil
 }
@@ -295,13 +294,14 @@ func DoCleanup() {
 		logVerbose("Encountered error during cleanup: %v", err)
 	}
 
-	time.Sleep(1 * time.Second)
 	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
 	for _, pipeName := range pipeFiles {
-		logVerbose("Opening/closing pipe %s", pipeName)
-		err = openClosePipe(pipeName)
-		if err != nil {
-			logVerbose("Encountered error opening/closing pipe %s: %v", pipeName, err)
+		if !wasTerminated {
+			logVerbose("Opening/closing pipe %s", pipeName)
+			err = openClosePipe(pipeName)
+			if err != nil {
+				logVerbose("Encountered error opening/closing pipe %s: %v", pipeName, err)
+			}
 		}
 		logVerbose("Removing pipe %s", pipeName)
 		err = deletePipe(pipeName)
