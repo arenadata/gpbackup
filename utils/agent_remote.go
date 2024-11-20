@@ -19,6 +19,7 @@ import (
 )
 
 var helperMutex sync.Mutex
+var AgentErr = errors.New("agent error")
 
 /*
  * Functions to run commands on entire cluster during both backup and restore
@@ -314,7 +315,7 @@ func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo
 	}
 	if numErrors > 0 {
 		helperLogName := fpInfo.GetHelperLogPath()
-		return errors.Errorf("Encountered errors with %d helper agent(s).  See %s for a complete list of segments with errors, and see %s on the corresponding hosts for detailed error messages.",
+		return errors.Wrapf(AgentErr, "Encountered errors with %d helper agent(s).  See %s for a complete list of segments with errors, and see %s on the corresponding hosts for detailed error messages.",
 			numErrors, gplog.GetLogFilePath(), helperLogName)
 	}
 	return nil
