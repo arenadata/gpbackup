@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -27,6 +26,7 @@ var (
 	CleanupGroup  *sync.WaitGroup
 	version       string
 	wasTerminated bool
+	wasSigpiped   bool
 	writeHandle   *os.File
 	writer        *bufio.Writer
 )
@@ -137,6 +137,7 @@ func InitializeSignalHandler() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGPIPE, unix.SIGUSR1)
 	terminatedChan := make(chan bool, 1)
+	sigpipedChan := make(chan bool, 1)
 	for {
 		go func() {
 			sig := <-signalChan
@@ -144,11 +145,14 @@ func InitializeSignalHandler() {
 			switch sig {
 			case unix.SIGINT:
 				gplog.Warn("Received an interrupt signal on segment %d: aborting", *content)
+				sigpipedChan <- false
 				terminatedChan <- true
 			case unix.SIGTERM:
 				gplog.Warn("Received a termination signal on segment %d: aborting", *content)
+				sigpipedChan <- false
 				terminatedChan <- true
 			case unix.SIGPIPE:
+				sigpipedChan <- true
 				if *onErrorContinue {
 					gplog.Warn("Received a broken pipe signal on segment %d: on-error-continue set, continuing", *content)
 					terminatedChan <- false
@@ -158,9 +162,11 @@ func InitializeSignalHandler() {
 				}
 			case unix.SIGUSR1:
 				gplog.Warn("Received shutdown request on segment %d: beginning cleanup", *content)
+				sigpipedChan <- false
 				terminatedChan <- true
 			}
 		}()
+		wasSigpiped = <-sigpipedChan
 		wasTerminated = <-terminatedChan
 		if wasTerminated {
 			DoCleanup()
@@ -202,11 +208,11 @@ func openClosePipe(filename string) error {
 	}
 	handle, err := os.OpenFile(filename, flag, os.ModeNamedPipe)
 	if err != nil {
-		gplog.Debug("Encountered error opening pipe file: %v", err)
+		return err
 	}
 	err = handle.Close()
 	if err != nil {
-		gplog.Debug("Encountered error closing pipe file: %v", err)
+		return err
 	}
 	return nil
 }
@@ -295,13 +301,14 @@ func DoCleanup() {
 		logVerbose("Encountered error during cleanup: %v", err)
 	}
 
-	time.Sleep(1 * time.Second)
 	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
 	for _, pipeName := range pipeFiles {
-		logVerbose("Opening/closing pipe %s", pipeName)
-		err = openClosePipe(pipeName)
-		if err != nil {
-			logVerbose("Encountered error opening/closing pipe %s: %v", pipeName, err)
+		if !wasSigpiped {
+			logVerbose("Opening/closing pipe %s", pipeName)
+			err = openClosePipe(pipeName)
+			if err != nil {
+				logVerbose("Encountered error opening/closing pipe %s: %v", pipeName, err)
+			}
 		}
 		logVerbose("Removing pipe %s", pipeName)
 		err = deletePipe(pipeName)
