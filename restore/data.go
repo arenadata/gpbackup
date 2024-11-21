@@ -107,7 +107,10 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		// was expected to set up
 		if backupConfig.SingleDataFile || resizeCluster {
 			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
-			gplog.FatalOnError(agentErr)
+			if agentErr != nil {
+				gplog.Error(agentErr.Error())
+				return agentErr
+			}
 		}
 
 		partialRowsRestored, copyErr := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
@@ -307,7 +310,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 
 				if err != nil {
 					atomic.AddInt32(&numErrors, 1)
-					if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
+					if errors.Is(err, utils.AgentErr) || !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 						dataProgressBar.(*pb.ProgressBar).NotPrint = true
 						cancel()
 						return
