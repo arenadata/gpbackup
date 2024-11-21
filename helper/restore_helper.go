@@ -384,17 +384,17 @@ func doRestoreAgent() error {
 	LoopEnd:
 		if tableOid != skipOid {
 			closeAndDeletePipe(tableOid, batchNum)
-		}
 
-		logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
+			logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
 
-		// On resize restore reader might be nil.
-		if !*singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
-			if errPlugin := readers[contentToRestore].waitForPlugin(); errPlugin != nil {
-				if err != nil {
-					err = errors.Wrap(err, errPlugin.Error())
-				} else {
-					err = errPlugin
+			// On resize restore reader might be nil.
+			if !*singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
+				if errPlugin := readers[contentToRestore].waitForPlugin(); errPlugin != nil {
+					if err != nil {
+						err = errors.Wrap(err, errPlugin.Error())
+					} else {
+						err = errPlugin
+					}
 				}
 			}
 		}
