@@ -304,6 +304,10 @@ func DoCleanup() {
 	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
 	for _, pipeName := range pipeFiles {
 		if !wasSigpiped {
+			/*
+			 * The main process doesn't know about the error yet, so it needs to
+			 * open/close pipes so that the COPY commands hanging on them can complete.
+			 */
 			logVerbose("Opening/closing pipe %s", pipeName)
 			err = openClosePipe(pipeName)
 			if err != nil {
