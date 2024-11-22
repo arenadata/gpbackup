@@ -2,9 +2,16 @@
 
 set -eox pipefail
 
+. /etc/os-release
+export TEST_OS="$ID"
+
 # 7x has additional tests with de_DE locale. Install the missing.
 # 6x has no such package and following commands are excessive, but it's not an error.
-yum install -y glibc-locale-source || true
+case "$TEST_OS" in
+	rocky*)
+		yum install -y glibc-locale-source
+		;;
+esac
 localedef -i de_DE -f UTF-8 de_DE
 
 source gpdb_src/concourse/scripts/common.bash
