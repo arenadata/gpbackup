@@ -388,7 +388,9 @@ func doRestoreAgent() error {
 
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
 
-		// On resize restore reader might be nil.
+		// On resize restore reader might be nil,
+		// for example, if contentToRestore >= *origSize,
+		// and also for the next batch after detecting a skip file.
 		if !*singleDataFile && readers[contentToRestore] != nil {
 			if errPlugin := readers[contentToRestore].waitForPlugin(); errPlugin != nil {
 				if err != nil {
