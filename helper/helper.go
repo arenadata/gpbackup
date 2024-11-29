@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/sys/unix"
 
@@ -25,7 +26,7 @@ import (
 var (
 	CleanupGroup  *sync.WaitGroup
 	version       string
-	wasTerminated bool
+	wasTerminated atomic.Bool
 	writeHandle   *os.File
 	writer        *bufio.Writer
 	pipesMap      map[string]bool
@@ -59,7 +60,7 @@ var (
 func DoHelper() {
 	var err error
 	defer func() {
-		if wasTerminated {
+		if wasTerminated.Load() {
 			CleanupGroup.Wait()
 			return
 		}
@@ -138,7 +139,6 @@ func InitializeGlobals() {
 func InitializeSignalHandler() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGPIPE, unix.SIGUSR1)
-	terminatedChan := make(chan bool, 1)
 	for {
 		go func() {
 			sig := <-signalChan
@@ -146,25 +146,24 @@ func InitializeSignalHandler() {
 			switch sig {
 			case unix.SIGINT:
 				gplog.Warn("Received an interrupt signal on segment %d: aborting", *content)
-				terminatedChan <- true
+				wasTerminated.Store(true)
 			case unix.SIGTERM:
 				gplog.Warn("Received a termination signal on segment %d: aborting", *content)
-				terminatedChan <- true
+				wasTerminated.Store(true)
 			case unix.SIGPIPE:
 				if *onErrorContinue {
 					gplog.Warn("Received a broken pipe signal on segment %d: on-error-continue set, continuing", *content)
-					terminatedChan <- false
+					wasTerminated.Store(false)
 				} else {
 					gplog.Warn("Received a broken pipe signal on segment %d: aborting", *content)
-					terminatedChan <- true
+					wasTerminated.Store(true)
 				}
 			case unix.SIGUSR1:
 				gplog.Warn("Received shutdown request on segment %d: beginning cleanup", *content)
-				terminatedChan <- true
+				wasTerminated.Store(true)
 			}
 		}()
-		wasTerminated = <-terminatedChan
-		if wasTerminated {
+		if wasTerminated.Load() {
 			DoCleanup()
 			os.Exit(2)
 		} else {
@@ -274,7 +273,7 @@ func flushAndCloseRestoreWriter(pipeName string, oid int) error {
 
 func DoCleanup() {
 	defer CleanupGroup.Done()
-	if wasTerminated {
+	if wasTerminated.Load() {
 		/*
 		 * If the agent dies during the last table copy, it can still report
 		 * success, so we create an error file and check for its presence in

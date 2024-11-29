@@ -64,7 +64,7 @@ type BackupProgressCounters struct {
 }
 
 func CopyTableOut(queryContext context.Context, connectionPool *dbconn.DBConn, table Table, destinationToWrite string, connNum int) (int64, error) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return -1, nil
 	}
 	checkPipeExistsCommand := ""
@@ -229,7 +229,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 					return // Error somewhere, terminate
 				default: // Default is must to avoid blocking
 				}
-				if wasTerminated || isErroredBackup.Load() {
+				if wasTerminated.Load() || isErroredBackup.Load() {
 					counters.ProgressBar.(*pb.ProgressBar).NotPrint = true
 					cancel()
 					return
@@ -319,7 +319,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 					return // Error somewhere, terminate
 				default: // Default is must to avoid blocking
 				}
-				if wasTerminated || isErroredBackup.Load() {
+				if wasTerminated.Load() || isErroredBackup.Load() {
 					cancel()
 					return
 				}
@@ -360,7 +360,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 	if backupSnapshot == "" {
 		allWorkersTerminatedLogged := false
 		for _, table := range tables {
-			if wasTerminated || isErroredBackup.Load() {
+			if wasTerminated.Load() || isErroredBackup.Load() {
 				counters.ProgressBar.(*pb.ProgressBar).NotPrint = true
 				break
 			}

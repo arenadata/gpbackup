@@ -23,7 +23,7 @@ var (
 
 func executeStatementsForConn(statements chan toc.StatementWithType, fatalErr *error, numErrors *int32, progressBar utils.ProgressBar, whichConn int, executeInParallel bool) {
 	for statement := range statements {
-		if wasTerminated || *fatalErr != nil {
+		if wasTerminated.Load() || *fatalErr != nil {
 			if executeInParallel {
 				gplog.Error("Error detected on connection %d. Terminating transactions.", whichConn)
 				txMutex.Lock()
