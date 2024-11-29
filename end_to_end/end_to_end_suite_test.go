@@ -2665,7 +2665,24 @@ LANGUAGE plpgsql NO SQL;`)
 				"--backup-dir", path.Join(backupDir, "4-segment-db-single-backup-dir"),
 				"--resize-cluster", "--on-error-continue")
 			output, _ := gprestoreCmd.CombinedOutput()
-			Expect(string(output)).To(ContainSubstring(`[CRITICAL]:-Encountered errors with 1 helper agent(s)`))
+			Expect(string(output)).To(ContainSubstring(`[ERROR]:-Encountered errors with 1 helper agent(s)`))
+			assertArtifactsCleaned("20240730085053")
+			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d;")
+		})
+		It("Will not hang and fatal error after helper error on resize-restore with jobs", func() {
+			command := exec.Command("tar", "-xzf", "resources/4-segment-db-single-backup-dir.tar.gz", "-C", backupDir)
+			mustRunCommand(command)
+			command = exec.Command("mv",
+				path.Join(backupDir, "4-segment-db-single-backup-dir/backups/20240730/20240730085053/gpbackup_0_20240730085053_16417.gz"),
+				path.Join(backupDir, "4-segment-db-single-backup-dir/backups/20240730/20240730085053/gpbackup_0_20240730085053_16417.gz.1"))
+			mustRunCommand(command)
+			gprestoreCmd := exec.Command(gprestorePath,
+				"--timestamp", "20240730085053",
+				"--redirect-db", "restoredb",
+				"--backup-dir", path.Join(backupDir, "4-segment-db-single-backup-dir"),
+				"--resize-cluster", "--on-error-continue", "--jobs", "3")
+			output, _ := gprestoreCmd.CombinedOutput()
+			Expect(string(output)).To(ContainSubstring(`[ERROR]:-Encountered errors with 1 helper agent(s)`))
 			assertArtifactsCleaned("20240730085053")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d;")
 		})
