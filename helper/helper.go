@@ -139,6 +139,7 @@ func InitializeGlobals() {
 func InitializeSignalHandler() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM, unix.SIGPIPE, unix.SIGUSR1)
+	terminatedChan := make(chan bool, 1)
 	for {
 		go func() {
 			sig := <-signalChan
@@ -146,23 +147,24 @@ func InitializeSignalHandler() {
 			switch sig {
 			case unix.SIGINT:
 				gplog.Warn("Received an interrupt signal on segment %d: aborting", *content)
-				wasTerminated.Store(true)
+				terminatedChan <- true
 			case unix.SIGTERM:
 				gplog.Warn("Received a termination signal on segment %d: aborting", *content)
-				wasTerminated.Store(true)
+				terminatedChan <- true
 			case unix.SIGPIPE:
 				if *onErrorContinue {
 					gplog.Warn("Received a broken pipe signal on segment %d: on-error-continue set, continuing", *content)
-					wasTerminated.Store(false)
+					terminatedChan <- false
 				} else {
 					gplog.Warn("Received a broken pipe signal on segment %d: aborting", *content)
-					wasTerminated.Store(true)
+					terminatedChan <- true
 				}
 			case unix.SIGUSR1:
 				gplog.Warn("Received shutdown request on segment %d: beginning cleanup", *content)
-				wasTerminated.Store(true)
+				terminatedChan <- true
 			}
 		}()
+		wasTerminated.Store(<-terminatedChan)
 		if wasTerminated.Load() {
 			DoCleanup()
 			os.Exit(2)
