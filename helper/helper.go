@@ -145,11 +145,9 @@ func InitializeSignalHandler() {
 			switch sig {
 			case unix.SIGINT:
 				gplog.Warn("Received an interrupt signal on segment %d: aborting", *content)
-				wasSigpiped.Store(false)
 				terminatedChan <- true
 			case unix.SIGTERM:
 				gplog.Warn("Received a termination signal on segment %d: aborting", *content)
-				wasSigpiped.Store(false)
 				terminatedChan <- true
 			case unix.SIGPIPE:
 				wasSigpiped.Store(true)
@@ -162,7 +160,6 @@ func InitializeSignalHandler() {
 				}
 			case unix.SIGUSR1:
 				gplog.Warn("Received shutdown request on segment %d: beginning cleanup", *content)
-				wasSigpiped.Store(false)
 				terminatedChan <- true
 			}
 		}()
