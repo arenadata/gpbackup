@@ -207,7 +207,6 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	}
 
 	origSize, destSize, resizeCluster, batches := GetResizeClusterInfo()
-	step := 1
 	if backupConfig.SingleDataFile || resizeCluster {
 		msg := ""
 		if backupConfig.SingleDataFile {
@@ -227,7 +226,6 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		} else {
 			maxHelpers = totalTables
 		}
-		step = maxHelpers
 
 		for helperIdx := 0; helperIdx < maxHelpers; helperIdx++ {
 			// During a larger-to-smaller restore, we need to do multiple passes of
@@ -285,7 +283,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 			defer workerPool.Done()
 
 			setGUCsForConnection(gucStatements, whichConn)
-			for entryIdx := whichConn; entryIdx < totalTables; entryIdx += step {
+			for entryIdx := whichConn; entryIdx < totalTables; entryIdx += connectionPool.NumConns {
 				entry := dataEntries[entryIdx]
 				// Check if any error occurred in any other goroutines:
 				select {
