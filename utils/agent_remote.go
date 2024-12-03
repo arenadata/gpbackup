@@ -362,19 +362,3 @@ func CreateSkipFileOnSegments(oid string, tableName string, c *cluster.Cluster, 
 		return fmt.Sprintf("Could not create skip file %s_skip_%s on segments", fpInfo.GetSegmentPipeFilePath(contentID), oid)
 	})
 }
-
-func StartHelperChecker(cl *cluster.Cluster, fpInfo filepath.FilePathInfo, cancel func()) {
-	go func() {
-		for {
-			time.Sleep(5 * time.Second)
-			remoteOutput := cl.GenerateAndExecuteCommand("Checking gpbackup_helper agent failure", cluster.ON_SEGMENTS, func(contentID int) string {
-				helperErrorFileName := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID))
-				return fmt.Sprintf("! ls %s", helperErrorFileName)
-			})
-			if remoteOutput.NumErrors != 0 {
-				gplog.Error("gpbackup_helper failed to start on some segments")
-				cancel()
-			}
-		}
-	}()
-}

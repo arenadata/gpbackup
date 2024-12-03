@@ -224,8 +224,6 @@ func doRestoreAgent() error {
 		}
 	}
 
-	preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
-
 	var currentPipe string
 
 	// If skip file is detected for the particular tableOid, will not process batches related to this oid
