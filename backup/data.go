@@ -185,12 +185,6 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Make sure it's called to release resources even if no errors
 
-	// Launch a checker that polls if the backup helper has ended with an error. It will cancel all pending
-	// COPY commands that could be hanging on pipes, that the backup helper didn't close before it died.
-	if MustGetFlagBool(options.SINGLE_DATA_FILE) {
-		utils.StartHelperChecker(globalCluster, globalFPInfo, cancel)
-	}
-
 	/*
 	 * Worker 0 is a special database connection that
 	 * 	1) Exports the database snapshot if the feature is supported

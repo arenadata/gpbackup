@@ -33,7 +33,6 @@ func doBackupAgent() error {
 		return err
 	}
 
-	preloadCreatedPipesForBackup(oidList, *copyQueue)
 	var currentPipe string
 	var errBuf bytes.Buffer
 	/*
