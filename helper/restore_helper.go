@@ -221,11 +221,6 @@ func doRestoreAgent() error {
 		}
 	}
 
-	var currentPipe string
-
-	// If skip file is detected for the particular tableOid, will not process batches related to this oid
-	skipOid := -1
-
 	for i, oidWithBatch := range oidWithBatchList {
 		if i < len(oidWithBatchList)-*copyQueue {
 			nextOid := oidWithBatchList[i+*copyQueue].oid
