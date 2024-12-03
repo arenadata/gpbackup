@@ -19,6 +19,7 @@ import (
 )
 
 var helperMutex sync.Mutex
+var AgentErr = errors.New("agent error")
 
 /*
  * Functions to run commands on entire cluster during both backup and restore
@@ -346,7 +347,7 @@ func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo
 	}
 	if numErrors > 0 {
 		helperLogName := fpInfo.GetHelperLogPath()
-		return errors.Errorf("Encountered errors with %d helper agent(s).  See %s for a complete list of segments with errors, and see %s on the corresponding hosts for detailed error messages.",
+		return errors.Wrapf(AgentErr, "Encountered errors with %d helper agent(s).  See %s for a complete list of segments with errors, and see %s on the corresponding hosts for detailed error messages.",
 			numErrors, gplog.GetLogFilePath(), helperLogName)
 	}
 	return nil
@@ -360,20 +361,4 @@ func CreateSkipFileOnSegments(oid string, tableName string, c *cluster.Cluster, 
 	c.CheckClusterError(remoteOutput, "Error while creating skip file on segments", func(contentID int) string {
 		return fmt.Sprintf("Could not create skip file %s_skip_%s on segments", fpInfo.GetSegmentPipeFilePath(contentID), oid)
 	})
-}
-
-func StartHelperChecker(cl *cluster.Cluster, fpInfo filepath.FilePathInfo, cancel func()) {
-	go func() {
-		for {
-			time.Sleep(5 * time.Second)
-			remoteOutput := cl.GenerateAndExecuteCommand("Checking gpbackup_helper agent failure", cluster.ON_SEGMENTS, func(contentID int) string {
-				helperErrorFileName := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID))
-				return fmt.Sprintf("! ls %s", helperErrorFileName)
-			})
-			if remoteOutput.NumErrors != 0 {
-				gplog.Error("gpbackup_helper failed to start on some segments")
-				cancel()
-			}
-		}
-	}()
 }
