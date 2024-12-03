@@ -1,8 +1,11 @@
 package end_to_end_test
 
 import (
+	"bufio"
 	"math/rand"
 	"os/exec"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/testhelper"
@@ -10,6 +13,29 @@ import (
 	. "github.com/onsi/gomega"
 	"golang.org/x/sys/unix"
 )
+
+func createCombinedOutput(cmd *exec.Cmd) *bufio.Scanner {
+	outPipe, err := cmd.StdoutPipe()
+	Expect(err).ToNot(HaveOccurred())
+	outScanner := bufio.NewScanner(outPipe)
+	cmd.Stderr = cmd.Stdout
+	return outScanner
+}
+
+func waitOutputLine(scanner *bufio.Scanner, output *strings.Builder) {
+	if !scanner.Scan() || scanner.Err() != nil {
+		Fail("no output from process")
+	}
+	output.WriteString(scanner.Text())
+	output.WriteByte('\n')
+}
+
+func readOutput(scanner *bufio.Scanner, output *strings.Builder) {
+	for scanner.Scan() {
+		output.WriteString(scanner.Text())
+		output.WriteByte('\n')
+	}
+}
 
 var _ = Describe("Signal handler tests", func() {
 	BeforeEach(func() {
@@ -30,7 +56,15 @@ var _ = Describe("Signal handler tests", func() {
 				"--single-data-file",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
+
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				/*
 				* We use a random delay for the sleep in this test (between
 				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
@@ -40,9 +74,13 @@ var _ = Describe("Signal handler tests", func() {
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
+
+				readOutput(outScanner, &output)
 			}()
-			output, _ := cmd.CombinedOutput()
-			stdout := string(output)
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
+			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
@@ -61,7 +99,15 @@ var _ = Describe("Signal handler tests", func() {
 				"--copy-queue-size", "4",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
+
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				/*
 				* We use a random delay for the sleep in this test (between
 				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
@@ -71,9 +117,13 @@ var _ = Describe("Signal handler tests", func() {
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
+
+				readOutput(outScanner, &output)
 			}()
-			output, _ := cmd.CombinedOutput()
-			stdout := string(output)
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
+			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
@@ -97,11 +147,18 @@ var _ = Describe("Signal handler tests", func() {
 				"--backup-dir", backupDir,
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
 
 			// Wait up to 5 seconds for gpbackup to block on acquiring AccessShareLock.
 			// Once blocked, we send a SIGINT to cancel gpbackup.
 			var beforeLockCount int
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				iterations := 50
 				for iterations > 0 {
 					_ = backupConn.Get(&beforeLockCount, checkLockQuery)
@@ -113,8 +170,12 @@ var _ = Describe("Signal handler tests", func() {
 					}
 				}
 				_ = cmd.Process.Signal(unix.SIGINT)
+
+				readOutput(outScanner, &output)
 			}()
-			output, _ := cmd.CombinedOutput()
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
 			Expect(beforeLockCount).To(Equal(1))
 
 			// After gpbackup has been canceled, we should no longer see a blocked SQL
@@ -124,7 +185,7 @@ var _ = Describe("Signal handler tests", func() {
 			Expect(afterLockCount).To(Equal(0))
 			backupConn.MustExec("ROLLBACK")
 
-			stdout := string(output)
+			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Interrupt received while acquiring ACCESS SHARE locks on tables"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
@@ -148,11 +209,18 @@ var _ = Describe("Signal handler tests", func() {
 				"--single-data-file",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
 
 			// Wait up to 5 seconds for gpbackup to block on acquiring AccessShareLock.
 			// Once blocked, we send a SIGINT to cancel gpbackup.
 			var beforeLockCount int
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				iterations := 50
 				for iterations > 0 {
 					_ = backupConn.Get(&beforeLockCount, checkLockQuery)
@@ -164,8 +232,12 @@ var _ = Describe("Signal handler tests", func() {
 					}
 				}
 				_ = cmd.Process.Signal(unix.SIGINT)
+
+				readOutput(outScanner, &output)
 			}()
-			output, _ := cmd.CombinedOutput()
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
 			Expect(beforeLockCount).To(Equal(1))
 
 			// After gpbackup has been canceled, we should no longer see a blocked SQL
@@ -175,7 +247,7 @@ var _ = Describe("Signal handler tests", func() {
 			Expect(afterLockCount).To(Equal(0))
 			backupConn.MustExec("ROLLBACK")
 
-			stdout := string(output)
+			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Interrupt received while acquiring ACCESS SHARE locks on tables"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
@@ -187,17 +259,25 @@ var _ = Describe("Signal handler tests", func() {
 			if useOldBackupVersion {
 				Skip("This test is not needed for old backup versions")
 			}
-			output := gpbackup(gpbackupPath, backupHelperPath,
+			backupOutput := gpbackup(gpbackupPath, backupHelperPath,
 				"--backup-dir", backupDir,
 				"--single-data-file")
-			timestamp := getBackupTimestamp(string(output))
+			timestamp := getBackupTimestamp(string(backupOutput))
 			args := []string{
 				"--timestamp", timestamp,
 				"--redirect-db", "restoredb",
 				"--backup-dir", backupDir,
 				"--verbose"}
 			cmd := exec.Command(gprestorePath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
+
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				/*
 				* We use a random delay for the sleep in this test (between
 				* 0.5s and 1.5s) so that gprestore will be interrupted at a
@@ -207,9 +287,13 @@ var _ = Describe("Signal handler tests", func() {
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
+
+				readOutput(outScanner, &output)
 			}()
-			output, _ = cmd.CombinedOutput()
-			stdout := string(output)
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
+			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received an interrupt signal, aborting restore process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
@@ -230,7 +314,15 @@ var _ = Describe("Signal handler tests", func() {
 				"--verbose",
 				"--copy-queue-size", "4"}
 			cmd := exec.Command(gprestorePath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
+
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				/*
 				* We use a random delay for the sleep in this test (between
 				* 0.5s and 1.5s) so that gprestore will be interrupted at a
@@ -240,9 +332,13 @@ var _ = Describe("Signal handler tests", func() {
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGINT)
+
+				readOutput(outScanner, &output)
 			}()
-			outputRes, _ := cmd.CombinedOutput()
-			stdoutRes := string(outputRes)
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
+			stdoutRes := output.String()
 			Expect(stdoutRes).To(ContainSubstring("Received an interrupt signal, aborting restore process"))
 			Expect(stdoutRes).To(ContainSubstring("Cleanup complete"))
 			Expect(stdoutRes).To(Not(ContainSubstring("CRITICAL")))
@@ -259,7 +355,15 @@ var _ = Describe("Signal handler tests", func() {
 				"--single-data-file",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
+
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				/*
 				* We use a random delay for the sleep in this test (between
 				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
@@ -269,9 +373,13 @@ var _ = Describe("Signal handler tests", func() {
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
+
+				readOutput(outScanner, &output)
 			}()
-			output, _ := cmd.CombinedOutput()
-			stdout := string(output)
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
+			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
@@ -290,7 +398,15 @@ var _ = Describe("Signal handler tests", func() {
 				"--copy-queue-size", "4",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
+
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				/*
 				* We use a random delay for the sleep in this test (between
 				* 0.5s and 1.5s) so that gpbackup will be interrupted at a
@@ -300,9 +416,13 @@ var _ = Describe("Signal handler tests", func() {
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
+
+				readOutput(outScanner, &output)
 			}()
-			output, _ := cmd.CombinedOutput()
-			stdout := string(output)
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
+			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
@@ -326,11 +446,18 @@ var _ = Describe("Signal handler tests", func() {
 				"--backup-dir", backupDir,
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
 
 			// Wait up to 5 seconds for gpbackup to block on acquiring AccessShareLock.
 			// Once blocked, we send a SIGTERM to cancel gpbackup.
 			var beforeLockCount int
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				iterations := 50
 				for iterations > 0 {
 					_ = backupConn.Get(&beforeLockCount, checkLockQuery)
@@ -342,8 +469,12 @@ var _ = Describe("Signal handler tests", func() {
 					}
 				}
 				_ = cmd.Process.Signal(unix.SIGTERM)
+
+				readOutput(outScanner, &output)
 			}()
-			output, _ := cmd.CombinedOutput()
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
 			Expect(beforeLockCount).To(Equal(1))
 
 			// After gpbackup has been canceled, we should no longer see a blocked SQL
@@ -353,7 +484,7 @@ var _ = Describe("Signal handler tests", func() {
 			Expect(afterLockCount).To(Equal(0))
 			backupConn.MustExec("ROLLBACK")
 
-			stdout := string(output)
+			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Interrupt received while acquiring ACCESS SHARE locks on tables"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
@@ -377,11 +508,18 @@ var _ = Describe("Signal handler tests", func() {
 				"--single-data-file",
 				"--verbose"}
 			cmd := exec.Command(gpbackupPath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
 
 			// Wait up to 5 seconds for gpbackup to block on acquiring AccessShareLock.
 			// Once blocked, we send a SIGTERM to cancel gpbackup.
 			var beforeLockCount int
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				iterations := 50
 				for iterations > 0 {
 					_ = backupConn.Get(&beforeLockCount, checkLockQuery)
@@ -393,8 +531,12 @@ var _ = Describe("Signal handler tests", func() {
 					}
 				}
 				_ = cmd.Process.Signal(unix.SIGTERM)
+
+				readOutput(outScanner, &output)
 			}()
-			output, _ := cmd.CombinedOutput()
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
 			Expect(beforeLockCount).To(Equal(1))
 
 			// After gpbackup has been canceled, we should no longer see a blocked SQL
@@ -404,7 +546,7 @@ var _ = Describe("Signal handler tests", func() {
 			Expect(afterLockCount).To(Equal(0))
 			backupConn.MustExec("ROLLBACK")
 
-			stdout := string(output)
+			stdout := output.String()
 			Expect(stdout).To(ContainSubstring("Received a termination signal, aborting backup process"))
 			Expect(stdout).To(ContainSubstring("Cleanup complete"))
 			Expect(stdout).To(Not(ContainSubstring("CRITICAL")))
@@ -425,7 +567,15 @@ var _ = Describe("Signal handler tests", func() {
 				"--backup-dir", backupDir,
 				"--verbose"}
 			cmd := exec.Command(gprestorePath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
+
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				/*
 				* We use a random delay for the sleep in this test (between
 				* 0.5s and 1.5s) so that gprestore will be interrupted at a
@@ -435,9 +585,13 @@ var _ = Describe("Signal handler tests", func() {
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
+
+				readOutput(outScanner, &output)
 			}()
-			outputRes, _ := cmd.CombinedOutput()
-			stdoutRes := string(outputRes)
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
+			stdoutRes := output.String()
 			Expect(stdoutRes).To(ContainSubstring("Received a termination signal, aborting restore process"))
 			Expect(stdoutRes).To(ContainSubstring("Cleanup complete"))
 			Expect(stdoutRes).To(Not(ContainSubstring("CRITICAL")))
@@ -458,7 +612,15 @@ var _ = Describe("Signal handler tests", func() {
 				"--verbose",
 				"--copy-queue-size", "4"}
 			cmd := exec.Command(gprestorePath, args...)
+			outScanner := createCombinedOutput(cmd)
+			var output strings.Builder
+			var wg sync.WaitGroup
+			wg.Add(1)
+
 			go func() {
+				defer wg.Done()
+				waitOutputLine(outScanner, &output)
+
 				/*
 				* We use a random delay for the sleep in this test (between
 				* 0.5s and 1.5s) so that gprestore will be interrupted at a
@@ -468,9 +630,14 @@ var _ = Describe("Signal handler tests", func() {
 				rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 				time.Sleep(time.Duration(rng.Intn(1000)+500) * time.Millisecond)
 				_ = cmd.Process.Signal(unix.SIGTERM)
+
+				readOutput(outScanner, &output)
 			}()
-			outputRes, _ := cmd.CombinedOutput()
-			stdoutRes := string(outputRes)
+			err := cmd.Start()
+			Expect(err).ToNot(HaveOccurred())
+			wg.Wait()
+
+			stdoutRes := output.String()
 			Expect(stdoutRes).To(ContainSubstring("Received a termination signal, aborting restore process"))
 			Expect(stdoutRes).To(ContainSubstring("Cleanup complete"))
 			Expect(stdoutRes).To(Not(ContainSubstring("CRITICAL")))

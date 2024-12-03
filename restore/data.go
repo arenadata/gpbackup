@@ -40,7 +40,7 @@ func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, ta
 		//helper.go handles compression, so we don't want to set it here
 		customPipeThroughCommand = utils.DefaultPipeThroughProgram
 		errorFile := fmt.Sprintf("%s_error", globalFPInfo.GetSegmentPipePathForCopyCommand())
-		readFromDestinationCommand = fmt.Sprintf("(timeout 300 bash -c \"while [[ ! -p \"%s\" && ! -f \"%s\" ]]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1)) && %s", destinationToRead, errorFile, destinationToRead, readFromDestinationCommand)
+		readFromDestinationCommand = fmt.Sprintf("(timeout --foreground 300 bash -c \"while [[ ! -p \"%s\" && ! -f \"%s\" ]]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1)) && %s", destinationToRead, errorFile, destinationToRead, readFromDestinationCommand)
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		readFromDestinationCommand = fmt.Sprintf("%s restore_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
 	}
@@ -107,7 +107,10 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		// was expected to set up
 		if backupConfig.SingleDataFile || resizeCluster {
 			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
-			gplog.FatalOnError(agentErr)
+			if agentErr != nil {
+				gplog.Error(agentErr.Error())
+				return agentErr
+			}
 		}
 
 		partialRowsRestored, copyErr := CopyTableIn(queryContext, connectionPool, tableName, entry.AttributeString, destinationToRead, backupConfig.SingleDataFile, whichConn)
@@ -257,17 +260,12 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Make sure it's called to release resources even if no errors
 
-	// Launch a checker that polls if the restore helper has ended with an error. It will cancel all pending
-	// COPY commands that could be hanging on pipes, that the restore helper didn't close before it died.
-	if backupConfig.SingleDataFile || resizeCluster {
-		utils.StartHelperChecker(globalCluster, globalFPInfo, cancel)
-	}
-
 	for i := 0; i < numConns; i++ {
 		workerPool.Add(1)
 		go func(whichConn int) {
 			defer func() {
 				if panicErr := recover(); panicErr != nil {
+					cancel()
 					panicChan <- fmt.Errorf("%v", panicErr)
 				}
 			}()
@@ -305,7 +303,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 
 				if err != nil {
 					atomic.AddInt32(&numErrors, 1)
-					if !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
+					if errors.Is(err, utils.AgentErr) || !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 						dataProgressBar.(*pb.ProgressBar).NotPrint = true
 						cancel()
 						return

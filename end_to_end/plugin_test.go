@@ -401,6 +401,30 @@ var _ = Describe("End to End plugin tests", func() {
 
 				os.RemoveAll(pluginBackupDirectory)
 			}, SpecTimeout(time.Second*30))
+			It("Will not hang on error with plugin during resize-restore and on-error-continue", func(ctx SpecContext) {
+				copyPluginToAllHosts(backupConn, examplePluginExec)
+
+				pluginBackupDirectory := `/tmp/plugin_dest`
+				os.Mkdir(pluginBackupDirectory, 0777)
+				command := exec.Command("tar", "-xzf", fmt.Sprintf("resources/%s.tar.gz", "9-segment-db-with-plugin-error"), "-C", pluginBackupDirectory)
+				mustRunCommand(command)
+
+				timestamp := "20241121122453"
+
+				gprestoreCmd := exec.Command(gprestorePath,
+					"--resize-cluster",
+					"--timestamp", timestamp,
+					"--redirect-db", "restoredb",
+					"--plugin-config", examplePluginTestConfig,
+					"--on-error-continue")
+
+				_, err := gprestoreCmd.CombinedOutput()
+				Expect(err).To(HaveOccurred())
+
+				assertArtifactsCleaned(timestamp)
+
+				os.RemoveAll(pluginBackupDirectory)
+			}, SpecTimeout(time.Second*30))
 			It("runs gpbackup and gprestore with plugin, single-data-file, and no-compression", func() {
 				copyPluginToAllHosts(backupConn, examplePluginExec)
 

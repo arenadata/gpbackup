@@ -8,6 +8,6 @@ docker run --rm -it --sysctl 'kernel.sem=500 1024000 200 4096' gpbackup:test bas
 
 7x:
 ```bash
-docker build -t gpbackup:test7x -f arenadata/Dockerfile --build-arg GPDB_IMAGE=gpdb7_regress:latest .
+docker build -t gpbackup:test7x -f arenadata/Dockerfile --build-arg GPDB_IMAGE=hub.adsw.io/library/gpdb7_u22:latest .
 docker run --rm -it --sysctl 'kernel.sem=500 1024000 200 4096' gpbackup:test7x bash -c "ssh-keygen -A && /usr/sbin/sshd && bash /home/gpadmin/go/src/github.com/greenplum-db/gpbackup/arenadata/run_gpbackup_tests.bash"
 ```

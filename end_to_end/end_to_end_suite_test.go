@@ -2119,6 +2119,25 @@ LANGUAGE plpgsql NO SQL;`)
 				Expect(contents).To(ContainSubstring(`GRANT SELECT (a) ON TABLE public.t1 TO user2;`))
 				Expect(contents).To(ContainSubstring(`GRANT SELECT (a) ON TABLE public.t1 TO "user, 3 ";`))
 			})
+			It("backup empty db with statistics", func() {
+				testutils.SkipIfBefore6(backupConn)
+
+				mustRunCommand(exec.Command("createdb", "emptydb"))
+				DeferCleanup(func() {
+					mustRunCommand(exec.Command("dropdb", "emptydb"))
+				})
+
+				output := gpbackup(gpbackupPath, backupHelperPath,
+					"--dbname", "emptydb",
+					"--backup-dir", backupDir,
+					"--with-stats")
+				timestamp := getBackupTimestamp(string(output))
+
+				gprestore(gprestorePath, restoreHelperPath, timestamp,
+					"--redirect-db", "restoredb",
+					"--backup-dir", backupDir,
+					"--with-stats")
+			})
 		})
 	})
 	Describe("Properly handles enum type as distribution or partition key", func() {
@@ -2560,8 +2579,8 @@ LANGUAGE plpgsql NO SQL;`)
 				"--resize-cluster", "--jobs", "3")
 			output, err := gprestoreCmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())
-			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t1`))
-			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t2`))
+			Expect(string(output)).To(MatchRegexp(`Error loading data into table public.t1: COPY t1, line \d+, column i: "\d+": ERROR: value "\d+" is out of range for type smallint`))
+			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t2: timeout: context canceled`))
 			assertArtifactsCleaned("20240502095933")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
 		})
@@ -2646,7 +2665,24 @@ LANGUAGE plpgsql NO SQL;`)
 				"--backup-dir", path.Join(backupDir, "4-segment-db-single-backup-dir"),
 				"--resize-cluster", "--on-error-continue")
 			output, _ := gprestoreCmd.CombinedOutput()
-			Expect(string(output)).To(ContainSubstring(`[CRITICAL]:-Encountered errors with 1 helper agent(s)`))
+			Expect(string(output)).To(ContainSubstring(`[ERROR]:-Encountered errors with 1 helper agent(s)`))
+			assertArtifactsCleaned("20240730085053")
+			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d;")
+		})
+		It("Will not hang and fatal error after helper error on resize-restore with jobs", func() {
+			command := exec.Command("tar", "-xzf", "resources/4-segment-db-single-backup-dir.tar.gz", "-C", backupDir)
+			mustRunCommand(command)
+			command = exec.Command("mv",
+				path.Join(backupDir, "4-segment-db-single-backup-dir/backups/20240730/20240730085053/gpbackup_0_20240730085053_16417.gz"),
+				path.Join(backupDir, "4-segment-db-single-backup-dir/backups/20240730/20240730085053/gpbackup_0_20240730085053_16417.gz.1"))
+			mustRunCommand(command)
+			gprestoreCmd := exec.Command(gprestorePath,
+				"--timestamp", "20240730085053",
+				"--redirect-db", "restoredb",
+				"--backup-dir", path.Join(backupDir, "4-segment-db-single-backup-dir"),
+				"--resize-cluster", "--on-error-continue", "--jobs", "3")
+			output, _ := gprestoreCmd.CombinedOutput()
+			Expect(string(output)).To(ContainSubstring(`[ERROR]:-Encountered errors with 1 helper agent(s)`))
 			assertArtifactsCleaned("20240730085053")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d;")
 		})
