@@ -78,7 +78,7 @@ func DoHelper() {
 	}
 	if err != nil {
 		// error logging handled in doBackupAgent and doRestoreAgent
-		errFile := fmt.Sprintf("%s_error", *pipeFile)
+		errFile := strings.Replace(*pipeFile, "pipe", "error", -1)
 		gplog.Debug("Writing error file %s", errFile)
 		handle, err := utils.OpenFileForWrite(errFile)
 		if err != nil {
@@ -281,7 +281,7 @@ func DoCleanup() {
 		 * success, so we create an error file and check for its presence in
 		 * gprestore after the COPYs are finished.
 		 */
-		errFile := fmt.Sprintf("%s_error", *pipeFile)
+		errFile := strings.Replace(*pipeFile, "pipe", "error", -1)
 		gplog.Debug("Writing error file %s", errFile)
 		handle, err := utils.OpenFileForWrite(errFile)
 		if err != nil {
