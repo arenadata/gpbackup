@@ -40,7 +40,12 @@ func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, ta
 	if singleDataFile || resizeCluster {
 		//helper.go handles compression, so we don't want to set it here
 		customPipeThroughCommand = utils.DefaultPipeThroughProgram
-		errorFile := strings.Replace(globalFPInfo.GetSegmentPipePathForCopyCommand(whichConn), "pipe", "error", -1)
+		var helperIdx []int
+		if !singleDataFile {
+			helperIdx = make([]int, 1)
+			helperIdx[0] = whichConn
+		}
+		errorFile := strings.Replace(globalFPInfo.GetSegmentPipePathForCopyCommand(helperIdx...), "pipe", "error", -1)
 		readFromDestinationCommand = fmt.Sprintf("(timeout --foreground 300 bash -c \"while [[ ! -p \"%s\" && ! -f \"%s\" ]]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1)) && %s", destinationToRead, errorFile, destinationToRead, readFromDestinationCommand)
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		readFromDestinationCommand = fmt.Sprintf("%s restore_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
@@ -89,7 +94,12 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 	for i := 0; i < batches; i++ {
 		destinationToRead := ""
 		if backupConfig.SingleDataFile || resizeCluster {
-			destinationToRead = fmt.Sprintf("%s_%d_%d", fpInfo.GetSegmentPipePathForCopyCommand(whichConn), entry.Oid, i)
+			var helperIdx []int
+			if !backupConfig.SingleDataFile {
+				helperIdx = make([]int, 1)
+				helperIdx[0] = whichConn
+			}
+			destinationToRead = fmt.Sprintf("%s_%d_%d", fpInfo.GetSegmentPipePathForCopyCommand(helperIdx...), entry.Oid, i)
 		} else {
 			destinationToRead = fpInfo.GetTableBackupFilePathForCopyCommand(entry.Oid, utils.GetPipeThroughProgram().Extension, backupConfig.SingleDataFile)
 		}
@@ -107,7 +117,12 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		// will hang indefinitely waiting to read from pipes that the helper
 		// was expected to set up
 		if backupConfig.SingleDataFile || resizeCluster {
-			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo, whichConn)
+			var helperIdx []int
+			if !backupConfig.SingleDataFile {
+				helperIdx = make([]int, 1)
+				helperIdx[0] = whichConn
+			}
+			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo, helperIdx...)
 			if agentErr != nil {
 				gplog.Error(agentErr.Error())
 				return agentErr
@@ -121,7 +136,12 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 			if MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 				if connectionPool.Version.AtLeast("6") && (backupConfig.SingleDataFile || resizeCluster) {
 					// inform segment helpers to skip this entry
-					utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo, whichConn)
+					var helperIdx []int
+					if !backupConfig.SingleDataFile {
+						helperIdx = make([]int, 1)
+						helperIdx[0] = whichConn
+					}
+					utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo, helperIdx...)
 				}
 			}
 			return copyErr
@@ -228,11 +248,11 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 			maxHelpers = totalTables
 		}
 
-		for helperIdx := 0; helperIdx < maxHelpers; helperIdx++ {
+		for whichConn := 0; whichConn < maxHelpers; whichConn++ {
 			// During a larger-to-smaller restore, we need to do multiple passes of
 			// data loading so we assign the batches here.
 			oidList := make([]string, 0)
-			for entryIdx := helperIdx; entryIdx < totalTables; entryIdx += maxHelpers {
+			for entryIdx := whichConn; entryIdx < totalTables; entryIdx += maxHelpers {
 				if dataEntries[entryIdx].IsReplicated {
 					oidList = append(oidList, fmt.Sprintf("%d,0", dataEntries[entryIdx].Oid))
 					continue
@@ -243,8 +263,13 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 				}
 			}
 
-			utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, fmt.Sprintf("oid%d", helperIdx))
-			initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo, helperIdx)
+			var helperIdx []int
+			if !backupConfig.SingleDataFile {
+				helperIdx = make([]int, 1)
+				helperIdx[0] = whichConn
+			}
+			utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, helperIdx...)
+			initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo, helperIdx...)
 			if wasTerminated {
 				return 0
 			}
@@ -256,7 +281,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 			if backupConfig.Compressed {
 				compressStr = fmt.Sprintf(" --compression-type %s ", utils.GetPipeThroughProgram().Name)
 			}
-			utils.StartGpbackupHelpers(globalCluster, fpInfo, "--restore-agent", MustGetFlagString(options.PLUGIN_CONFIG), compressStr, MustGetFlagBool(options.ON_ERROR_CONTINUE), isFilter, &wasTerminated, initialPipes, backupConfig.SingleDataFile, resizeCluster, origSize, destSize, gplog.GetVerbosity(), helperIdx)
+			utils.StartGpbackupHelpers(globalCluster, fpInfo, "--restore-agent", MustGetFlagString(options.PLUGIN_CONFIG), compressStr, MustGetFlagBool(options.ON_ERROR_CONTINUE), isFilter, &wasTerminated, initialPipes, backupConfig.SingleDataFile, resizeCluster, origSize, destSize, gplog.GetVerbosity(), helperIdx...)
 		}
 	}
 	/*
@@ -349,7 +374,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	return numErrors
 }
 
-func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionPool *dbconn.DBConn, fpInfo filepath.FilePathInfo, helperIdx int) int {
+func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionPool *dbconn.DBConn, fpInfo filepath.FilePathInfo, helperIdx ...int) int {
 	// Create min(connections, tables) segment pipes on each host
 	var maxPipes int
 	if !backupConfig.SingleDataFile {
@@ -360,7 +385,7 @@ func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionP
 		maxPipes = len(oidList)
 	}
 	for i := 0; i < maxPipes; i++ {
-		utils.CreateSegmentPipeOnAllHostsForRestore(oidList[i], c, fpInfo, helperIdx)
+		utils.CreateSegmentPipeOnAllHostsForRestore(oidList[i], c, fpInfo, helperIdx...)
 	}
 	return maxPipes
 }

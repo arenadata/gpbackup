@@ -44,10 +44,10 @@ func CreateSegmentPipeOnAllHostsForBackup(oid string, c *cluster.Cluster, fpInfo
 	})
 }
 
-func CreateSegmentPipeOnAllHostsForRestore(oid string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx int) {
+func CreateSegmentPipeOnAllHostsForRestore(oid string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) {
 	oidWithBatch := strings.Split(oid, ",")
 	remoteOutput := c.GenerateAndExecuteCommand("Creating segment data pipes", cluster.ON_SEGMENTS, func(contentID int) string {
-		pipeName := fpInfo.GetSegmentPipeFilePath(contentID, helperIdx)
+		pipeName := fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...)
 		pipeName = fmt.Sprintf("%s_%s_%s", pipeName, oidWithBatch[0], oidWithBatch[1])
 		gplog.Debug("Creating pipe %s", pipeName)
 		return fmt.Sprintf("mkfifo %s", pipeName)
@@ -57,7 +57,11 @@ func CreateSegmentPipeOnAllHostsForRestore(oid string, c *cluster.Cluster, fpInf
 	})
 }
 
-func WriteOidListToSegments(oidList []string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, fileSuffix string) {
+func WriteOidListToSegments(oidList []string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) {
+	fileSuffix := "oid"
+	if len(helperIdx) == 1 {
+		fileSuffix += fmt.Sprintf("%d", helperIdx[0])
+	}
 	rsync_exists := CommandExists("rsync")
 	if !rsync_exists {
 		gplog.Fatal(errors.New("Failed to find rsync on PATH. Please ensure rsync is installed."), "")
@@ -362,12 +366,12 @@ func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo
 	return nil
 }
 
-func CreateSkipFileOnSegments(oid string, tableName string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx int) {
+func CreateSkipFileOnSegments(oid string, tableName string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) {
 	createSkipFileLogMsg := fmt.Sprintf("Creating skip file on segments for restore entry %s (%s)", oid, tableName)
 	remoteOutput := c.GenerateAndExecuteCommand(createSkipFileLogMsg, cluster.ON_SEGMENTS, func(contentID int) string {
-		return fmt.Sprintf("touch %s_skip_%s", fpInfo.GetSegmentPipeFilePath(contentID, helperIdx), oid)
+		return fmt.Sprintf("touch %s_skip_%s", fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...), oid)
 	})
 	c.CheckClusterError(remoteOutput, "Error while creating skip file on segments", func(contentID int) string {
-		return fmt.Sprintf("Could not create skip file %s_skip_%s on segments", fpInfo.GetSegmentPipeFilePath(contentID, helperIdx), oid)
+		return fmt.Sprintf("Could not create skip file %s_skip_%s on segments", fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...), oid)
 	})
 }
