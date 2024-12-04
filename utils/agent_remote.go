@@ -211,10 +211,10 @@ HEREDOC
 func findCommandStr(c *cluster.Cluster, fpInfo filepath.FilePathInfo, contentID int) string {
 	var cmdString string
 	if runtime.GOOS == "linux" {
-		cmdString = fmt.Sprintf(`find %s -regextype posix-extended -regex ".*gpbackup_%d_%s_(oid|script|oid_[[:digit:]]+|script_[[:digit:]]+|pipe)_%d.*"`,
+		cmdString = fmt.Sprintf(`find %s -regextype posix-extended -regex ".*gpbackup_%d_%s_(oid|script|pipe|oid_[[:digit:]]+|script_[[:digit:]]+)_%d.*"`,
 			c.GetDirForContent(contentID), contentID, fpInfo.Timestamp, fpInfo.PID)
 	} else if runtime.GOOS == "darwin" {
-		cmdString = fmt.Sprintf(`find -E %s -regex ".*gpbackup_%d_%s_(oid|script|oid_[[:digit:]]+|script_[[:digit:]]+|pipe)_%d.*"`,
+		cmdString = fmt.Sprintf(`find -E %s -regex ".*gpbackup_%d_%s_(oid|script|pipe|oid_[[:digit:]]+|script_[[:digit:]]+)_%d.*"`,
 			c.GetDirForContent(contentID), contentID, fpInfo.Timestamp, fpInfo.PID)
 	}
 	return cmdString
@@ -360,10 +360,10 @@ func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo
 	return nil
 }
 
-func CreateSkipFileOnSegments(oid string, tableName string, c *cluster.Cluster, fpInfo filepath.FilePathInfo) {
+func CreateSkipFileOnSegments(oid string, tableName string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, whichConn int) {
 	createSkipFileLogMsg := fmt.Sprintf("Creating skip file on segments for restore entry %s (%s)", oid, tableName)
 	remoteOutput := c.GenerateAndExecuteCommand(createSkipFileLogMsg, cluster.ON_SEGMENTS, func(contentID int) string {
-		return fmt.Sprintf("touch %s_skip_%s", fpInfo.GetSegmentPipeFilePath(contentID), oid)
+		return fmt.Sprintf("touch %s_%d_skip_%s", fpInfo.GetSegmentPipeFilePath(contentID), whichConn, oid)
 	})
 	c.CheckClusterError(remoteOutput, "Error while creating skip file on segments", func(contentID int) string {
 		return fmt.Sprintf("Could not create skip file %s_skip_%s on segments", fpInfo.GetSegmentPipeFilePath(contentID), oid)

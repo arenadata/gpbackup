@@ -120,7 +120,7 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 			if MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 				if connectionPool.Version.AtLeast("6") && (backupConfig.SingleDataFile || resizeCluster) {
 					// inform segment helpers to skip this entry
-					utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo)
+					utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo, whichConn)
 				}
 			}
 			return copyErr
