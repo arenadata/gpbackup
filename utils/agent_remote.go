@@ -145,7 +145,7 @@ func VerifyHelperVersionOnSegments(version string, c *cluster.Cluster) {
 	}
 }
 
-func StartGpbackupHelpers(c *cluster.Cluster, fpInfo filepath.FilePathInfo, operation string, pluginConfigFile string, compressStr string, onErrorContinue bool, isFilter bool, wasTerminated *bool, copyQueue int, isSingleDataFile bool, resizeCluster bool, origSize int, destSize int, verbosity int, helperIdx *int) {
+func StartGpbackupHelpers(c *cluster.Cluster, fpInfo filepath.FilePathInfo, operation string, pluginConfigFile string, compressStr string, onErrorContinue bool, isFilter bool, wasTerminated *bool, copyQueue int, isSingleDataFile bool, resizeCluster bool, origSize int, destSize int, verbosity int, helperIdx ...int) {
 	// A mutex lock for cleaning up and starting gpbackup helpers prevents a
 	// race condition that causes gpbackup_helpers to be orphaned if
 	// gpbackup_helper cleanup happens before they are started.
@@ -181,10 +181,10 @@ func StartGpbackupHelpers(c *cluster.Cluster, fpInfo filepath.FilePathInfo, oper
 	oid := "oid"
 	pipe := "pipe"
 	script := "script"
-	if helperIdx != nil {
-		oid = fmt.Sprintf("oid_%d", *helperIdx)
-		pipe = fmt.Sprintf("pipe_%d", *helperIdx)
-		script = fmt.Sprintf("script_%d", *helperIdx)
+	if len(helperIdx) == 1 {
+		oid = fmt.Sprintf("oid_%d", helperIdx[0])
+		pipe = fmt.Sprintf("pipe_%d", helperIdx[0])
+		script = fmt.Sprintf("script_%d", helperIdx[0])
 	}
 	remoteOutput := c.GenerateAndExecuteCommand("Starting gpbackup_helper agent", cluster.ON_SEGMENTS, func(contentID int) string {
 		tocFile := fpInfo.GetSegmentTOCFilePath(contentID)
