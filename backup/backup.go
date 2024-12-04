@@ -306,7 +306,7 @@ func backupData(tables []Table) {
 		for _, table := range tables {
 			oidList = append(oidList, fmt.Sprintf("%d", table.Oid))
 		}
-		utils.WriteOidListToSegments(oidList, globalCluster, globalFPInfo, "oid_0")
+		utils.WriteOidListToSegments(oidList, globalCluster, globalFPInfo, "oid")
 		compressStr := fmt.Sprintf(" --compression-level %d --compression-type %s", MustGetFlagInt(options.COMPRESSION_LEVEL), MustGetFlagString(options.COMPRESSION_TYPE))
 		if MustGetFlagBool(options.NO_COMPRESSION) {
 			compressStr = " --compression-level 0"
@@ -314,7 +314,7 @@ func backupData(tables []Table) {
 		initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, globalFPInfo)
 		// Do not pass through the --on-error-continue flag or the resizeClusterMap because neither apply to gpbackup
 		utils.StartGpbackupHelpers(globalCluster, globalFPInfo, "--backup-agent",
-			MustGetFlagString(options.PLUGIN_CONFIG), compressStr, false, false, &wasTerminated, initialPipes, true, false, 0, 0, gplog.GetVerbosity(), 0)
+			MustGetFlagString(options.PLUGIN_CONFIG), compressStr, false, false, &wasTerminated, initialPipes, true, false, 0, 0, gplog.GetVerbosity(), nil)
 	}
 	gplog.Info("Writing data to file")
 	rowsCopiedMaps := BackupDataForAllTables(tables)

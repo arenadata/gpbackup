@@ -49,7 +49,7 @@ var _ = Describe("agent remote", func() {
 	//			this file is not used throughout the unit tests below, and it is cleaned up with the method: `operating.System.Remove`
 	Describe("WriteOidListToSegments()", func() {
 		It("generates the correct rsync commands to copy oid file to segments", func() {
-			utils.WriteOidListToSegments(oidList, testCluster, fpInfo, "oid_0")
+			utils.WriteOidListToSegments(oidList, testCluster, fpInfo, "oid")
 
 			Expect(testExecutor.NumExecutions).To(Equal(1))
 			cc := testExecutor.ClusterCommands[0]
@@ -72,7 +72,7 @@ var _ = Describe("agent remote", func() {
 				},
 			}
 
-			Expect(func() { utils.WriteOidListToSegments(oidList, testCluster, fpInfo, "oid_0") }).To(Panic())
+			Expect(func() { utils.WriteOidListToSegments(oidList, testCluster, fpInfo, "oid") }).To(Panic())
 
 			Expect(testExecutor.NumExecutions).To(Equal(1))
 			Expect(string(logfile.Contents())).To(ContainSubstring(`[CRITICAL]:-Failed to rsync oid file on 1 segment. See gbytes.Buffer for a complete list of errors.`))
@@ -127,14 +127,14 @@ var _ = Describe("agent remote", func() {
 	Describe("StartGpbackupHelpers()", func() {
 		It("Correctly propagates --on-error-continue flag to gpbackup_helper", func() {
 			wasTerminated := false
-			utils.StartGpbackupHelpers(testCluster, fpInfo, "operation", "/tmp/pluginConfigFile.yml", " compressStr", true, false, &wasTerminated, 1, true, false, 0, 0, gplog.LOGINFO, 0)
+			utils.StartGpbackupHelpers(testCluster, fpInfo, "operation", "/tmp/pluginConfigFile.yml", " compressStr", true, false, &wasTerminated, 1, true, false, 0, 0, gplog.LOGINFO, nil)
 
 			cc := testExecutor.ClusterCommands[0]
 			Expect(cc[1].CommandString).To(ContainSubstring(" --on-error-continue"))
 		})
 		It("Correctly propagates --copy-queue-size value to gpbackup_helper", func() {
 			wasTerminated := false
-			utils.StartGpbackupHelpers(testCluster, fpInfo, "operation", "/tmp/pluginConfigFile.yml", " compressStr", false, false, &wasTerminated, 4, true, false, 0, 0, gplog.LOGINFO, 0)
+			utils.StartGpbackupHelpers(testCluster, fpInfo, "operation", "/tmp/pluginConfigFile.yml", " compressStr", false, false, &wasTerminated, 4, true, false, 0, 0, gplog.LOGINFO, nil)
 
 			cc := testExecutor.ClusterCommands[0]
 			Expect(cc[1].CommandString).To(ContainSubstring(" --copy-queue-size 4"))
@@ -142,7 +142,7 @@ var _ = Describe("agent remote", func() {
 		It("Correctly propagates verbosity", func() {
 			wasTerminated := false
 			verbosity := gplog.LOGDEBUG
-			utils.StartGpbackupHelpers(testCluster, fpInfo, "operation", "/tmp/pluginConfigFile.yml", " compressStr", false, false, &wasTerminated, 4, true, false, 0, 0, verbosity, 0)
+			utils.StartGpbackupHelpers(testCluster, fpInfo, "operation", "/tmp/pluginConfigFile.yml", " compressStr", false, false, &wasTerminated, 4, true, false, 0, 0, verbosity, nil)
 
 			cc := testExecutor.ClusterCommands[0]
 			Expect(cc[1].CommandString).To(ContainSubstring("--verbosity %d", gplog.LOGDEBUG))
