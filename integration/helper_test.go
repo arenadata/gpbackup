@@ -33,7 +33,7 @@ var (
 	restoreOidFile             = fmt.Sprintf("%s/restore_test_oids", testDir)
 	pipeFile                   = fmt.Sprintf("%s/test_pipe", testDir)
 	dataFileFullPath           = filepath.Join(testDir, "test_data")
-	errorFile                  = fmt.Sprintf("%s_error", pipeFile)
+	errorFile                  = strings.Replace(pipeFile, "pipe", "error", -1)
 )
 
 const (
