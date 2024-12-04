@@ -242,7 +242,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 				}
 			}
 
-			utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, fmt.Sprintf("oid_%d", helperIdx))
+			utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, fmt.Sprintf("oid%d", helperIdx))
 			initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo, helperIdx)
 			if wasTerminated {
 				return 0

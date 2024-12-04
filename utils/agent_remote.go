@@ -180,8 +180,8 @@ func StartGpbackupHelpers(c *cluster.Cluster, fpInfo filepath.FilePathInfo, oper
 	oid := "oid"
 	script := "script"
 	if len(helperIdx) == 1 {
-		oid = fmt.Sprintf("oid_%d", helperIdx[0])
-		script = fmt.Sprintf("script_%d", helperIdx[0])
+		oid += fmt.Sprintf("%d", helperIdx[0])
+		script += fmt.Sprintf("%d", helperIdx[0])
 	}
 	remoteOutput := c.GenerateAndExecuteCommand("Starting gpbackup_helper agent", cluster.ON_SEGMENTS, func(contentID int) string {
 		tocFile := fpInfo.GetSegmentTOCFilePath(contentID)
@@ -209,10 +209,10 @@ HEREDOC
 func findCommandStr(c *cluster.Cluster, fpInfo filepath.FilePathInfo, contentID int) string {
 	var cmdString string
 	if runtime.GOOS == "linux" {
-		cmdString = fmt.Sprintf(`find %s -regextype posix-extended -regex ".*gpbackup_%d_%s_(oid|script|pipe|oid_[[:digit:]]+|script_[[:digit:]]+|pipe_[[:digit:]]+)_%d.*"`,
+		cmdString = fmt.Sprintf(`find %s -regextype posix-extended -regex ".*gpbackup_%d_%s_(oid|script|pipe)_%d.*"`,
 			c.GetDirForContent(contentID), contentID, fpInfo.Timestamp, fpInfo.PID)
 	} else if runtime.GOOS == "darwin" {
-		cmdString = fmt.Sprintf(`find -E %s -regex ".*gpbackup_%d_%s_(oid|script|pipe|oid_[[:digit:]]+|script_[[:digit:]]+|pipe_[[:digit:]]+)_%d.*"`,
+		cmdString = fmt.Sprintf(`find -E %s -regex ".*gpbackup_%d_%s_(oid|script|pipe)_%d.*"`,
 			c.GetDirForContent(contentID), contentID, fpInfo.Timestamp, fpInfo.PID)
 	}
 	return cmdString

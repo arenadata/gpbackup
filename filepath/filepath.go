@@ -111,9 +111,9 @@ func (backupFPInfo *FilePathInfo) GetSegmentPipeFilePath(contentID int, helperId
 func (backupFPInfo *FilePathInfo) GetSegmentPipePathForCopyCommand(helperIdx ...int) string {
 	pipe := "pipe"
 	if len(helperIdx) == 1 {
-		pipe = fmt.Sprintf("pipe_%d", helperIdx[0])
+		pipe += fmt.Sprintf("%d", helperIdx[0])
 	}
-	return fmt.Sprintf("<SEG_DATA_DIR>/gpbackup_<SEGID>_%s_%s_%d", backupFPInfo.Timestamp, pipe, backupFPInfo.PID)
+	return fmt.Sprintf("<SEG_DATA_DIR>/gpbackup_<SEGID>_%s_%d_%s", backupFPInfo.Timestamp, backupFPInfo.PID, pipe)
 }
 
 func (backupFPInfo *FilePathInfo) GetTableBackupFilePath(contentID int, tableOid uint32, extension string, singleDataFile bool) string {
@@ -208,7 +208,7 @@ func (backupFPInfo *FilePathInfo) GetPluginConfigPath() string {
 }
 
 func (backupFPInfo *FilePathInfo) GetSegmentHelperFilePath(contentID int, suffix string) string {
-	return path.Join(backupFPInfo.SegDirMap[contentID], fmt.Sprintf("gpbackup_%d_%s_%s_%d", contentID, backupFPInfo.Timestamp, suffix, backupFPInfo.PID))
+	return path.Join(backupFPInfo.SegDirMap[contentID], fmt.Sprintf("gpbackup_%d_%s_%d_%s", contentID, backupFPInfo.Timestamp, backupFPInfo.PID, suffix))
 }
 
 func (backupFPInfo *FilePathInfo) GetHelperLogPath() string {
