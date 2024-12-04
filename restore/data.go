@@ -40,12 +40,7 @@ func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, ta
 	if singleDataFile || resizeCluster {
 		//helper.go handles compression, so we don't want to set it here
 		customPipeThroughCommand = utils.DefaultPipeThroughProgram
-		var helperIdx []int
-		if !singleDataFile {
-			helperIdx = make([]int, 1)
-			helperIdx[0] = whichConn
-		}
-		errorFile := strings.Replace(globalFPInfo.GetSegmentPipePathForCopyCommand(helperIdx...), "pipe", "error", -1)
+		errorFile := strings.Replace(globalFPInfo.GetSegmentPipePathForCopyCommand(HelperIdx(whichConn)...), "pipe", "error", -1)
 		readFromDestinationCommand = fmt.Sprintf("(timeout --foreground 300 bash -c \"while [[ ! -p \"%s\" && ! -f \"%s\" ]]; do sleep 1; done\" || (echo \"Pipe not found %s\">&2; exit 1)) && %s", destinationToRead, errorFile, destinationToRead, readFromDestinationCommand)
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		readFromDestinationCommand = fmt.Sprintf("%s restore_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
@@ -94,12 +89,7 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 	for i := 0; i < batches; i++ {
 		destinationToRead := ""
 		if backupConfig.SingleDataFile || resizeCluster {
-			var helperIdx []int
-			if !backupConfig.SingleDataFile {
-				helperIdx = make([]int, 1)
-				helperIdx[0] = whichConn
-			}
-			destinationToRead = fmt.Sprintf("%s_%d_%d", fpInfo.GetSegmentPipePathForCopyCommand(helperIdx...), entry.Oid, i)
+			destinationToRead = fmt.Sprintf("%s_%d_%d", fpInfo.GetSegmentPipePathForCopyCommand(HelperIdx(whichConn)...), entry.Oid, i)
 		} else {
 			destinationToRead = fpInfo.GetTableBackupFilePathForCopyCommand(entry.Oid, utils.GetPipeThroughProgram().Extension, backupConfig.SingleDataFile)
 		}
@@ -117,12 +107,7 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 		// will hang indefinitely waiting to read from pipes that the helper
 		// was expected to set up
 		if backupConfig.SingleDataFile || resizeCluster {
-			var helperIdx []int
-			if !backupConfig.SingleDataFile {
-				helperIdx = make([]int, 1)
-				helperIdx[0] = whichConn
-			}
-			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo, helperIdx...)
+			agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo, HelperIdx(whichConn)...)
 			if agentErr != nil {
 				gplog.Error(agentErr.Error())
 				return agentErr
@@ -136,12 +121,7 @@ func restoreSingleTableData(queryContext context.Context, fpInfo *filepath.FileP
 			if MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 				if connectionPool.Version.AtLeast("6") && (backupConfig.SingleDataFile || resizeCluster) {
 					// inform segment helpers to skip this entry
-					var helperIdx []int
-					if !backupConfig.SingleDataFile {
-						helperIdx = make([]int, 1)
-						helperIdx[0] = whichConn
-					}
-					utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo, helperIdx...)
+					utils.CreateSkipFileOnSegments(fmt.Sprintf("%d", entry.Oid), tableName, globalCluster, globalFPInfo, HelperIdx(whichConn)...)
 				}
 			}
 			return copyErr
@@ -263,11 +243,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 				}
 			}
 
-			var helperIdx []int
-			if !backupConfig.SingleDataFile {
-				helperIdx = make([]int, 1)
-				helperIdx[0] = whichConn
-			}
+			helperIdx := HelperIdx(whichConn)
 			utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, helperIdx...)
 			initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo, helperIdx...)
 			if wasTerminated {
@@ -388,4 +364,13 @@ func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionP
 		utils.CreateSegmentPipeOnAllHostsForRestore(oidList[i], c, fpInfo, helperIdx...)
 	}
 	return maxPipes
+}
+
+func HelperIdx(whichConn int) []int {
+	var helperIdx []int
+	if !backupConfig.SingleDataFile {
+		helperIdx = make([]int, 1)
+		helperIdx[0] = whichConn
+	}
+	return helperIdx
 }
