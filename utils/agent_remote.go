@@ -336,10 +336,10 @@ func CleanUpSegmentHelperProcesses(c *cluster.Cluster, fpInfo filepath.FilePathI
 	}
 }
 
-func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx *int) error {
+func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) error {
 	pipe := "pipe"
-	if helperIdx != nil {
-		pipe = fmt.Sprintf("pipe_%d", *helperIdx)
+	if len(helperIdx) == 1 {
+		pipe = fmt.Sprintf("pipe_%d", helperIdx[0])
 	}
 	remoteOutput := c.GenerateAndExecuteCommand("Checking whether segment agents had errors", cluster.ON_SEGMENTS, func(contentID int) string {
 		errorFile := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID, pipe))

@@ -492,7 +492,7 @@ func DoCleanup(backupFailed bool) {
 
 		// Check gpbackup_helper errors here if backup was terminated
 		if wasTerminated {
-			err := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo, nil)
+			err := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
 			if err != nil {
 				gplog.Error(err.Error())
 			}
