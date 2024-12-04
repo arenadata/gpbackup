@@ -690,7 +690,7 @@ func setupRestoreWithSkipFiles(oid int, withPlugin bool) []string {
 	createCustomTOCFile(tocFile, dataLength)
 	ret = append(ret, tocFile)
 
-	skipFile := fmt.Sprintf("%s_skip_%d", pipeFile, 1)
+	skipFile := strings.Replace(pipeFile, "pipe", "skip", -1) + "_1"
 	err = exec.Command("touch", skipFile).Run()
 	Expect(err).ToNot(HaveOccurred())
 

@@ -317,7 +317,7 @@ func DoCleanup() {
 		}
 	}
 
-	skipFiles, _ := filepath.Glob(fmt.Sprintf("%s_skip_*", *pipeFile))
+	skipFiles, _ := filepath.Glob(strings.Replace(*pipeFile, "pipe", "skip", -1) + "*")
 	for _, skipFile := range skipFiles {
 		err = utils.RemoveFileIfExists(skipFile)
 		if err != nil {
