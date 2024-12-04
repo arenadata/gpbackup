@@ -204,10 +204,10 @@ HEREDOC
 func findCommandStr(c *cluster.Cluster, fpInfo filepath.FilePathInfo, contentID int) string {
 	var cmdString string
 	if runtime.GOOS == "linux" {
-		cmdString = fmt.Sprintf(`find %s -regextype posix-extended -regex ".*gpbackup_%d_%s_%d_(oid|script|pipe).*"`,
+		cmdString = fmt.Sprintf(`find %s -regextype posix-extended -regex ".*gpbackup_%d_%s_%d_(oid|script|pipe|skip).*"`,
 			c.GetDirForContent(contentID), contentID, fpInfo.Timestamp, fpInfo.PID)
 	} else if runtime.GOOS == "darwin" {
-		cmdString = fmt.Sprintf(`find -E %s -regex ".*gpbackup_%d_%s_%d_(oid|script|pipe).*"`,
+		cmdString = fmt.Sprintf(`find -E %s -regex ".*gpbackup_%d_%s_%d_(oid|script|pipe|skip).*"`,
 			c.GetDirForContent(contentID), contentID, fpInfo.Timestamp, fpInfo.PID)
 	}
 	return cmdString
@@ -357,12 +357,12 @@ func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo
 	return nil
 }
 
-func CreateSkipFileOnSegments(oid string, tableName string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) {
-	createSkipFileLogMsg := fmt.Sprintf("Creating skip file on segments for restore entry %s (%s)", oid, tableName)
+func CreateSkipFileOnSegments(oid uint32, tableName string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) {
+	createSkipFileLogMsg := fmt.Sprintf("Creating skip file on segments for restore entry %d (%s)", oid, tableName)
 	remoteOutput := c.GenerateAndExecuteCommand(createSkipFileLogMsg, cluster.ON_SEGMENTS, func(contentID int) string {
-		return fmt.Sprintf("touch %s_skip_%s", fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...), oid)
+		return fmt.Sprintf("touch %s_%d", strings.Replace(fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...), "pipe", "skip", -1), oid)
 	})
 	c.CheckClusterError(remoteOutput, "Error while creating skip file on segments", func(contentID int) string {
-		return fmt.Sprintf("Could not create skip file %s_skip_%s on segments", fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...), oid)
+		return fmt.Sprintf("Could not create skip file %s_%d on segments", strings.Replace(fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...), "pipe", "skip", -1), oid)
 	})
 }
