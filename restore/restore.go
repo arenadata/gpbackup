@@ -741,8 +741,8 @@ func DoCleanup(restoreFailed bool) {
 
 			// Check gpbackup_helper errors here if restore was terminated
 			if wasTerminated {
-				for i := 0; i < connectionPool.NumConns; i++ {
-					err := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo, i)
+				for helperIdx := 0; helperIdx < connectionPool.NumConns; helperIdx++ {
+					err := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo, helperIdx)
 					if err != nil {
 						gplog.Error(err.Error())
 					}
