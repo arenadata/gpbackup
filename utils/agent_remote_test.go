@@ -54,8 +54,8 @@ var _ = Describe("agent remote", func() {
 			Expect(testExecutor.NumExecutions).To(Equal(1))
 			cc := testExecutor.ClusterCommands[0]
 			Expect(len(cc)).To(Equal(2))
-			Expect(cc[0].CommandString).To(MatchRegexp("rsync -e ssh .*/gpbackup-oids.* localhost:/data/gpseg0/gpbackup_0_11112233445566_oid_.*"))
-			Expect(cc[1].CommandString).To(MatchRegexp("rsync -e ssh .*/gpbackup-oids.* remotehost1:/data/gpseg1/gpbackup_1_11112233445566_oid_.*"))
+			Expect(cc[0].CommandString).To(MatchRegexp("rsync -e ssh .*/gpbackup-oids.* localhost:/data/gpseg0/gpbackup_0_11112233445566_\\d+_oid"))
+			Expect(cc[1].CommandString).To(MatchRegexp("rsync -e ssh .*/gpbackup-oids.* remotehost1:/data/gpseg1/gpbackup_1_11112233445566_\\d+_oid"))
 		})
 		It("panics if any rsync commands fail and outputs correct err messages", func() {
 			testExecutor.ErrorOnExecNum = 1
