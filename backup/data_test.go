@@ -176,7 +176,7 @@ var _ = Describe("backup/data tests", func() {
 		It("backs up a single regular table with single data file", func() {
 			_ = cmdFlags.Set(options.SINGLE_DATA_FILE, "true")
 
-			backupFile := fmt.Sprintf("<SEG_DATA_DIR>/gpbackup_<SEGID>_20170101010101_pipe_(.*)_%d", testTable.Oid)
+			backupFile := fmt.Sprintf("<SEG_DATA_DIR>/gpbackup_<SEGID>_20170101010101_(.*)_pipe_%d", testTable.Oid)
 			copyCmd := fmt.Sprintf(copyFmtStr, backupFile)
 			mock.ExpectExec(copyCmd).WillReturnResult(sqlmock.NewResult(0, 10))
 			err := backup.BackupSingleTableData(context.Background(), testTable, rowsCopiedMap, &counters, 0)
