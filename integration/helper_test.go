@@ -195,7 +195,7 @@ options:
 			setupRestoreFiles("", false)
 			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath)
 			for _, i := range []int{1, 3} {
-				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
+				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_0_%d_0", pipeFile, i))
 				Expect(string(contents)).To(Equal("here is some data\n"))
 			}
 			err := helperCmd.Wait()
@@ -207,7 +207,7 @@ options:
 			setupRestoreFiles("gzip", false)
 			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath+".gz")
 			for _, i := range []int{1, 3} {
-				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
+				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_0_%d_0", pipeFile, i))
 				Expect(string(contents)).To(Equal("here is some data\n"))
 			}
 			err := helperCmd.Wait()
@@ -219,7 +219,7 @@ options:
 			setupRestoreFiles("zstd", false)
 			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath+".zst")
 			for _, i := range []int{1, 3} {
-				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
+				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_0_%d_0", pipeFile, i))
 				Expect(string(contents)).To(Equal("here is some data\n"))
 			}
 			err := helperCmd.Wait()
@@ -231,7 +231,7 @@ options:
 			setupRestoreFiles("", true)
 			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath, "--plugin-config", examplePluginTestConfig)
 			for _, i := range []int{1, 3} {
-				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
+				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_0_%d_0", pipeFile, i))
 				Expect(string(contents)).To(Equal("here is some data\n"))
 			}
 			err := helperCmd.Wait()
@@ -243,7 +243,7 @@ options:
 			setupRestoreFiles("gzip", true)
 			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath+".gz", "--plugin-config", examplePluginTestConfig)
 			for _, i := range []int{1, 3} {
-				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
+				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_0_%d_0", pipeFile, i))
 				Expect(string(contents)).To(Equal("here is some data\n"))
 			}
 			err := helperCmd.Wait()
@@ -255,7 +255,7 @@ options:
 			setupRestoreFiles("zstd", true)
 			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath+".zst", "--plugin-config", examplePluginTestConfig)
 			for _, i := range []int{1, 3} {
-				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
+				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_0_%d_0", pipeFile, i))
 				Expect(string(contents)).To(Equal("here is some data\n"))
 			}
 			err := helperCmd.Wait()
@@ -289,7 +289,7 @@ options:
 			Expect(err).ToNot(HaveOccurred())
 
 			for _, i := range []int{1, 3} {
-				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
+				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_0_%d_0", pipeFile, i))
 				Expect(string(contents)).To(Equal("here is some data\n"))
 			}
 
@@ -334,7 +334,7 @@ options:
 			Expect(err).ToNot(HaveOccurred())
 
 			for _, i := range []int{1, 3} {
-				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, i))
+				contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_0_%d_0", pipeFile, i))
 				Expect(string(contents)).To(Equal("here is some data\n"))
 			}
 
@@ -372,7 +372,7 @@ options:
 			err = helperCmd.Start()
 			Expect(err).ToNot(HaveOccurred())
 
-			contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, 1))
+			contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_0_%d_0", pipeFile, 1))
 			// Empty output
 			Expect(contents).To(Equal([]byte{}))
 
@@ -411,7 +411,7 @@ options:
 			err = helperCmd.Start()
 			Expect(err).ToNot(HaveOccurred())
 
-			contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_%d_0", pipeFile, 1))
+			contents, _ := ioutil.ReadFile(fmt.Sprintf("%s_0_%d_0", pipeFile, 1))
 			// Empty output
 			Expect(contents).To(Equal([]byte{}))
 
@@ -460,7 +460,7 @@ options:
 				err = helperCmd.Wait()
 				Expect(err).ToNot(HaveOccurred())
 				for _, i := range []int{1, 2, 3} {
-					currentPipe := fmt.Sprintf("%s_%d_0", pipeFile, i)
+					currentPipe := fmt.Sprintf("%s_0_%d_0", pipeFile, i)
 					Expect(currentPipe).ToNot(BeAnExistingFile())
 				}
 
@@ -511,7 +511,7 @@ options:
 				_ = os.Remove(restoreOidFile)
 			}()
 
-			err := unix.Mkfifo(fmt.Sprintf("%s_%d_0", pipeFile, 1), 0700)
+			err := unix.Mkfifo(fmt.Sprintf("%s_0_%d_0", pipeFile, 1), 0700)
 			if err != nil {
 				Fail(fmt.Sprintf("%v", err))
 			}
@@ -537,7 +537,7 @@ options:
 			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath+".gz", "--on-error-continue")
 
 			for k, v := range []int{1, 2, 3} {
-				currentPipe := fmt.Sprintf("%s_%d_0", pipeFile, v)
+				currentPipe := fmt.Sprintf("%s_0_%d_0", pipeFile, v)
 
 				if k == 1 {
 					// Do not read from the pipe to cause data load error on the helper by interrupting the write.
@@ -555,7 +555,7 @@ options:
 			// Block here until gpbackup_helper finishes (cleaning up pipes)
 			_ = helperCmd.Wait()
 			for _, i := range []int{1, 2, 3} {
-				currentPipe := fmt.Sprintf("%s_%d_0", pipeFile, i)
+				currentPipe := fmt.Sprintf("%s_0_%d_0", pipeFile, i)
 				Expect(currentPipe).ToNot(BeAnExistingFile())
 			}
 
@@ -574,7 +574,7 @@ func setupRestoreFiles(compressionType string, withPlugin bool) {
 	f, _ := os.Create(restoreOidFile)
 	_, _ = f.WriteString("1,0\n3,0\n")
 
-	err := unix.Mkfifo(fmt.Sprintf("%s_%d_0", pipeFile, 1), 0700)
+	err := unix.Mkfifo(fmt.Sprintf("%s_0_%d_0", pipeFile, 1), 0700)
 	if err != nil {
 		Fail(fmt.Sprintf("%v", err))
 	}
@@ -681,7 +681,7 @@ func setupRestoreWithSkipFiles(oid int, withPlugin bool) []string {
 	createOidFile(restoreOidFile, "1,0\n1,1\n1,2\n")
 	ret = append(ret, restoreOidFile)
 
-	pipename := fmt.Sprintf("%s_%d_0", pipeFile, 1)
+	pipename := fmt.Sprintf("%s_0_%d_0", pipeFile, 1)
 	err := unix.Mkfifo(pipename, 0700)
 	if err != nil {
 		Fail(fmt.Sprintf("%v", err))
