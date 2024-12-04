@@ -58,10 +58,7 @@ func CreateSegmentPipeOnAllHostsForRestore(oid string, c *cluster.Cluster, fpInf
 }
 
 func WriteOidListToSegments(oidList []string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) {
-	fileSuffix := "oid"
-	if len(helperIdx) == 1 {
-		fileSuffix += fmt.Sprintf("%d", helperIdx[0])
-	}
+	fileSuffix := filepath.FormatSuffix("oid", helperIdx...)
 	rsync_exists := CommandExists("rsync")
 	if !rsync_exists {
 		gplog.Fatal(errors.New("Failed to find rsync on PATH. Please ensure rsync is installed."), "")
@@ -181,16 +178,10 @@ func StartGpbackupHelpers(c *cluster.Cluster, fpInfo filepath.FilePathInfo, oper
 	if resizeCluster {
 		resizeStr = fmt.Sprintf(" --resize-cluster --orig-seg-count %d --dest-seg-count %d", origSize, destSize)
 	}
-	oid := "oid"
-	script := "script"
-	if len(helperIdx) == 1 {
-		oid += fmt.Sprintf("%d", helperIdx[0])
-		script += fmt.Sprintf("%d", helperIdx[0])
-	}
 	remoteOutput := c.GenerateAndExecuteCommand("Starting gpbackup_helper agent", cluster.ON_SEGMENTS, func(contentID int) string {
 		tocFile := fpInfo.GetSegmentTOCFilePath(contentID)
-		oidFile := fpInfo.GetSegmentHelperFilePath(contentID, oid)
-		scriptFile := fpInfo.GetSegmentHelperFilePath(contentID, script)
+		oidFile := fpInfo.GetSegmentHelperFilePath(contentID, filepath.FormatSuffix("oid", helperIdx...))
+		scriptFile := fpInfo.GetSegmentHelperFilePath(contentID, filepath.FormatSuffix("script", helperIdx...))
 		pipeFile := fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...)
 		backupFile := fpInfo.GetTableBackupFilePath(contentID, 0, GetPipeThroughProgram().Extension, true)
 		helperCmdStr := fmt.Sprintf(`gpbackup_helper %s --toc-file %s --oid-file %s --pipe-file %s --data-file "%s" --content %d%s%s%s%s%s%s --copy-queue-size %d --verbosity %d`,
