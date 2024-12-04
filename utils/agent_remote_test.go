@@ -155,11 +155,11 @@ var _ = Describe("agent remote", func() {
 
 			cc := testExecutor.ClusterCommands[0]
 			errorFile0 := fmt.Sprintf(`/data/gpseg0/gpbackup_0_11112233445566_%d_error`, fpInfo.PID)
-			expectedCmd0 := fmt.Sprintf(`if [[ -f %[1]s ]]; then echo 'error'; fi; rm -f %[1]s`, errorFile0)
+			expectedCmd0 := fmt.Sprintf(`if ls %[1]s* >/dev/null 2>/dev/null; then echo 'error'; fi; rm -f %[1]s*`, errorFile0)
 			Expect(cc[0].CommandString).To(ContainSubstring(expectedCmd0))
 
 			errorFile1 := fmt.Sprintf(`/data/gpseg1/gpbackup_1_11112233445566_%d_error`, fpInfo.PID)
-			expectedCmd1 := fmt.Sprintf(`if [[ -f %[1]s ]]; then echo 'error'; fi; rm -f %[1]s`, errorFile1)
+			expectedCmd1 := fmt.Sprintf(`if ls %[1]s* >/dev/null 2>/dev/null; then echo 'error'; fi; rm -f %[1]s*`, errorFile1)
 			Expect(cc[1].CommandString).To(ContainSubstring(expectedCmd1))
 		})
 
