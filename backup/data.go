@@ -371,7 +371,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 
 	// Main goroutine waits for deferred worker 0 by waiting on this channel
 	<-deferredWorkerDone
-	agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
+	agentErr := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo, nil)
 	if agentErr != nil {
 		gplog.Fatal(agentErr, "")
 	}

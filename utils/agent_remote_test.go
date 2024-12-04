@@ -150,7 +150,7 @@ var _ = Describe("agent remote", func() {
 	})
 	Describe("CheckAgentErrorsOnSegments", func() {
 		It("constructs the correct ssh call to check for the existance of an error file on each segment", func() {
-			err := utils.CheckAgentErrorsOnSegments(testCluster, fpInfo)
+			err := utils.CheckAgentErrorsOnSegments(testCluster, fpInfo, nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			cc := testExecutor.ClusterCommands[0]

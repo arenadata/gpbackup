@@ -335,9 +335,13 @@ func CleanUpSegmentHelperProcesses(c *cluster.Cluster, fpInfo filepath.FilePathI
 	}
 }
 
-func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo) error {
+func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx *int) error {
+	suffix := "error"
+	if helperIdx != nil {
+		suffix = fmt.Sprintf("%d_error", *helperIdx)
+	}
 	remoteOutput := c.GenerateAndExecuteCommand("Checking whether segment agents had errors", cluster.ON_SEGMENTS, func(contentID int) string {
-		errorFile := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID))
+		errorFile := fmt.Sprintf("%s_%s", fpInfo.GetSegmentPipeFilePath(contentID), suffix)
 		/*
 		 * If an error file exists we want to indicate an error, as that means
 		 * the agent errored out.  If no file exists, the agent was successful.
