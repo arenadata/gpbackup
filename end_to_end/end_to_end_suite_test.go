@@ -289,10 +289,10 @@ func assertArtifactsCleaned(timestamp string) {
 	fpInfo := filepath.NewFilePathInfo(backupCluster, "", timestamp, "", false)
 	description := "Checking if helper files are cleaned up properly"
 	cleanupFunc := func(contentID int) string {
-		errorFile := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID))
+		errorFile := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID, "pipe"))
 		oidFile := fpInfo.GetSegmentHelperFilePath(contentID, "oid")
 		scriptFile := fpInfo.GetSegmentHelperFilePath(contentID, "script")
-		pipeFile := fpInfo.GetSegmentPipeFilePath(contentID)
+		pipeFile := fpInfo.GetSegmentPipeFilePath(contentID, "pipe")
 
 		return fmt.Sprintf("! ls %s* && ! ls %s* && ! ls %s* && ! ls %s*", errorFile, oidFile, scriptFile, pipeFile)
 	}

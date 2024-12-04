@@ -42,7 +42,7 @@ var _ = Describe("utils integration", func() {
 		Expect(err).To(Not(HaveOccurred()))
 		defer os.Remove(testPipe)
 		go func() {
-			copyFileName := fpInfo.GetSegmentPipePathForCopyCommand()
+			copyFileName := fpInfo.GetSegmentPipePathForCopyCommand("pipe")
 			// COPY will blcok because there is no reader for the testPipe
 			_, _ = conn.Exec(fmt.Sprintf("COPY public.foo TO PROGRAM 'echo %s > /dev/null; cat - > %s' WITH CSV DELIMITER ','", copyFileName, testPipe))
 		}()
@@ -50,7 +50,7 @@ var _ = Describe("utils integration", func() {
 		query := `SELECT count(*) FROM pg_stat_activity WHERE application_name = 'hangingApplication'`
 		Eventually(func() string { return dbconn.MustSelectString(connectionPool, query) }, 5*time.Second, 100*time.Millisecond).Should(Equal("1"))
 
-		utils.TerminateHangingCopySessions(fpInfo, "hangingApplication", 30 * time.Second, 1 * time.Second)
+		utils.TerminateHangingCopySessions(fpInfo, "hangingApplication", 30*time.Second, 1*time.Second)
 
 		Eventually(func() string { return dbconn.MustSelectString(connectionPool, query) }, 5*time.Second, 100*time.Millisecond).Should(Equal("0"))
 

@@ -414,7 +414,7 @@ func (plugin *PluginConfig) BackupSegmentTOCs(c *cluster.Cluster, fpInfo filepat
 		cluster.ON_SEGMENTS,
 		func(contentID int) string {
 			tocFile := fpInfo.GetSegmentTOCFilePath(contentID)
-			errorFile := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID))
+			errorFile := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID, "pipe"))
 			command = fmt.Sprintf(`while [[ ! -f "%s" && ! -f "%s" ]]; do sleep 1; done; ls "%s"`, tocFile, errorFile, tocFile)
 			return command
 		})
