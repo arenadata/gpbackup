@@ -299,10 +299,13 @@ func DoCleanup() {
 		logVerbose("Encountered error during cleanup: %v", err)
 	}
 
-	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
-	if *restoreAgent {
-		pipeFiles, _ = filepath.Glob(fmt.Sprintf("%s_%d_[0-9]*", *pipeFile, *index))
+	var pattern string
+	if *backupAgent {
+		pattern = fmt.Sprintf("%s_[0-9]*", *pipeFile)
+	} else if *restoreAgent {
+		pattern = fmt.Sprintf("%s_%d_[0-9]*", *pipeFile, *index)
 	}
+	pipeFiles, _ := filepath.Glob(pattern)
 	for _, pipeName := range pipeFiles {
 		if !wasSigpiped.Load() {
 			/*
