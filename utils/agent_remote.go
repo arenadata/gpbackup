@@ -209,10 +209,10 @@ HEREDOC
 func findCommandStr(c *cluster.Cluster, fpInfo filepath.FilePathInfo, contentID int) string {
 	var cmdString string
 	if runtime.GOOS == "linux" {
-		cmdString = fmt.Sprintf(`find %s -regextype posix-extended -regex ".*gpbackup_%d_%s_%d_(oid|script|pipe|error).*"`,
+		cmdString = fmt.Sprintf(`find %s -regextype posix-extended -regex ".*gpbackup_%d_%s_%d_(oid|script|pipe).*"`,
 			c.GetDirForContent(contentID), contentID, fpInfo.Timestamp, fpInfo.PID)
 	} else if runtime.GOOS == "darwin" {
-		cmdString = fmt.Sprintf(`find -E %s -regex ".*gpbackup_%d_%s_%d_(oid|script|pipe|error).*"`,
+		cmdString = fmt.Sprintf(`find -E %s -regex ".*gpbackup_%d_%s_%d_(oid|script|pipe).*"`,
 			c.GetDirForContent(contentID), contentID, fpInfo.Timestamp, fpInfo.PID)
 	}
 	return cmdString
@@ -336,12 +336,15 @@ func CleanUpSegmentHelperProcesses(c *cluster.Cluster, fpInfo filepath.FilePathI
 func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) error {
 	remoteOutput := c.GenerateAndExecuteCommand("Checking whether segment agents had errors", cluster.ON_SEGMENTS, func(contentID int) string {
 		errorFile := strings.Replace(fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...), "pipe", "error", -1)
+		if len(helperIdx) == 0 {
+			errorFile += "*"
+		}
 
 		/*
 		 * If an error file exists we want to indicate an error, as that means
 		 * the agent errored out.  If no file exists, the agent was successful.
 		 */
-		return fmt.Sprintf("if [[ -f %s ]]; then echo 'error'; fi; rm -f %s", errorFile, errorFile)
+		return fmt.Sprintf("if ls %[1]s >/dev/null 2>/dev/null; then echo 'error'; fi; rm -f %[1]s", errorFile)
 	})
 
 	numErrors := 0
