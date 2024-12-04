@@ -103,13 +103,17 @@ func (backupFPInfo *FilePathInfo) replaceCopyFormatStringsInPath(templateFilePat
 	return strings.Replace(filePath, "<SEGID>", strconv.Itoa(contentID), -1)
 }
 
-func (backupFPInfo *FilePathInfo) GetSegmentPipeFilePath(contentID int, suffix string) string {
-	templateFilePath := backupFPInfo.GetSegmentPipePathForCopyCommand(suffix)
+func (backupFPInfo *FilePathInfo) GetSegmentPipeFilePath(contentID int, helperIdx ...int) string {
+	templateFilePath := backupFPInfo.GetSegmentPipePathForCopyCommand(helperIdx...)
 	return backupFPInfo.replaceCopyFormatStringsInPath(templateFilePath, contentID)
 }
 
-func (backupFPInfo *FilePathInfo) GetSegmentPipePathForCopyCommand(suffix string) string {
-	return fmt.Sprintf("<SEG_DATA_DIR>/gpbackup_<SEGID>_%s_%s_%d", backupFPInfo.Timestamp, suffix, backupFPInfo.PID)
+func (backupFPInfo *FilePathInfo) GetSegmentPipePathForCopyCommand(helperIdx ...int) string {
+	pipe := "pipe"
+	if len(helperIdx) == 1 {
+		pipe = fmt.Sprintf("pipe_%d", helperIdx[0])
+	}
+	return fmt.Sprintf("<SEG_DATA_DIR>/gpbackup_<SEGID>_%s_%s_%d", backupFPInfo.Timestamp, pipe, backupFPInfo.PID)
 }
 
 func (backupFPInfo *FilePathInfo) GetTableBackupFilePath(contentID int, tableOid uint32, extension string, singleDataFile bool) string {

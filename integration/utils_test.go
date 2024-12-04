@@ -42,7 +42,7 @@ var _ = Describe("utils integration", func() {
 		Expect(err).To(Not(HaveOccurred()))
 		defer os.Remove(testPipe)
 		go func() {
-			copyFileName := fpInfo.GetSegmentPipePathForCopyCommand("pipe")
+			copyFileName := fpInfo.GetSegmentPipePathForCopyCommand()
 			// COPY will blcok because there is no reader for the testPipe
 			_, _ = conn.Exec(fmt.Sprintf("COPY public.foo TO PROGRAM 'echo %s > /dev/null; cat - > %s' WITH CSV DELIMITER ','", copyFileName, testPipe))
 		}()

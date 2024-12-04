@@ -191,7 +191,7 @@ func TerminateHangingCopySessions(fpInfo filepath.FilePathInfo, appName string, 
 		queryCol = "query"
 	}
 
-	copyFileName := fpInfo.GetSegmentPipePathForCopyCommand("pipe")
+	copyFileName := fpInfo.GetSegmentPipePathForCopyCommand()
 	fromClause := fmt.Sprintf(`FROM pg_stat_activity
 	WHERE application_name = '%s'
 	AND %s LIKE '%%%s%%'

@@ -34,7 +34,7 @@ var AgentErr = errors.New("agent error")
  */
 func CreateSegmentPipeOnAllHostsForBackup(oid string, c *cluster.Cluster, fpInfo filepath.FilePathInfo) {
 	remoteOutput := c.GenerateAndExecuteCommand("Creating segment data pipes", cluster.ON_SEGMENTS, func(contentID int) string {
-		pipeName := fpInfo.GetSegmentPipeFilePath(contentID, "pipe")
+		pipeName := fpInfo.GetSegmentPipeFilePath(contentID)
 		pipeName = fmt.Sprintf("%s_%s", pipeName, oid)
 		gplog.Debug("Creating pipe %s", pipeName)
 		return fmt.Sprintf("mkfifo -m 0700 %s", pipeName)
@@ -46,9 +46,8 @@ func CreateSegmentPipeOnAllHostsForBackup(oid string, c *cluster.Cluster, fpInfo
 
 func CreateSegmentPipeOnAllHostsForRestore(oid string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx int) {
 	oidWithBatch := strings.Split(oid, ",")
-	suffix := fmt.Sprintf("pipe_%d", helperIdx)
 	remoteOutput := c.GenerateAndExecuteCommand("Creating segment data pipes", cluster.ON_SEGMENTS, func(contentID int) string {
-		pipeName := fpInfo.GetSegmentPipeFilePath(contentID, suffix)
+		pipeName := fpInfo.GetSegmentPipeFilePath(contentID, helperIdx)
 		pipeName = fmt.Sprintf("%s_%s_%s", pipeName, oidWithBatch[0], oidWithBatch[1])
 		gplog.Debug("Creating pipe %s", pipeName)
 		return fmt.Sprintf("mkfifo %s", pipeName)
@@ -179,18 +178,16 @@ func StartGpbackupHelpers(c *cluster.Cluster, fpInfo filepath.FilePathInfo, oper
 		resizeStr = fmt.Sprintf(" --resize-cluster --orig-seg-count %d --dest-seg-count %d", origSize, destSize)
 	}
 	oid := "oid"
-	pipe := "pipe"
 	script := "script"
 	if len(helperIdx) == 1 {
 		oid = fmt.Sprintf("oid_%d", helperIdx[0])
-		pipe = fmt.Sprintf("pipe_%d", helperIdx[0])
 		script = fmt.Sprintf("script_%d", helperIdx[0])
 	}
 	remoteOutput := c.GenerateAndExecuteCommand("Starting gpbackup_helper agent", cluster.ON_SEGMENTS, func(contentID int) string {
 		tocFile := fpInfo.GetSegmentTOCFilePath(contentID)
 		oidFile := fpInfo.GetSegmentHelperFilePath(contentID, oid)
 		scriptFile := fpInfo.GetSegmentHelperFilePath(contentID, script)
-		pipeFile := fpInfo.GetSegmentPipeFilePath(contentID, pipe)
+		pipeFile := fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...)
 		backupFile := fpInfo.GetTableBackupFilePath(contentID, 0, GetPipeThroughProgram().Extension, true)
 		helperCmdStr := fmt.Sprintf(`gpbackup_helper %s --toc-file %s --oid-file %s --pipe-file %s --data-file "%s" --content %d%s%s%s%s%s%s --copy-queue-size %d --verbosity %d`,
 			operation, tocFile, oidFile, pipeFile, backupFile, contentID, pluginStr, compressStr, onErrorContinueStr, filterStr, singleDataFileStr, resizeStr, copyQueue, verbosity)
@@ -337,12 +334,8 @@ func CleanUpSegmentHelperProcesses(c *cluster.Cluster, fpInfo filepath.FilePathI
 }
 
 func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) error {
-	pipe := "pipe"
-	if len(helperIdx) == 1 {
-		pipe = fmt.Sprintf("pipe_%d", helperIdx[0])
-	}
 	remoteOutput := c.GenerateAndExecuteCommand("Checking whether segment agents had errors", cluster.ON_SEGMENTS, func(contentID int) string {
-		errorFile := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID, pipe))
+		errorFile := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...))
 		/*
 		 * If an error file exists we want to indicate an error, as that means
 		 * the agent errored out.  If no file exists, the agent was successful.
@@ -367,11 +360,10 @@ func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo
 
 func CreateSkipFileOnSegments(oid string, tableName string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx int) {
 	createSkipFileLogMsg := fmt.Sprintf("Creating skip file on segments for restore entry %s (%s)", oid, tableName)
-	pipe := fmt.Sprintf("pipe_%d", helperIdx)
 	remoteOutput := c.GenerateAndExecuteCommand(createSkipFileLogMsg, cluster.ON_SEGMENTS, func(contentID int) string {
-		return fmt.Sprintf("touch %s_skip_%s", fpInfo.GetSegmentPipeFilePath(contentID, pipe), oid)
+		return fmt.Sprintf("touch %s_skip_%s", fpInfo.GetSegmentPipeFilePath(contentID, helperIdx), oid)
 	})
 	c.CheckClusterError(remoteOutput, "Error while creating skip file on segments", func(contentID int) string {
-		return fmt.Sprintf("Could not create skip file %s_skip_%s on segments", fpInfo.GetSegmentPipeFilePath(contentID, pipe), oid)
+		return fmt.Sprintf("Could not create skip file %s_skip_%s on segments", fpInfo.GetSegmentPipeFilePath(contentID, helperIdx), oid)
 	})
 }
