@@ -33,6 +33,7 @@ var (
 	restoreOidFile             = fmt.Sprintf("%s/restore_test_oids", testDir)
 	pipeFile                   = fmt.Sprintf("%s/test_pipe", testDir)
 	dataFileFullPath           = filepath.Join(testDir, "test_data")
+	errorFile                  = fmt.Sprintf("%s_error", pipeFile)
 )
 
 const (
@@ -559,7 +560,7 @@ options:
 			}
 
 			// Check that an error file was created
-			Expect(fmt.Sprintf("%s_error", pipeFile)).To(BeAnExistingFile())
+			Expect(errorFile).To(BeAnExistingFile())
 		})
 	})
 })
@@ -698,14 +699,14 @@ func setupRestoreWithSkipFiles(oid int, withPlugin bool) []string {
 }
 
 func assertNoErrors() {
-	Expect(fmt.Sprintf("%s_error", pipeFile)).To(Not(BeARegularFile()))
+	Expect(errorFile).To(Not(BeARegularFile()))
 	pipes, err := filepath.Glob(pipeFile + "_[1-9]*")
 	Expect(err).ToNot(HaveOccurred())
 	Expect(pipes).To(BeEmpty())
 }
 
 func assertErrorsHandled() {
-	Expect(fmt.Sprintf("%s_error", pipeFile)).To(BeARegularFile())
+	Expect(errorFile).To(BeARegularFile())
 	pipes, err := filepath.Glob(pipeFile + "_[1-9]*")
 	Expect(err).ToNot(HaveOccurred())
 	Expect(pipes).To(BeEmpty())
