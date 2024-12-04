@@ -32,7 +32,6 @@ var (
 	backupOidFile              = fmt.Sprintf("%s/backup_test_oids", testDir)
 	restoreOidFile             = fmt.Sprintf("%s/restore_test_oids", testDir)
 	pipeFile                   = fmt.Sprintf("%s/test_pipe", testDir)
-	pipeFileRestore            = fmt.Sprintf("%s/test_pipe_0", testDir)
 	dataFileFullPath           = filepath.Join(testDir, "test_data")
 )
 
@@ -191,9 +190,6 @@ options:
 		})
 	})
 	Context("restore tests", func() {
-		BeforeEach(func() {
-			pipeFile = pipeFileRestore
-		})
 		It("runs restore gpbackup_helper without compression", func() {
 			setupRestoreFiles("", false)
 			helperCmd := gpbackupHelperRestore(gpbackupHelperPath, "--data-file", dataFileFullPath)
