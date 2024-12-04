@@ -55,7 +55,6 @@ var (
 	origSize         *int
 	destSize         *int
 	verbosity        *int
-	index            *int
 )
 
 func DoHelper() {
@@ -115,7 +114,6 @@ func InitializeGlobals() {
 	origSize = flag.Int("orig-seg-count", 0, "Used with resize restore.  Gives the segment count of the backup.")
 	destSize = flag.Int("dest-seg-count", 0, "Used with resize restore.  Gives the segment count of the current cluster.")
 	verbosity = flag.Int("verbosity", gplog.LOGINFO, "Log file verbosity")
-	index = flag.Int("index", 0, "Index")
 
 	flag.Parse()
 	if *printVersion {
@@ -299,13 +297,7 @@ func DoCleanup() {
 		logVerbose("Encountered error during cleanup: %v", err)
 	}
 
-	var pattern string
-	if *backupAgent {
-		pattern = fmt.Sprintf("%s_[0-9]*", *pipeFile)
-	} else if *restoreAgent {
-		pattern = fmt.Sprintf("%s_%d_[0-9]*", *pipeFile, *index)
-	}
-	pipeFiles, _ := filepath.Glob(pattern)
+	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
 	for _, pipeName := range pipeFiles {
 		if !wasSigpiped.Load() {
 			/*

@@ -239,14 +239,14 @@ func doRestoreAgent() error {
 			return errors.New("Terminated due to user request")
 		}
 
-		currentPipe = fmt.Sprintf("%s_%d_%d_%d", *pipeFile, *index, tableOid, batchNum)
+		currentPipe = fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
 		if i < len(oidWithBatchList)-*copyQueue {
 			nextOidWithBatch := oidWithBatchList[i+*copyQueue]
 			nextOid := nextOidWithBatch.oid
 
 			if nextOid != skipOid {
 				nextBatchNum := nextOidWithBatch.batch
-				nextPipeToCreate := fmt.Sprintf("%s_%d_%d_%d", *pipeFile, *index, nextOid, nextBatchNum)
+				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
 				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 				err := createPipe(nextPipeToCreate)
 				if err != nil {
