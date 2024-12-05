@@ -342,10 +342,11 @@ func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo
 		return fmt.Sprintf("if ls %[1]s >/dev/null 2>/dev/null; then echo 'error'; fi; rm -f %[1]s", errorFile)
 	})
 
+	agent := filepath.FormatSuffix("agent", helperIdx...)
 	numErrors := 0
 	for contentID, cmd := range remoteOutput.Commands {
 		if strings.TrimSpace(cmd.Stdout) == "error" {
-			gplog.Verbose("Error occurred with helper agent on segment %d on host %s.", contentID, c.GetHostForContent(contentID))
+			gplog.Verbose("Error occurred with helper %s on segment %d on host %s.", agent, contentID, c.GetHostForContent(contentID))
 			numErrors++
 		}
 	}

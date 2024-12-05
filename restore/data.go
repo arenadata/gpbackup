@@ -317,6 +317,10 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 
 				if err != nil {
 					atomic.AddInt32(&numErrors, 1)
+					if errors.Is(err, utils.AgentErr) && MustGetFlagBool(options.ON_ERROR_CONTINUE) && !backupConfig.SingleDataFile && resizeCluster {
+						dataProgressBar.(*pb.ProgressBar).NotPrint = true
+						return
+					}
 					if errors.Is(err, utils.AgentErr) || !MustGetFlagBool(options.ON_ERROR_CONTINUE) {
 						dataProgressBar.(*pb.ProgressBar).NotPrint = true
 						cancel()
