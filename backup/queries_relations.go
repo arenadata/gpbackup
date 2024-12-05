@@ -560,7 +560,7 @@ func LockTables(connectionPool *dbconn.DBConn, tables []Relation) {
 	for i, currentBatch := range tableBatches {
 		_, err := connectionPool.Exec(fmt.Sprintf("LOCK TABLE %s %s", currentBatch, lockMode))
 		if err != nil {
-			if wasTerminated {
+			if wasTerminated.Load() {
 				gplog.Warn("Interrupt received while acquiring ACCESS SHARE locks on tables")
 				select {} // wait for cleanup thread to exit gpbackup
 			} else {

@@ -27,7 +27,7 @@ var (
 )
 
 func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return -1, nil
 	}
 	whichConn = connectionPool.ValidateConnNum(whichConn)
@@ -233,7 +233,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 
 		utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, "oid")
 		initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo)
-		if wasTerminated {
+		if wasTerminated.Load() {
 			return 0
 		}
 		isFilter := false
@@ -279,7 +279,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					return // Error somewhere, terminate
 				default: // Default is must to avoid blocking
 				}
-				if wasTerminated {
+				if wasTerminated.Load() {
 					dataProgressBar.(*pb.ProgressBar).NotPrint = true
 					cancel()
 					return
