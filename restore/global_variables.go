@@ -2,6 +2,7 @@ package restore
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
@@ -36,7 +37,7 @@ var (
 	pluginConfig        *utils.PluginConfig
 	restoreStartTime    string
 	version             string
-	wasTerminated       bool
+	wasTerminated       atomic.Bool
 	errorTablesMetadata map[string]Empty
 	errorTablesData     map[string]Empty
 	opts                *options.Options
