@@ -2720,6 +2720,11 @@ LANGUAGE plpgsql NO SQL;`)
 				"--resize-cluster", "--on-error-continue")
 			output, _ := gprestoreCmd.CombinedOutput()
 			Expect(string(output)).To(ContainSubstring(`[ERROR]:-Encountered errors with 1 helper agent(s)`))
+			assertDataRestored(restoreConn, map[string]int{
+				"public.a": 1000,
+				"public.b": 0,
+				"public.c": 0,
+				"public.d": 0})
 			assertArtifactsCleaned("20240730085053")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d;")
 		})
@@ -2737,6 +2742,11 @@ LANGUAGE plpgsql NO SQL;`)
 				"--resize-cluster", "--on-error-continue", "--jobs", "3")
 			output, _ := gprestoreCmd.CombinedOutput()
 			Expect(string(output)).To(ContainSubstring(`[ERROR]:-Encountered errors with 1 helper agent(s)`))
+			assertDataRestored(restoreConn, map[string]int{
+				"public.a": 1000,
+				"public.b": 0,
+				"public.c": 1000,
+				"public.d": 1000})
 			assertArtifactsCleaned("20240730085053")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d;")
 		})
