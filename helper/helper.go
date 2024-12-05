@@ -26,7 +26,7 @@ import (
 var (
 	CleanupGroup  *sync.WaitGroup
 	version       string
-	wasTerminated bool
+	wasTerminated atomic.Bool
 	wasSigpiped   atomic.Bool
 	writeHandle   *os.File
 	writer        *bufio.Writer
@@ -60,7 +60,7 @@ var (
 func DoHelper() {
 	var err error
 	defer func() {
-		if wasTerminated {
+		if wasTerminated.Load() {
 			CleanupGroup.Wait()
 			return
 		}
@@ -163,8 +163,8 @@ func InitializeSignalHandler() {
 				terminatedChan <- true
 			}
 		}()
-		wasTerminated = <-terminatedChan
-		if wasTerminated {
+		wasTerminated.Store(<-terminatedChan)
+		if wasTerminated.Load() {
 			DoCleanup()
 			os.Exit(2)
 		} else {
@@ -275,7 +275,7 @@ func flushAndCloseRestoreWriter(pipeName string, oid int) error {
 
 func DoCleanup() {
 	defer CleanupGroup.Done()
-	if wasTerminated {
+	if wasTerminated.Load() {
 		/*
 		 * If the agent dies during the last table copy, it can still report
 		 * success, so we create an error file and check for its presence in

@@ -234,7 +234,7 @@ func doRestoreAgent() error {
 		batchNum := oidWithBatch.batch
 
 		contentToRestore := *content + (*destSize * batchNum)
-		if wasTerminated {
+		if wasTerminated.Load() {
 			logError("Terminated due to user request")
 			return errors.New("Terminated due to user request")
 		}
