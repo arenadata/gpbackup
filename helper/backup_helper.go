@@ -7,11 +7,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
+	"time"
 
 	"github.com/greenplum-db/gpbackup/toc"
 	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
 /*
@@ -35,6 +38,8 @@ func doBackupAgent() error {
 
 	var currentPipe string
 	var errBuf bytes.Buffer
+	var readHandle *os.File
+	var reader *bufio.Reader
 	/*
 	 * It is important that we create the reader before creating the writer
 	 * so that we establish a connection to the first pipe (created by gpbackup)
@@ -46,21 +51,27 @@ func doBackupAgent() error {
 			logError("Terminated due to user request")
 			return errors.New("Terminated due to user request")
 		}
-		if i < len(oidList)-*copyQueue {
-			nextPipeToCreate := fmt.Sprintf("%s_%d", *pipeFile, oidList[i+*copyQueue])
-			logVerbose(fmt.Sprintf("Oid %d: Creating pipe %s\n", oidList[i+*copyQueue], nextPipeToCreate))
-			err := createPipe(nextPipeToCreate)
-			if err != nil {
-				logError(fmt.Sprintf("Oid %d: Failed to create pipe %s\n", oidList[i+*copyQueue], nextPipeToCreate))
-				return err
-			}
-		}
 
 		logInfo(fmt.Sprintf("Oid %d: Opening pipe %s", oid, currentPipe))
-		reader, readHandle, err := getBackupPipeReader(currentPipe)
-		if err != nil {
-			logError(fmt.Sprintf("Oid %d: Error encountered getting backup pipe reader: %v", oid, err))
-			return err
+		for {
+			reader, readHandle, err = getBackupPipeReader(currentPipe)
+			if err != nil {
+				if errors.Is(err, unix.ENXIO) || errors.Is(err, unix.ENOENT) {
+					// keep trying to open the pipe
+					time.Sleep(50 * time.Millisecond)
+				} else {
+					logError(fmt.Sprintf("Oid %d: Error encountered getting backup pipe reader: %v", oid, err))
+					return err
+				}
+			} else {
+				// A reader has connected to the pipe and we have successfully opened
+				// the writer for the pipe. To avoid having to write complex buffer
+				// logic for when os.write() returns EAGAIN due to full buffer, set
+				// the file descriptor to block on IO.
+				unix.SetNonblock(int(readHandle.Fd()), false)
+				logVerbose(fmt.Sprintf("Oid %d, Reader connected to pipe %s", oid, path.Base(currentPipe)))
+				break
+			}
 		}
 		if i == 0 {
 			pipeWriter, writeCmd, err = getBackupPipeWriter(&errBuf)
@@ -112,16 +123,14 @@ func doBackupAgent() error {
 	return nil
 }
 
-func getBackupPipeReader(currentPipe string) (io.Reader, io.ReadCloser, error) {
-	readHandle, err := os.OpenFile(currentPipe, os.O_RDONLY, os.ModeNamedPipe)
+func getBackupPipeReader(currentPipe string) (*bufio.Reader, *os.File, error) {
+	readHandle, err := os.OpenFile(currentPipe, os.O_RDONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
 	if err != nil {
 		// error logging handled by calling functions
 		return nil, nil, err
 	}
-	// This is a workaround for https://github.com/golang/go/issues/24164.
-	// Once this bug is fixed, the call to Fd() can be removed
-	readHandle.Fd()
-	reader := bufio.NewReader(readHandle)
+
+	reader := bufio.NewReader(struct{ io.ReadCloser }{readHandle})
 	return reader, readHandle, nil
 }
 
