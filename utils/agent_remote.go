@@ -331,7 +331,7 @@ func CleanUpSegmentHelperProcesses(c *cluster.Cluster, fpInfo filepath.FilePathI
 
 func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) error {
 	remoteOutput := c.GenerateAndExecuteCommand("Checking whether segment agents had errors", cluster.ON_SEGMENTS, func(contentID int) string {
-		errorFile := strings.Replace(fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...), "pipe", "error", -1)
+		errorFile := GetErrorFilename(fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...))
 		if len(helperIdx) == 0 {
 			errorFile += "*"
 		}
@@ -362,9 +362,9 @@ func CheckAgentErrorsOnSegments(c *cluster.Cluster, fpInfo filepath.FilePathInfo
 func CreateSkipFileOnSegments(oid uint32, tableName string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) {
 	createSkipFileLogMsg := fmt.Sprintf("Creating skip file on segments for restore entry %d (%s)", oid, tableName)
 	remoteOutput := c.GenerateAndExecuteCommand(createSkipFileLogMsg, cluster.ON_SEGMENTS, func(contentID int) string {
-		return fmt.Sprintf("touch %s_%d", strings.Replace(fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...), "pipe", "skip", -1), oid)
+		return fmt.Sprintf("touch %s_%d", GetSkipFilename(fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...)), oid)
 	})
 	c.CheckClusterError(remoteOutput, "Error while creating skip file on segments", func(contentID int) string {
-		return fmt.Sprintf("Could not create skip file %s_%d on segments", strings.Replace(fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...), "pipe", "skip", -1), oid)
+		return fmt.Sprintf("Could not create skip file %s_%d on segments", GetSkipFilename(fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...)), oid)
 	})
 }

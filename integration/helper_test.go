@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/operating"
+	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/sys/unix"
 
@@ -33,7 +34,7 @@ var (
 	restoreOidFile             = fmt.Sprintf("%s/restore_test_oids", testDir)
 	pipeFile                   = fmt.Sprintf("%s/test_pipe", testDir)
 	dataFileFullPath           = filepath.Join(testDir, "test_data")
-	errorFile                  = strings.Replace(pipeFile, "pipe", "error", -1)
+	errorFile                  = utils.GetErrorFilename(pipeFile)
 )
 
 const (
@@ -690,7 +691,7 @@ func setupRestoreWithSkipFiles(oid int, withPlugin bool) []string {
 	createCustomTOCFile(tocFile, dataLength)
 	ret = append(ret, tocFile)
 
-	skipFile := strings.Replace(pipeFile, "pipe", "skip", -1) + "_1"
+	skipFile := utils.GetSkipFilename(pipeFile) + "_1"
 	err = exec.Command("touch", skipFile).Run()
 	Expect(err).ToNot(HaveOccurred())
 

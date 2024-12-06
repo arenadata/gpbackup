@@ -292,8 +292,8 @@ func assertArtifactsCleaned(timestamp string) {
 		oidFile := fpInfo.GetSegmentHelperFilePath(contentID, "oid")
 		scriptFile := fpInfo.GetSegmentHelperFilePath(contentID, "script")
 		pipeFile := fpInfo.GetSegmentPipeFilePath(contentID)
-		errorFile := strings.Replace(pipeFile, "pipe", "error", -1)
-		skipFile := strings.Replace(pipeFile, "pipe", "skip", -1)
+		errorFile := utils.GetErrorFilename(pipeFile)
+		skipFile := utils.GetSkipFilename(pipeFile)
 
 		return fmt.Sprintf("! ls %s* && ! ls %s* && ! ls %s* && ! ls %s* && ! ls %s*", errorFile, skipFile, oidFile, scriptFile, pipeFile)
 	}

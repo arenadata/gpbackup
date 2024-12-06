@@ -305,3 +305,11 @@ func GetFileHash(filename string) ([32]byte, error) {
 	}
 	return filehash, nil
 }
+
+func GetErrorFilename(pipeFile string) string {
+	return strings.Replace(pipeFile, "pipe", "error", -1)
+}
+
+func GetSkipFilename(pipeFile string) string {
+	return strings.Replace(pipeFile, "pipe", "skip", -1)
+}
