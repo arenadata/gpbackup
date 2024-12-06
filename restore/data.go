@@ -316,7 +316,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 
 				if err != nil {
 					atomic.AddInt32(&numErrors, 1)
-					if errors.Is(err, utils.AgentErr) && MustGetFlagBool(options.ON_ERROR_CONTINUE) && !backupConfig.SingleDataFile && resizeCluster {
+					if errors.Is(err, utils.AgentErr) && MustGetFlagBool(options.ON_ERROR_CONTINUE) && maxHelpers > 1 {
 						dataProgressBar.(*pb.ProgressBar).NotPrint = true
 						return
 					}
@@ -370,7 +370,7 @@ func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionP
 }
 
 func HelperIdx(whichConn int) []int {
-	if maxHelpers > 0 {
+	if maxHelpers > 1 {
 		return []int{whichConn}
 	}
 	return []int{}
