@@ -50,13 +50,13 @@ var _ = Describe("agent remote", func() {
 	//			this file is not used throughout the unit tests below, and it is cleaned up with the method: `operating.System.Remove`
 	Describe("WriteOidListToSegments()", func() {
 		It("generates the correct rsync commands to copy oid file to segments", func() {
-			utils.WriteOidListToSegments(oidList, testCluster, fpInfo, "oid")
+			utils.WriteOidListToSegments(oidList, testCluster, fpInfo)
 
 			Expect(testExecutor.NumExecutions).To(Equal(1))
 			cc := testExecutor.ClusterCommands[0]
 			Expect(len(cc)).To(Equal(2))
-			Expect(cc[0].CommandString).To(MatchRegexp("rsync -e ssh .*/gpbackup-oids.* localhost:/data/gpseg0/gpbackup_0_11112233445566_oid_.*"))
-			Expect(cc[1].CommandString).To(MatchRegexp("rsync -e ssh .*/gpbackup-oids.* remotehost1:/data/gpseg1/gpbackup_1_11112233445566_oid_.*"))
+			Expect(cc[0].CommandString).To(MatchRegexp("rsync -e ssh .*/gpbackup-oids.* localhost:/data/gpseg0/gpbackup_0_11112233445566_\\d+_oid"))
+			Expect(cc[1].CommandString).To(MatchRegexp("rsync -e ssh .*/gpbackup-oids.* remotehost1:/data/gpseg1/gpbackup_1_11112233445566_\\d+_oid"))
 		})
 		It("panics if any rsync commands fail and outputs correct err messages", func() {
 			testExecutor.ErrorOnExecNum = 1
@@ -73,7 +73,7 @@ var _ = Describe("agent remote", func() {
 				},
 			}
 
-			Expect(func() { utils.WriteOidListToSegments(oidList, testCluster, fpInfo, "oid") }).To(Panic())
+			Expect(func() { utils.WriteOidListToSegments(oidList, testCluster, fpInfo) }).To(Panic())
 
 			Expect(testExecutor.NumExecutions).To(Equal(1))
 			Expect(string(logfile.Contents())).To(ContainSubstring(`[CRITICAL]:-Failed to rsync oid file on 1 segment. See gbytes.Buffer for a complete list of errors.`))
@@ -155,12 +155,12 @@ var _ = Describe("agent remote", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			cc := testExecutor.ClusterCommands[0]
-			errorFile0 := fmt.Sprintf(`/data/gpseg0/gpbackup_0_11112233445566_pipe_%d_error`, fpInfo.PID)
-			expectedCmd0 := fmt.Sprintf(`if [[ -f %[1]s ]]; then echo 'error'; fi; rm -f %[1]s`, errorFile0)
+			errorFile0 := fmt.Sprintf(`/data/gpseg0/gpbackup_0_11112233445566_%d_error`, fpInfo.PID)
+			expectedCmd0 := fmt.Sprintf(`if ls %[1]s* >/dev/null 2>/dev/null; then echo 'error'; fi; rm -f %[1]s*`, errorFile0)
 			Expect(cc[0].CommandString).To(ContainSubstring(expectedCmd0))
 
-			errorFile1 := fmt.Sprintf(`/data/gpseg1/gpbackup_1_11112233445566_pipe_%d_error`, fpInfo.PID)
-			expectedCmd1 := fmt.Sprintf(`if [[ -f %[1]s ]]; then echo 'error'; fi; rm -f %[1]s`, errorFile1)
+			errorFile1 := fmt.Sprintf(`/data/gpseg1/gpbackup_1_11112233445566_%d_error`, fpInfo.PID)
+			expectedCmd1 := fmt.Sprintf(`if ls %[1]s* >/dev/null 2>/dev/null; then echo 'error'; fi; rm -f %[1]s*`, errorFile1)
 			Expect(cc[1].CommandString).To(ContainSubstring(expectedCmd1))
 		})
 
