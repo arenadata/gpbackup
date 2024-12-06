@@ -306,7 +306,7 @@ func backupData(tables []Table) {
 		for _, table := range tables {
 			oidList = append(oidList, fmt.Sprintf("%d", table.Oid))
 		}
-		utils.WriteOidListToSegments(oidList, globalCluster, globalFPInfo, "oid")
+		utils.WriteOidListToSegments(oidList, globalCluster, globalFPInfo)
 		compressStr := fmt.Sprintf(" --compression-level %d --compression-type %s", MustGetFlagInt(options.COMPRESSION_LEVEL), MustGetFlagString(options.COMPRESSION_TYPE))
 		if MustGetFlagBool(options.NO_COMPRESSION) {
 			compressStr = " --compression-level 0"

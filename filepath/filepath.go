@@ -7,6 +7,7 @@ package filepath
  */
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -103,13 +104,13 @@ func (backupFPInfo *FilePathInfo) replaceCopyFormatStringsInPath(templateFilePat
 	return strings.Replace(filePath, "<SEGID>", strconv.Itoa(contentID), -1)
 }
 
-func (backupFPInfo *FilePathInfo) GetSegmentPipeFilePath(contentID int) string {
-	templateFilePath := backupFPInfo.GetSegmentPipePathForCopyCommand()
+func (backupFPInfo *FilePathInfo) GetSegmentPipeFilePath(contentID int, helperIdx ...int) string {
+	templateFilePath := backupFPInfo.GetSegmentPipePathForCopyCommand(helperIdx...)
 	return backupFPInfo.replaceCopyFormatStringsInPath(templateFilePath, contentID)
 }
 
-func (backupFPInfo *FilePathInfo) GetSegmentPipePathForCopyCommand() string {
-	return fmt.Sprintf("<SEG_DATA_DIR>/gpbackup_<SEGID>_%s_pipe_%d", backupFPInfo.Timestamp, backupFPInfo.PID)
+func (backupFPInfo *FilePathInfo) GetSegmentPipePathForCopyCommand(helperIdx ...int) string {
+	return fmt.Sprintf("<SEG_DATA_DIR>/gpbackup_<SEGID>_%s_%d_%s", backupFPInfo.Timestamp, backupFPInfo.PID, FormatSuffix("pipe", helperIdx...))
 }
 
 func (backupFPInfo *FilePathInfo) GetTableBackupFilePath(contentID int, tableOid uint32, extension string, singleDataFile bool) string {
@@ -204,7 +205,7 @@ func (backupFPInfo *FilePathInfo) GetPluginConfigPath() string {
 }
 
 func (backupFPInfo *FilePathInfo) GetSegmentHelperFilePath(contentID int, suffix string) string {
-	return path.Join(backupFPInfo.SegDirMap[contentID], fmt.Sprintf("gpbackup_%d_%s_%s_%d", contentID, backupFPInfo.Timestamp, suffix, backupFPInfo.PID))
+	return path.Join(backupFPInfo.SegDirMap[contentID], fmt.Sprintf("gpbackup_%d_%s_%d_%s", contentID, backupFPInfo.Timestamp, backupFPInfo.PID, suffix))
 }
 
 func (backupFPInfo *FilePathInfo) GetHelperLogPath() string {
@@ -290,4 +291,16 @@ func GetSegPrefix(connectionPool *dbconn.DBConn) string {
 	_, segPrefix := path.Split(result)
 	segPrefix = segPrefix[:len(segPrefix)-2] // Remove "-1" segment ID from string
 	return segPrefix
+}
+
+func FormatSuffix(suffix string, helperIdx ...int) string {
+	switch len(helperIdx) {
+	case 0:
+		break
+	case 1:
+		suffix += fmt.Sprintf("%d", helperIdx[0])
+	default:
+		gplog.Fatal(errors.New("helperIdx slice should have <= 1 elements"), "")
+	}
+	return suffix
 }

@@ -739,12 +739,10 @@ func DoCleanup(restoreFailed bool) {
 			utils.CleanUpSegmentHelperProcesses(globalCluster, fpInfo, "restore", cleanupTimeout)
 			utils.CleanUpHelperFilesOnAllHosts(globalCluster, fpInfo, cleanupTimeout)
 
-			// Check gpbackup_helper errors here if restore was terminated
-			if wasTerminated.Load() {
-				err := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
-				if err != nil {
-					gplog.Error(err.Error())
-				}
+			// Check gpbackup_helper errors here
+			err := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
+			if err != nil {
+				gplog.Error(err.Error())
 			}
 		}
 	}
