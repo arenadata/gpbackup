@@ -7,6 +7,7 @@ package filepath
  */
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -109,8 +110,13 @@ func (backupFPInfo *FilePathInfo) GetSegmentPipeFilePath(contentID int, helperId
 }
 
 func FormatSuffix(suffix string, helperIdx ...int) string {
-	if len(helperIdx) == 1 {
+	switch len(helperIdx) {
+	case 0:
+		break
+	case 1:
 		suffix += fmt.Sprintf("%d", helperIdx[0])
+	default:
+		gplog.Fatal(errors.New("helperIdx slice should have <= 1 elements"), "")
 	}
 	return suffix
 }
