@@ -64,7 +64,7 @@ type BackupProgressCounters struct {
 }
 
 func CopyTableOut(queryContext context.Context, connectionPool *dbconn.DBConn, table Table, destinationToWrite string, connNum int) (int64, error) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return -1, nil
 	}
 	checkPipeExistsCommand := ""
@@ -185,12 +185,6 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Make sure it's called to release resources even if no errors
 
-	// Launch a checker that polls if the backup helper has ended with an error. It will cancel all pending
-	// COPY commands that could be hanging on pipes, that the backup helper didn't close before it died.
-	if MustGetFlagBool(options.SINGLE_DATA_FILE) {
-		utils.StartHelperChecker(globalCluster, globalFPInfo, cancel)
-	}
-
 	/*
 	 * Worker 0 is a special database connection that
 	 * 	1) Exports the database snapshot if the feature is supported
@@ -229,7 +223,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 					return // Error somewhere, terminate
 				default: // Default is must to avoid blocking
 				}
-				if wasTerminated || isErroredBackup.Load() {
+				if wasTerminated.Load() || isErroredBackup.Load() {
 					counters.ProgressBar.(*pb.ProgressBar).NotPrint = true
 					cancel()
 					return
@@ -319,7 +313,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 					return // Error somewhere, terminate
 				default: // Default is must to avoid blocking
 				}
-				if wasTerminated || isErroredBackup.Load() {
+				if wasTerminated.Load() || isErroredBackup.Load() {
 					cancel()
 					return
 				}
@@ -360,7 +354,7 @@ func BackupDataForAllTables(tables []Table) []map[uint32]int64 {
 	if backupSnapshot == "" {
 		allWorkersTerminatedLogged := false
 		for _, table := range tables {
-			if wasTerminated || isErroredBackup.Load() {
+			if wasTerminated.Load() || isErroredBackup.Load() {
 				counters.ProgressBar.(*pb.ProgressBar).NotPrint = true
 				break
 			}

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/sys/unix"
 
@@ -24,8 +25,9 @@ import (
 var (
 	CleanupGroup  *sync.WaitGroup
 	version       string
-	wasTerminated bool
 	pipesMap      map[string]bool
+	wasTerminated atomic.Bool
+	wasSigpiped   atomic.Bool
 )
 
 /*
@@ -56,7 +58,7 @@ var (
 func DoHelper() {
 	var err error
 	defer func() {
-		if wasTerminated {
+		if wasTerminated.Load() {
 			CleanupGroup.Wait()
 			return
 		}
@@ -126,8 +128,6 @@ func InitializeGlobals() {
 	}
 	operating.InitializeSystemFunctions()
 
-	pipesMap = make(map[string]bool, 0)
-
 	gplog.InitializeLogging("gpbackup_helper", "")
 	gplog.SetLogFileVerbosity(*verbosity)
 }
@@ -148,6 +148,7 @@ func InitializeSignalHandler() {
 				gplog.Warn("Received a termination signal on segment %d: aborting", *content)
 				terminatedChan <- true
 			case unix.SIGPIPE:
+				wasSigpiped.Store(true)
 				if *onErrorContinue {
 					gplog.Warn("Received a broken pipe signal on segment %d: on-error-continue set, continuing", *content)
 					terminatedChan <- false
@@ -160,8 +161,8 @@ func InitializeSignalHandler() {
 				terminatedChan <- true
 			}
 		}()
-		wasTerminated = <-terminatedChan
-		if wasTerminated {
+		wasTerminated.Store(<-terminatedChan)
+		if wasTerminated.Load() {
 			DoCleanup()
 			os.Exit(2)
 		} else {
@@ -180,7 +181,6 @@ func createPipe(pipe string) error {
 		return err
 	}
 
-	pipesMap[pipe] = true
 	return nil
 }
 
@@ -190,16 +190,25 @@ func deletePipe(pipe string) error {
 		return err
 	}
 
-	delete(pipesMap, pipe)
 	return nil
 }
 
-// Gpbackup creates the first n pipes. Record these pipes.
-func preloadCreatedPipesForBackup(oidList []int, queuedPipeCount int) {
-	for i := 0; i < queuedPipeCount; i++ {
-		pipeName := fmt.Sprintf("%s_%d", *pipeFile, oidList[i])
-		pipesMap[pipeName] = true
+func openClosePipe(filename string) error {
+	flag := unix.O_NONBLOCK
+	if *backupAgent {
+		flag |= os.O_RDONLY
+	} else if *restoreAgent {
+		flag |= os.O_WRONLY
 	}
+	handle, err := os.OpenFile(filename, flag, os.ModeNamedPipe)
+	if err != nil {
+		return err
+	}
+	err = handle.Close()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func getOidListFromFile(oidFileName string) ([]int, error) {
@@ -223,7 +232,7 @@ func getOidListFromFile(oidFileName string) ([]int, error) {
 
 func DoCleanup() {
 	defer CleanupGroup.Done()
-	if wasTerminated {
+	if wasTerminated.Load() {
 		/*
 		 * If the agent dies during the last table copy, it can still report
 		 * success, so we create an error file and check for its presence in
@@ -241,7 +250,19 @@ func DoCleanup() {
 		}
 	}
 
-	for pipeName, _ := range pipesMap {
+	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
+	for _, pipeName := range pipeFiles {
+		if !wasSigpiped.Load() {
+			/*
+			 * The main process doesn't know about the error yet, so it needs to
+			 * open/close pipes so that the COPY commands hanging on them can complete.
+			 */
+			logVerbose("Opening/closing pipe %s", pipeName)
+			err := openClosePipe(pipeName)
+			if err != nil {
+				logVerbose("Encountered error opening/closing pipe %s: %v", pipeName, err)
+			}
+		}
 		logVerbose("Removing pipe %s", pipeName)
 		err := deletePipe(pipeName)
 		if err != nil {

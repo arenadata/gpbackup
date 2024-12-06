@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
@@ -144,12 +145,12 @@ func VerifyHelperVersionOnSegments(version string, c *cluster.Cluster) {
 	}
 }
 
-func StartGpbackupHelpers(c *cluster.Cluster, fpInfo filepath.FilePathInfo, operation string, pluginConfigFile string, compressStr string, onErrorContinue bool, isFilter bool, wasTerminated *bool, copyQueue int, isSingleDataFile bool, resizeCluster bool, origSize int, destSize int, verbosity int) {
+func StartGpbackupHelpers(c *cluster.Cluster, fpInfo filepath.FilePathInfo, operation string, pluginConfigFile string, compressStr string, onErrorContinue bool, isFilter bool, wasTerminated *atomic.Bool, copyQueue int, isSingleDataFile bool, resizeCluster bool, origSize int, destSize int, verbosity int) {
 	// A mutex lock for cleaning up and starting gpbackup helpers prevents a
 	// race condition that causes gpbackup_helpers to be orphaned if
 	// gpbackup_helper cleanup happens before they are started.
 	helperMutex.Lock()
-	if *wasTerminated {
+	if wasTerminated.Load() {
 		helperMutex.Unlock()
 		select {} // Pause forever and wait for cleanup to exit program.
 	}
@@ -361,20 +362,4 @@ func CreateSkipFileOnSegments(oid string, tableName string, c *cluster.Cluster, 
 	c.CheckClusterError(remoteOutput, "Error while creating skip file on segments", func(contentID int) string {
 		return fmt.Sprintf("Could not create skip file %s_skip_%s on segments", fpInfo.GetSegmentPipeFilePath(contentID), oid)
 	})
-}
-
-func StartHelperChecker(cl *cluster.Cluster, fpInfo filepath.FilePathInfo, cancel func()) {
-	go func() {
-		for {
-			time.Sleep(5 * time.Second)
-			remoteOutput := cl.GenerateAndExecuteCommand("Checking gpbackup_helper agent failure", cluster.ON_SEGMENTS, func(contentID int) string {
-				helperErrorFileName := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID))
-				return fmt.Sprintf("! ls %s", helperErrorFileName)
-			})
-			if remoteOutput.NumErrors != 0 {
-				gplog.Error("gpbackup_helper failed to start on some segments")
-				cancel()
-			}
-		}
-	}()
 }

@@ -169,20 +169,12 @@ type IRestoreHelper interface {
 	getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error)
 	getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error)
 	checkForSkipFile(pipeFile string, tableOid int) bool
-	preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int)
 }
 
 type RestoreHelper struct{}
 
 func (RestoreHelper) checkForSkipFile(pipeFile string, tableOid int) bool {
 	return utils.FileExists(fmt.Sprintf("%s_skip_%d", pipeFile, tableOid))
-}
-
-func (h *RestoreHelper) preloadCreatedPipesForRestore(oidWithBatchList []oidWithBatch, queuedPipeCount int) {
-	for i := 0; i < queuedPipeCount; i++ {
-		pipeName := fmt.Sprintf("%s_%d_%d", *pipeFile, oidWithBatchList[i].oid, oidWithBatchList[i].batch)
-		pipesMap[pipeName] = true
-	}
 }
 
 func doRestoreAgent() error {
@@ -277,8 +269,6 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 		}
 	}
 
-	restoreHelper.preloadCreatedPipesForRestore(oidWithBatchList, *copyQueue)
-
 	var currentPipe string
 
 	// If skip file is detected for the particular tableOid, will not process batches related to this oid
@@ -289,7 +279,7 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 		batchNum := oidWithBatch.batch
 
 		contentToRestore := *content + (*destSize * batchNum)
-		if wasTerminated {
+		if wasTerminated.Load() {
 			logError("Terminated due to user request")
 			return errors.New("Terminated due to user request")
 		}
@@ -440,8 +430,10 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
 
-		// On resize restore reader might be nil.
-		if !*singleDataFile && !(*isResizeRestore && contentToRestore >= *origSize) {
+		// On resize restore reader might be nil,
+		// for example, if contentToRestore >= *origSize,
+		// and also for the next batch after detecting a skip file.
+		if !*singleDataFile && readers[contentToRestore] != nil {
 			if errPlugin := readers[contentToRestore].waitForPlugin(); errPlugin != nil {
 				if err != nil {
 					err = errors.Wrap(err, errPlugin.Error())

@@ -33,7 +33,6 @@ func doBackupAgent() error {
 		return err
 	}
 
-	preloadCreatedPipesForBackup(oidList, *copyQueue)
 	var currentPipe string
 	var errBuf bytes.Buffer
 	/*
@@ -43,7 +42,7 @@ func doBackupAgent() error {
 	 */
 	for i, oid := range oidList {
 		currentPipe = fmt.Sprintf("%s_%d", *pipeFile, oidList[i])
-		if wasTerminated {
+		if wasTerminated.Load() {
 			logError("Terminated due to user request")
 			return errors.New("Terminated due to user request")
 		}

@@ -27,7 +27,7 @@ var (
 )
 
 func CopyTableIn(queryContext context.Context, connectionPool *dbconn.DBConn, tableName string, tableAttributes string, destinationToRead string, singleDataFile bool, whichConn int) (int64, error) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return -1, nil
 	}
 	whichConn = connectionPool.ValidateConnNum(whichConn)
@@ -234,7 +234,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 
 		utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, "oid")
 		initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo)
-		if wasTerminated {
+		if wasTerminated.Load() {
 			return 0
 		}
 		isFilter := false
@@ -261,12 +261,6 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Make sure it's called to release resources even if no errors
 
-	// Launch a checker that polls if the restore helper has ended with an error. It will cancel all pending
-	// COPY commands that could be hanging on pipes, that the restore helper didn't close before it died.
-	if backupConfig.SingleDataFile || resizeCluster {
-		utils.StartHelperChecker(globalCluster, globalFPInfo, cancel)
-	}
-
 	for i := 0; i < connectionPool.NumConns; i++ {
 		workerPool.Add(1)
 		go func(whichConn int) {
@@ -286,7 +280,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 					return // Error somewhere, terminate
 				default: // Default is must to avoid blocking
 				}
-				if wasTerminated {
+				if wasTerminated.Load() {
 					dataProgressBar.(*pb.ProgressBar).NotPrint = true
 					cancel()
 					return

@@ -2,6 +2,7 @@ package backup
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
@@ -27,7 +28,7 @@ const (
 	Deferred
 	Complete
 	PG_LOCK_NOT_AVAILABLE = "55P03"
-	ENUM_TYPE_OID = 3500
+	ENUM_TYPE_OID         = 3500
 )
 
 /*
@@ -43,7 +44,7 @@ var (
 	objectCounts         map[string]int
 	pluginConfig         *utils.PluginConfig
 	version              string
-	wasTerminated        bool
+	wasTerminated        atomic.Bool
 	backupLockFile       lockfile.Lockfile
 	filterRelationClause string
 	quotedRoleNames      map[string]string
