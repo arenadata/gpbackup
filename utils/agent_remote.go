@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	path "path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -367,4 +368,12 @@ func CreateSkipFileOnSegments(oid uint32, tableName string, c *cluster.Cluster, 
 	c.CheckClusterError(remoteOutput, "Error while creating skip file on segments", func(contentID int) string {
 		return fmt.Sprintf("Could not create skip file %s_%d on segments", GetSkipFilename(fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...)), oid)
 	})
+}
+
+func GetErrorFilename(pipeFile string) string {
+	return regexp.MustCompile(`_pipe(\d*)$`).ReplaceAllString(pipeFile, "_error$1")
+}
+
+func GetSkipFilename(pipeFile string) string {
+	return regexp.MustCompile(`_pipe(\d*)$`).ReplaceAllString(pipeFile, "_skip$1")
 }

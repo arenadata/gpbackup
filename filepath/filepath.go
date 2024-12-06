@@ -109,18 +109,6 @@ func (backupFPInfo *FilePathInfo) GetSegmentPipeFilePath(contentID int, helperId
 	return backupFPInfo.replaceCopyFormatStringsInPath(templateFilePath, contentID)
 }
 
-func FormatSuffix(suffix string, helperIdx ...int) string {
-	switch len(helperIdx) {
-	case 0:
-		break
-	case 1:
-		suffix += fmt.Sprintf("%d", helperIdx[0])
-	default:
-		gplog.Fatal(errors.New("helperIdx slice should have <= 1 elements"), "")
-	}
-	return suffix
-}
-
 func (backupFPInfo *FilePathInfo) GetSegmentPipePathForCopyCommand(helperIdx ...int) string {
 	return fmt.Sprintf("<SEG_DATA_DIR>/gpbackup_<SEGID>_%s_%d_%s", backupFPInfo.Timestamp, backupFPInfo.PID, FormatSuffix("pipe", helperIdx...))
 }
@@ -303,4 +291,16 @@ func GetSegPrefix(connectionPool *dbconn.DBConn) string {
 	_, segPrefix := path.Split(result)
 	segPrefix = segPrefix[:len(segPrefix)-2] // Remove "-1" segment ID from string
 	return segPrefix
+}
+
+func FormatSuffix(suffix string, helperIdx ...int) string {
+	switch len(helperIdx) {
+	case 0:
+		break
+	case 1:
+		suffix += fmt.Sprintf("%d", helperIdx[0])
+	default:
+		gplog.Fatal(errors.New("helperIdx slice should have <= 1 elements"), "")
+	}
+	return suffix
 }
