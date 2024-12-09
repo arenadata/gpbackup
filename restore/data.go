@@ -10,7 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/greenplum-db/gp-common-go-libs/cluster"
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
 	"github.com/greenplum-db/gp-common-go-libs/gplog"
 	"github.com/greenplum-db/gpbackup/filepath"
@@ -219,9 +218,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		gplog.Verbose("Initializing pipes and gpbackup_helper on segments for %srestore", msg)
 		utils.VerifyHelperVersionOnSegments(version, globalCluster)
 
-		if backupConfig.SingleDataFile {
-			maxHelpers = 1
-		} else if connectionPool.NumConns < totalTables {
+		if connectionPool.NumConns < totalTables {
 			maxHelpers = connectionPool.NumConns
 		} else {
 			maxHelpers = totalTables
@@ -243,7 +240,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 			}
 
 			utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, HelperIdx(whichConn)...)
-			initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo, HelperIdx(whichConn)...)
+			utils.CreateSegmentPipeOnAllHostsForRestore(oidList[0], globalCluster, fpInfo, HelperIdx(whichConn)...)
 			if wasTerminated.Load() {
 				return 0
 			}
@@ -255,7 +252,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 			if backupConfig.Compressed {
 				compressStr = fmt.Sprintf(" --compression-type %s ", utils.GetPipeThroughProgram().Name)
 			}
-			utils.StartGpbackupHelpers(globalCluster, fpInfo, "--restore-agent", MustGetFlagString(options.PLUGIN_CONFIG), compressStr, MustGetFlagBool(options.ON_ERROR_CONTINUE), isFilter, &wasTerminated, initialPipes, backupConfig.SingleDataFile, resizeCluster, origSize, destSize, gplog.GetVerbosity(), HelperIdx(whichConn)...)
+			utils.StartGpbackupHelpers(globalCluster, fpInfo, "--restore-agent", MustGetFlagString(options.PLUGIN_CONFIG), compressStr, MustGetFlagBool(options.ON_ERROR_CONTINUE), isFilter, &wasTerminated, 1, backupConfig.SingleDataFile, resizeCluster, origSize, destSize, gplog.GetVerbosity(), HelperIdx(whichConn)...)
 		}
 	}
 	/*
@@ -350,22 +347,6 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	}
 
 	return numErrors
-}
-
-func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionPool *dbconn.DBConn, fpInfo filepath.FilePathInfo, helperIdx ...int) int {
-	// Create min(connections, tables) segment pipes on each host
-	var maxPipes int
-	if !backupConfig.SingleDataFile {
-		maxPipes = 1 // Create single initial pipe for the first oid in the restore oids list for non --single-data-file data file restore.
-	} else if connectionPool.NumConns < len(oidList) {
-		maxPipes = connectionPool.NumConns
-	} else {
-		maxPipes = len(oidList)
-	}
-	for i := 0; i < maxPipes; i++ {
-		utils.CreateSegmentPipeOnAllHostsForRestore(oidList[i], c, fpInfo, helperIdx...)
-	}
-	return maxPipes
 }
 
 func HelperIdx(whichConn int) []int {
