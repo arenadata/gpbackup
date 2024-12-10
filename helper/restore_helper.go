@@ -174,7 +174,7 @@ type IRestoreHelper interface {
 type RestoreHelper struct{}
 
 func (RestoreHelper) checkForSkipFile(pipeFile string, tableOid int) bool {
-	return utils.FileExists(fmt.Sprintf("%s_skip_%d", pipeFile, tableOid))
+	return utils.FileExists(fmt.Sprintf("%s_%d", utils.GetSkipFilename(pipeFile), tableOid))
 }
 
 func doRestoreAgent() error {
