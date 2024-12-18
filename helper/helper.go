@@ -25,7 +25,6 @@ import (
 var (
 	CleanupGroup  *sync.WaitGroup
 	version       string
-	pipesMap      map[string]bool
 	wasTerminated atomic.Bool
 	wasSigpiped   atomic.Bool
 )

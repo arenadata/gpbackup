@@ -87,8 +87,7 @@ func (h *restoreMockHelperImpl) makeStep() helperTestStep {
 		h.currentStep++
 	}
 
-	Expect(h.currentStep).To(BeNumerically("<", len(h.expectedSteps)))
-	ret := h.expectedSteps[h.currentStep]
+	ret := h.getCurStep()
 	fmt.Printf("Step: %s", ret.comment)
 	return ret
 }
