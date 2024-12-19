@@ -484,11 +484,13 @@ var _ = Describe("helper tests", func() {
 			err := test_reader.waitForPlugin()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(test_cmd1.waitCount).To(Equal(1))
-
-			// Check that waitForPlugin do nothing when no cmd and/or no process
+		})
+		It("waitForPlugin do nothing when no cmd and/or no process", func() {
 			test_cmd2 := testPluginCmd{hasProcess_: false}
+			test_reader := new(RestoreReader)
 			test_reader.pluginCmd = &test_cmd2
-			err = test_reader.waitForPlugin()
+
+			err := test_reader.waitForPlugin()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(test_cmd2.waitCount).To(Equal(0))
 		})
