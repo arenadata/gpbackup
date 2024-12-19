@@ -366,7 +366,6 @@ var _ = Describe("helper tests", func() {
 			Expect(err).To(BeNil())
 		})
 		It("skips batches if skip file is discovered with resize restore", func() {
-			*isResizeRestore = true
 			*origSize = 3
 			*destSize = 5
 
