@@ -441,7 +441,7 @@ var _ = Describe("helper tests", func() {
 			// Check that plugin command's Wait was acually called and only once
 			Expect(helper.restoreData.waitCount).To(Equal(1))
 		})
-		It("calls waitForPlugin doRestoreAgent for resize and no single data file ", func() {
+		It("calls waitForPlugin doRestoreAgent for resize and no single data file", func() {
 			Expect(*singleDataFile).To(Equal(false))
 
 			oidBatch := []oidWithBatch{{100, 0}}
@@ -457,7 +457,7 @@ var _ = Describe("helper tests", func() {
 			// Check that plugin command's Wait was acually called and only once
 			Expect(helper.restoreData.waitCount).To(Equal(1))
 		})
-		It("calls waitForPlugin doRestoreAgent for reduce cluster and no single data file ", func() {
+		It("calls waitForPlugin doRestoreAgent for reduce cluster and no single data file", func() {
 			Expect(*singleDataFile).To(Equal(false))
 			*destSize, *origSize = *origSize, *destSize
 
