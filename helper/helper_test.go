@@ -188,7 +188,7 @@ func (pt *testPluginCmd) pid() int {
 }
 
 func (pt *testPluginCmd) Wait() error {
-	pt.waitCount += 1
+	pt.waitCount++
 	if pt.error == nil {
 		return nil
 	}
