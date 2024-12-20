@@ -459,7 +459,8 @@ var _ = Describe("helper tests", func() {
 		})
 		It("calls waitForPlugin doRestoreAgent for reduce cluster and no single data file", func() {
 			Expect(*singleDataFile).To(Equal(false))
-			*destSize, *origSize = *origSize, *destSize
+			*origSize = 3
+			*destSize = 5
 
 			oidBatch := []oidWithBatch{{100, 0}}
 			expectedScenario := []helperTestStep{
