@@ -318,8 +318,7 @@ var _ = Describe("helper tests", func() {
 			mockHelper := newHelperTest(oidBatch, steps)
 
 			// Prepare and write the toc file
-			testDir := "" // Use local directory for the TOC file instead of default
-			*tocFile = fmt.Sprintf("%stest_toc.yaml", testDir)
+			*tocFile = testTocFile
 			writeTestTOC(*tocFile)
 			defer func() {
 				_ = os.Remove(*tocFile)
