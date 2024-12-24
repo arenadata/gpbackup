@@ -47,10 +47,9 @@ func CreateSegmentPipeOnAllHostsForBackup(oid string, c *cluster.Cluster, fpInfo
 }
 
 func CreateSegmentPipeOnAllHostsForRestore(oid string, c *cluster.Cluster, fpInfo filepath.FilePathInfo, helperIdx ...int) {
-	oidWithBatch := strings.Split(oid, ",")
 	remoteOutput := c.GenerateAndExecuteCommand("Creating segment data pipes", cluster.ON_SEGMENTS, func(contentID int) string {
 		pipeName := fpInfo.GetSegmentPipeFilePath(contentID, helperIdx...)
-		pipeName = fmt.Sprintf("%s_%s_%s", pipeName, oidWithBatch[0], oidWithBatch[1])
+		pipeName = fmt.Sprintf("%s_%s_0", pipeName, oid)
 		gplog.Debug("Creating pipe %s", pipeName)
 		return fmt.Sprintf("mkfifo %s", pipeName)
 	})

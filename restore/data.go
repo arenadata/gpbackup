@@ -230,20 +230,23 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 		for whichConn := 0; whichConn < maxHelpers; whichConn++ {
 			// During a larger-to-smaller restore, we need to do multiple passes of
 			// data loading so we assign the batches here.
+			oidWithoutBatchList := make([]string, 0)
 			oidList := make([]string, 0)
 			for entryIdx := whichConn; entryIdx < totalTables; entryIdx += maxHelpers {
 				if dataEntries[entryIdx].IsReplicated {
+					oidWithoutBatchList = append(oidWithoutBatchList, fmt.Sprintf("%d", dataEntries[entryIdx].Oid))
 					oidList = append(oidList, fmt.Sprintf("%d,0", dataEntries[entryIdx].Oid))
 					continue
 				}
 
+				oidWithoutBatchList = append(oidWithoutBatchList, fmt.Sprintf("%d", dataEntries[entryIdx].Oid))
 				for b := 0; b < batches; b++ {
 					oidList = append(oidList, fmt.Sprintf("%d,%d", dataEntries[entryIdx].Oid, b))
 				}
 			}
 
 			utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, HelperIdx(whichConn)...)
-			initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo, HelperIdx(whichConn)...)
+			initialPipes := CreateInitialSegmentPipes(oidWithoutBatchList, globalCluster, connectionPool, fpInfo, HelperIdx(whichConn)...)
 			if wasTerminated.Load() {
 				return 0
 			}
