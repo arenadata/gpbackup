@@ -289,12 +289,13 @@ func assertArtifactsCleaned(timestamp string) {
 	fpInfo := filepath.NewFilePathInfo(backupCluster, "", timestamp, "", false)
 	description := "Checking if helper files are cleaned up properly"
 	cleanupFunc := func(contentID int) string {
-		errorFile := fmt.Sprintf("%s_error", fpInfo.GetSegmentPipeFilePath(contentID))
 		oidFile := fpInfo.GetSegmentHelperFilePath(contentID, "oid")
 		scriptFile := fpInfo.GetSegmentHelperFilePath(contentID, "script")
 		pipeFile := fpInfo.GetSegmentPipeFilePath(contentID)
+		errorFile := utils.GetErrorFilename(pipeFile)
+		skipFile := utils.GetSkipFilename(pipeFile)
 
-		return fmt.Sprintf("! ls %s && ! ls %s && ! ls %s && ! ls %s*", errorFile, oidFile, scriptFile, pipeFile)
+		return fmt.Sprintf("! ls %s* && ! ls %s* && ! ls %s* && ! ls %s* && ! ls %s*", errorFile, skipFile, oidFile, scriptFile, pipeFile)
 	}
 	remoteOutput := backupCluster.GenerateAndExecuteCommand(description, cluster.ON_SEGMENTS|cluster.INCLUDE_COORDINATOR, cleanupFunc)
 	if remoteOutput.NumErrors != 0 {
@@ -2326,7 +2327,7 @@ LANGUAGE plpgsql NO SQL;`)
 			testhelper.AssertQueryRuns(restoreConn, "DROP ROLE testrole;")
 		})
 		DescribeTable("",
-			func(fullTimestamp string, incrementalTimestamp string, tarBaseName string, isIncrementalRestore bool, isFilteredRestore bool, isSingleDataFileRestore bool, testUsesPlugin bool) {
+			func(fullTimestamp string, incrementalTimestamp string, tarBaseName string, isIncrementalRestore bool, isFilteredRestore bool, isSingleDataFileRestore bool, testUsesPlugin bool, size ...int) {
 				if isSingleDataFileRestore && segmentCount != 3 {
 					Skip("Single data file resize restores currently require a 3-segment cluster to test.")
 				}
@@ -2357,6 +2358,13 @@ LANGUAGE plpgsql NO SQL;`)
 					"--on-error-continue"}
 				if isFilteredRestore {
 					gprestoreArgs = append(gprestoreArgs, "--include-schema", "schematwo")
+				}
+				if len(size) == 1 {
+					if isSingleDataFileRestore {
+						gprestoreArgs = append(gprestoreArgs, "--copy-queue-size", fmt.Sprintf("%d", size[0]))
+					} else {
+						gprestoreArgs = append(gprestoreArgs, "--jobs", fmt.Sprintf("%d", size[0]))
+					}
 				}
 				gprestore(gprestorePath, restoreHelperPath, fullTimestamp, gprestoreArgs...)
 
@@ -2405,30 +2413,49 @@ LANGUAGE plpgsql NO SQL;`)
 				}
 			},
 			Entry("Can backup a 9-segment cluster and restore to current cluster", "20220909090738", "", "9-segment-db", false, false, false, false),
+			Entry("Can backup a 9-segment cluster and restore to current cluster with jobs", "20220909090738", "", "9-segment-db", false, false, false, false, 3),
 			Entry("Can backup a 9-segment cluster and restore to current cluster with single data file", "20220909090827", "", "9-segment-db-single-data-file", false, false, true, false),
+			Entry("Can backup a 9-segment cluster and restore to current cluster with single data file with copy-queue-size", "20220909090827", "", "9-segment-db-single-data-file", false, false, true, false, 3),
 			Entry("Can backup a 9-segment cluster and restore to current cluster with incremental backups", "20220909150254", "20220909150353", "9-segment-db-incremental", true, false, false, false),
+			Entry("Can backup a 9-segment cluster and restore to current cluster with incremental backups with jobs", "20220909150254", "20220909150353", "9-segment-db-incremental", true, false, false, false, 3),
 
 			Entry("Can backup a 7-segment cluster and restore to current cluster", "20220908145504", "", "7-segment-db", false, false, false, false),
+			Entry("Can backup a 7-segment cluster and restore to current cluster with jobs", "20220908145504", "", "7-segment-db", false, false, false, false, 3),
 			Entry("Can backup a 7-segment cluster and restore to current cluster single data file", "20220912101931", "", "7-segment-db-single-data-file", false, false, true, false),
+			Entry("Can backup a 7-segment cluster and restore to current cluster single data file with copy-queue-size", "20220912101931", "", "7-segment-db-single-data-file", false, false, true, false, 3),
 			Entry("Can backup a 7-segment cluster and restore to current cluster with a filter", "20220908145645", "", "7-segment-db-filter", false, true, false, false),
+			Entry("Can backup a 7-segment cluster and restore to current cluster with a filter with jobs", "20220908145645", "", "7-segment-db-filter", false, true, false, false, 3),
 			Entry("Can backup a 7-segment cluster and restore to current cluster with single data file and filter", "20220912102413", "", "7-segment-db-single-data-file-filter", false, true, true, false),
+			Entry("Can backup a 7-segment cluster and restore to current cluster with single data file and filter with copy-queue-size", "20220912102413", "", "7-segment-db-single-data-file-filter", false, true, true, false, 3),
 			Entry("Can backup a 2-segment cluster and restore to current cluster single data file and filter", "20220908150223", "", "2-segment-db-single-data-file-filter", false, true, true, false),
+			Entry("Can backup a 2-segment cluster and restore to current cluster single data file and filter with copy-queue-size", "20220908150223", "", "2-segment-db-single-data-file-filter", false, true, true, false, 3),
 			Entry("Can backup a 2-segment cluster and restore to current cluster single data file", "20220908150159", "", "2-segment-db-single-data-file", false, false, true, false),
+			Entry("Can backup a 2-segment cluster and restore to current cluster single data file with copy-queue-size", "20220908150159", "", "2-segment-db-single-data-file", false, false, true, false, 3),
 			Entry("Can backup a 2-segment cluster and restore to current cluster with filter", "20220908150238", "", "2-segment-db-filter", false, true, false, false),
-			Entry("Can backup a 2-segment cluster and restore to current cluster with incremental backups and a single data file", "20220909150612", "20220909150622", "2-segment-db-incremental", true, false, false, false),
+			Entry("Can backup a 2-segment cluster and restore to current cluster with filter with jobs", "20220908150238", "", "2-segment-db-filter", false, true, false, false, 3),
+			Entry("Can backup a 2-segment cluster and restore to current cluster with incremental backups and a single data file", "20220909150612", "20220909150622", "2-segment-db-incremental", true, false, true, false),
+			Entry("Can backup a 2-segment cluster and restore to current cluster with incremental backups and a single data file with copy-queue-size", "20220909150612", "20220909150622", "2-segment-db-incremental", true, false, true, false, 3),
 			Entry("Can backup a 1-segment cluster and restore to current cluster", "20220908150735", "", "1-segment-db", false, false, false, false),
+			Entry("Can backup a 1-segment cluster and restore to current cluster with jobs", "20220908150735", "", "1-segment-db", false, false, false, false, 3),
 			Entry("Can backup a 1-segment cluster and restore to current cluster with single data file", "20220908150752", "", "1-segment-db-single-data-file", false, false, true, false),
+			Entry("Can backup a 1-segment cluster and restore to current cluster with single data file with copy-queue-size", "20220908150752", "", "1-segment-db-single-data-file", false, false, true, false, 3),
 			Entry("Can backup a 1-segment cluster and restore to current cluster with a filter", "20220908150804", "", "1-segment-db-filter", false, true, false, false),
+			Entry("Can backup a 1-segment cluster and restore to current cluster with a filter with jobs", "20220908150804", "", "1-segment-db-filter", false, true, false, false, 3),
 			Entry("Can backup a 3-segment cluster and restore to current cluster", "20220909094828", "", "3-segment-db", false, false, false, false),
+			Entry("Can backup a 3-segment cluster and restore to current cluster with jobs", "20220909094828", "", "3-segment-db", false, false, false, false, 3),
 
 			Entry("Can backup a 2-segment using gpbackup 1.26.0 and restore to current cluster", "20230516032007", "", "2-segment-db-1_26_0", false, false, false, false),
+			Entry("Can backup a 2-segment using gpbackup 1.26.0 and restore to current cluster with jobs", "20230516032007", "", "2-segment-db-1_26_0", false, false, false, false, 3),
 
 			// These tests will only run in CI, to avoid requiring developers to configure a plugin locally.
 			// We don't do as many combinatoric tests for resize restores using plugins, partly for storage space reasons and partly because
 			// we assume that if all of the above resize restores work and basic plugin restores work then the intersection should also work.
 			Entry("Can perform a backup and full restore of a 7-segment cluster using a plugin", "20220912101931", "", "7-segment-db-single-data-file", false, false, true, true),
+			Entry("Can perform a backup and full restore of a 7-segment cluster using a plugin with jobs", "20220912101931", "", "7-segment-db-single-data-file", false, false, true, true, 3),
 			Entry("Can perform a backup and full restore of a 2-segment cluster using a plugin", "20220908150159", "", "2-segment-db-single-data-file", false, false, true, true),
+			Entry("Can perform a backup and full restore of a 2-segment cluster using a plugin with jobs", "20220908150159", "", "2-segment-db-single-data-file", false, false, true, true, 3),
 			Entry("Can perform a backup and incremental restore of a 2-segment cluster using a plugin", "20220909150612", "20220909150622", "2-segment-db-incremental", true, false, false, true),
+			Entry("Can perform a backup and incremental restore of a 2-segment cluster using a plugin with jobs", "20220909150612", "20220909150622", "2-segment-db-incremental", true, false, false, true, 3),
 		)
 		It("will not restore a pre-1.26.0 backup that lacks a stored SegmentCount value", func() {
 			extractDirectory := extractSavedTarFile(backupDir, "2-segment-db-1_24_0")
@@ -2581,6 +2608,33 @@ LANGUAGE plpgsql NO SQL;`)
 			Expect(err).To(HaveOccurred())
 			Expect(string(output)).To(MatchRegexp(`Error loading data into table public.t1: COPY t1, line \d+, column i: "\d+": ERROR: value "\d+" is out of range for type smallint`))
 			Expect(string(output)).To(ContainSubstring(`Error loading data into table public.t2: timeout: context canceled`))
+			assertDataRestored(restoreConn, map[string]int{
+				"public.t0": 0,
+				"public.t1": 0,
+				"public.t2": 0,
+				"public.t3": 0,
+				"public.t4": 0})
+			assertArtifactsCleaned("20240502095933")
+			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
+		})
+		It("Will continue after error during restore with jobs", func() {
+			command := exec.Command("tar", "-xzf", "resources/2-segment-db-error.tar.gz", "-C", backupDir)
+			mustRunCommand(command)
+			gprestoreCmd := exec.Command(gprestorePath,
+				"--timestamp", "20240502095933",
+				"--redirect-db", "restoredb",
+				"--backup-dir", path.Join(backupDir, "2-segment-db-error"),
+				"--resize-cluster", "--jobs", "3", "--on-error-continue")
+			output, err := gprestoreCmd.CombinedOutput()
+			Expect(err).To(HaveOccurred())
+			Expect(string(output)).To(MatchRegexp(`Error loading data into table public.t1: COPY t1, line \d+, column i: "\d+": ERROR: value "\d+" is out of range for type smallint`))
+			Expect(string(output)).To(MatchRegexp(`Error loading data into table public.t3: COPY t3, line \d+, column i: "\d+": ERROR: value "\d+" is out of range for type smallint`))
+			assertDataRestored(restoreConn, map[string]int{
+				"public.t0": 1000000,
+				"public.t1": 0,
+				"public.t2": 1000000,
+				"public.t3": 0,
+				"public.t4": 1000000})
 			assertArtifactsCleaned("20240502095933")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4;")
 		})
@@ -2666,6 +2720,11 @@ LANGUAGE plpgsql NO SQL;`)
 				"--resize-cluster", "--on-error-continue")
 			output, _ := gprestoreCmd.CombinedOutput()
 			Expect(string(output)).To(ContainSubstring(`[ERROR]:-Encountered errors with 1 helper agent(s)`))
+			assertDataRestored(restoreConn, map[string]int{
+				"public.a": 1000,
+				"public.b": 0,
+				"public.c": 0,
+				"public.d": 0})
 			assertArtifactsCleaned("20240730085053")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d;")
 		})
@@ -2683,6 +2742,11 @@ LANGUAGE plpgsql NO SQL;`)
 				"--resize-cluster", "--on-error-continue", "--jobs", "3")
 			output, _ := gprestoreCmd.CombinedOutput()
 			Expect(string(output)).To(ContainSubstring(`[ERROR]:-Encountered errors with 1 helper agent(s)`))
+			assertDataRestored(restoreConn, map[string]int{
+				"public.a": 1000,
+				"public.b": 0,
+				"public.c": 1000,
+				"public.d": 1000})
 			assertArtifactsCleaned("20240730085053")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d;")
 		})

@@ -289,7 +289,7 @@ func verifyIncrementalState() {
 }
 
 func restorePredata(metadataFilename string) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return
 	}
 	var numErrors int32
@@ -356,7 +356,7 @@ func restorePredata(metadataFilename string) {
 	}
 
 	progressBar.Finish()
-	if wasTerminated {
+	if wasTerminated.Load() {
 		gplog.Info("Pre-data metadata restore incomplete")
 	} else if numErrors > 0 {
 		gplog.Info("Pre-data metadata restore completed with failures")
@@ -366,7 +366,7 @@ func restorePredata(metadataFilename string) {
 }
 
 func restoreSequenceValues(metadataFilename string) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return
 	}
 	gplog.Info("Restoring sequence values")
@@ -396,7 +396,7 @@ func restoreSequenceValues(metadataFilename string) {
 		progressBar.Finish()
 	}
 
-	if wasTerminated {
+	if wasTerminated.Load() {
 		gplog.Info("Sequence values restore incomplete")
 	} else if numErrors > 0 {
 		gplog.Info("Sequence values restore completed with failures")
@@ -466,7 +466,7 @@ func editStatementsRedirectSchema(statements []toc.StatementWithType, redirectSc
 }
 
 func restoreData() (int, map[string][]toc.CoordinatorDataEntry) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return -1, nil
 	}
 	restorePlan := backupConfig.RestorePlan
@@ -502,7 +502,7 @@ func restoreData() (int, map[string][]toc.CoordinatorDataEntry) {
 	}
 
 	dataProgressBar.Finish()
-	if wasTerminated {
+	if wasTerminated.Load() {
 		gplog.Info("Data restore incomplete")
 	} else if numErrors > 0 {
 		gplog.Info("Data restore completed with failures")
@@ -514,7 +514,7 @@ func restoreData() (int, map[string][]toc.CoordinatorDataEntry) {
 }
 
 func restorePostdata(metadataFilename string) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return
 	}
 	gplog.Info("Restoring post-data metadata")
@@ -532,7 +532,7 @@ func restorePostdata(metadataFilename string) {
 	numErrors += ExecuteRestoreMetadataStatements("postdata", thirdBatch, "", progressBar, utils.PB_VERBOSE, connectionPool.NumConns > 1)
 	progressBar.Finish()
 
-	if wasTerminated {
+	if wasTerminated.Load() {
 		gplog.Info("Post-data metadata restore incomplete")
 	} else if numErrors > 0 {
 		gplog.Info("Post-data metadata restore completed with failures")
@@ -542,7 +542,7 @@ func restorePostdata(metadataFilename string) {
 }
 
 func restoreStatistics() {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return
 	}
 	statisticsFilename := globalFPInfo.GetStatisticsFilePath()
@@ -562,7 +562,7 @@ func restoreStatistics() {
 }
 
 func runAnalyze(filteredDataEntries map[string][]toc.CoordinatorDataEntry) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return
 	}
 	gplog.Info("Running ANALYZE on restored tables")
@@ -591,7 +591,7 @@ func runAnalyze(filteredDataEntries map[string][]toc.CoordinatorDataEntry) {
 	numErrors := ExecuteStatements(analyzeStatements, progressBar, connectionPool.NumConns > 1)
 	progressBar.Finish()
 
-	if wasTerminated {
+	if wasTerminated.Load() {
 		gplog.Info("ANALYZE on restored tables incomplete")
 	} else if numErrors > 0 {
 		gplog.Info("ANALYZE on restored tables completed with failures")
@@ -604,7 +604,7 @@ func DoTeardown() {
 	restoreFailed := false
 	defer func() {
 		// If the restore was terminated, the signal handler will handle cleanup
-		if wasTerminated {
+		if wasTerminated.Load() {
 			CleanupGroup.Wait()
 		} else {
 			DoCleanup(restoreFailed)
@@ -629,7 +629,7 @@ func DoTeardown() {
 		}
 		restoreFailed = true
 	}
-	if wasTerminated {
+	if wasTerminated.Load() {
 		/*
 		 * Don't print an error if the restore was canceled, as the signal handler
 		 * will take care of cleanup and return codes.  Just wait until the signal
@@ -739,12 +739,10 @@ func DoCleanup(restoreFailed bool) {
 			utils.CleanUpSegmentHelperProcesses(globalCluster, fpInfo, "restore", cleanupTimeout)
 			utils.CleanUpHelperFilesOnAllHosts(globalCluster, fpInfo, cleanupTimeout)
 
-			// Check gpbackup_helper errors here if restore was terminated
-			if wasTerminated {
-				err := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
-				if err != nil {
-					gplog.Error(err.Error())
-				}
+			// Check gpbackup_helper errors here
+			err := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
+			if err != nil {
+				gplog.Error(err.Error())
 			}
 		}
 	}

@@ -235,7 +235,7 @@ func backupGlobals(metadataFile *utils.FileWithByteCount) {
 }
 
 func backupPredata(metadataFile *utils.FileWithByteCount, tables []Table, tableOnly bool) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return
 	}
 	gplog.Info("Writing pre-data metadata")
@@ -290,7 +290,7 @@ func backupPredata(metadataFile *utils.FileWithByteCount, tables []Table, tableO
 }
 
 func backupData(tables []Table) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return
 	}
 	if len(tables) == 0 {
@@ -306,7 +306,7 @@ func backupData(tables []Table) {
 		for _, table := range tables {
 			oidList = append(oidList, fmt.Sprintf("%d", table.Oid))
 		}
-		utils.WriteOidListToSegments(oidList, globalCluster, globalFPInfo, "oid")
+		utils.WriteOidListToSegments(oidList, globalCluster, globalFPInfo)
 		compressStr := fmt.Sprintf(" --compression-level %d --compression-type %s", MustGetFlagInt(options.COMPRESSION_LEVEL), MustGetFlagString(options.COMPRESSION_TYPE))
 		if MustGetFlagBool(options.NO_COMPRESSION) {
 			compressStr = " --compression-level 0"
@@ -326,7 +326,7 @@ func backupData(tables []Table) {
 }
 
 func backupPostdata(metadataFile *utils.FileWithByteCount) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return
 	}
 	gplog.Info("Writing post-data metadata")
@@ -349,7 +349,7 @@ func backupPostdata(metadataFile *utils.FileWithByteCount) {
 }
 
 func backupStatistics(tables []Table) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		return
 	}
 	statisticsFilename := globalFPInfo.GetStatisticsFilePath()
@@ -365,7 +365,7 @@ func DoTeardown() {
 	backupFailed := false
 	defer func() {
 		// If the backup was terminated, the signal handler will handle cleanup
-		if wasTerminated {
+		if wasTerminated.Load() {
 			CleanupGroup.Wait()
 		} else {
 			DoCleanup(backupFailed)
@@ -389,7 +389,7 @@ func DoTeardown() {
 		}
 		backupFailed = true
 	}
-	if wasTerminated {
+	if wasTerminated.Load() {
 		/*
 		 * Don't print an error or create a report file if the backup was canceled,
 		 * as the signal handler will take care of cleanup and return codes.  Just
@@ -491,7 +491,7 @@ func DoCleanup(backupFailed bool) {
 		utils.CleanUpHelperFilesOnAllHosts(globalCluster, globalFPInfo, cleanupTimeout)
 
 		// Check gpbackup_helper errors here if backup was terminated
-		if wasTerminated {
+		if wasTerminated.Load() {
 			err := utils.CheckAgentErrorsOnSegments(globalCluster, globalFPInfo)
 			if err != nil {
 				gplog.Error(err.Error())
@@ -586,7 +586,7 @@ func GetVersion() string {
 }
 
 func logCompletionMessage(msg string) {
-	if wasTerminated {
+	if wasTerminated.Load() {
 		gplog.Info("%s incomplete", msg)
 	} else {
 		gplog.Info("%s complete", msg)

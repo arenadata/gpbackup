@@ -238,7 +238,7 @@ func doRestoreAgent() error {
 
 		for batchNum := 0; batchNum < oidWithBatch.batch; batchNum++ {
 			contentToRestore := *content + (*destSize * batchNum)
-			if wasTerminated {
+			if wasTerminated.Load() {
 				logError("Terminated due to user request")
 				return errors.New("Terminated due to user request")
 			}
@@ -297,9 +297,13 @@ func doRestoreAgent() error {
 						if *onErrorContinue && utils.FileExists(fmt.Sprintf("%s_skip_%d", *pipeFile, tableOid)) {
 							logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 							err = nil
-							skip = true
-							if nextBatchNum < oidWithBatch.batch {
-								closeAndDeletePipe(tableOid, nextBatchNum)
+							skipOid = tableOid
+							/* Close up to *copyQueue files with this tableOid */
+							for idx := 0; idx < *copyQueue; idx++ {
+								batchToDelete := batchNum + idx
+								if batchToDelete < batches {
+									closeAndDeletePipe(tableOid, batchToDelete)
+								}
 							}
 							goto LoopEnd
 						} else {

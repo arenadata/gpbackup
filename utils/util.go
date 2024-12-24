@@ -14,6 +14,7 @@ import (
 	path "path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/greenplum-db/gp-common-go-libs/dbconn"
@@ -156,7 +157,7 @@ func ValidateCompressionTypeAndLevel(compressionType string, compressionLevel in
 	return nil
 }
 
-func InitializeSignalHandler(cleanupFunc func(bool), procDesc string, termFlag *bool) {
+func InitializeSignalHandler(cleanupFunc func(bool), procDesc string, termFlag *atomic.Bool) {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, unix.SIGINT, unix.SIGTERM)
 	go func() {
@@ -168,7 +169,7 @@ func InitializeSignalHandler(cleanupFunc func(bool), procDesc string, termFlag *
 		case unix.SIGTERM:
 			gplog.Warn("Received a termination signal, aborting %s", procDesc)
 		}
-		*termFlag = true
+		termFlag.Store(true)
 		cleanupFunc(true)
 		os.Exit(2)
 	}()

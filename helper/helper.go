@@ -26,7 +26,7 @@ import (
 var (
 	CleanupGroup  *sync.WaitGroup
 	version       string
-	wasTerminated bool
+	wasTerminated atomic.Bool
 	wasSigpiped   atomic.Bool
 	writeHandle   *os.File
 	writer        *bufio.Writer
@@ -60,7 +60,7 @@ var (
 func DoHelper() {
 	var err error
 	defer func() {
-		if wasTerminated {
+		if wasTerminated.Load() {
 			CleanupGroup.Wait()
 			return
 		}
@@ -78,7 +78,7 @@ func DoHelper() {
 	}
 	if err != nil {
 		// error logging handled in doBackupAgent and doRestoreAgent
-		errFile := fmt.Sprintf("%s_error", *pipeFile)
+		errFile := utils.GetErrorFilename(*pipeFile)
 		gplog.Debug("Writing error file %s", errFile)
 		handle, err := utils.OpenFileForWrite(errFile)
 		if err != nil {
@@ -163,8 +163,8 @@ func InitializeSignalHandler() {
 				terminatedChan <- true
 			}
 		}()
-		wasTerminated = <-terminatedChan
-		if wasTerminated {
+		wasTerminated.Store(<-terminatedChan)
+		if wasTerminated.Load() {
 			DoCleanup()
 			os.Exit(2)
 		} else {
@@ -275,13 +275,13 @@ func flushAndCloseRestoreWriter(pipeName string, oid int) error {
 
 func DoCleanup() {
 	defer CleanupGroup.Done()
-	if wasTerminated {
+	if wasTerminated.Load() {
 		/*
 		 * If the agent dies during the last table copy, it can still report
 		 * success, so we create an error file and check for its presence in
 		 * gprestore after the COPYs are finished.
 		 */
-		errFile := fmt.Sprintf("%s_error", *pipeFile)
+		errFile := utils.GetErrorFilename(*pipeFile)
 		gplog.Debug("Writing error file %s", errFile)
 		handle, err := utils.OpenFileForWrite(errFile)
 		if err != nil {
@@ -317,7 +317,7 @@ func DoCleanup() {
 		}
 	}
 
-	skipFiles, _ := filepath.Glob(fmt.Sprintf("%s_skip_*", *pipeFile))
+	skipFiles, _ := filepath.Glob(utils.GetSkipFilename(*pipeFile) + "*")
 	for _, skipFile := range skipFiles {
 		err = utils.RemoveFileIfExists(skipFile)
 		if err != nil {
