@@ -223,7 +223,8 @@ func doRestoreAgent() error {
 
 	for i, oidWithBatch := range oidWithBatchList {
 		if i < len(oidWithBatchList)-*copyQueue {
-			nextOid := oidWithBatchList[i+*copyQueue].oid
+			nextOidWithBatch := oidWithBatchList[i+*copyQueue]
+			nextOid := nextOidWithBatch.oid
 			err := createNextPipe(*pipeFile, nextOid, 0)
 			if err != nil {
 				// In the case this error is hit it means we have lost the
