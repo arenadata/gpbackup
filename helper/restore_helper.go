@@ -257,7 +257,7 @@ func doRestoreAgent() error {
 				}
 			}
 		}
-		if batchNum == 0 && i < len(oidList)-*copyQueue {
+		if i < len(oidList)-*copyQueue {
 			nextOid := oidList[i+*copyQueue]
 			nextBatchNum := 0
 
