@@ -297,7 +297,6 @@ func doRestoreAgent() error {
 						if *onErrorContinue && utils.FileExists(fmt.Sprintf("%s_skip_%d", *pipeFile, tableOid)) {
 							logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 							err = nil
-							skipOid = tableOid
 							/* Close up to *copyQueue files with this tableOid */
 							for idx := 0; idx < *copyQueue; idx++ {
 								batchToDelete := batchNum + idx
