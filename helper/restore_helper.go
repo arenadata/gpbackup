@@ -11,9 +11,11 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/greenplum-db/gp-common-go-libs/operating"
 	"github.com/greenplum-db/gpbackup/toc"
 	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/klauspost/compress/zstd"
@@ -33,21 +35,32 @@ const (
 )
 
 var (
-	contentRE *regexp.Regexp
+	writeHandle *os.File
+	writer      *bufio.Writer
+	contentRE   *regexp.Regexp
 )
 
-/* RestoreReader structure to wrap the underlying reader.
- * readerType identifies how the reader can be used
+/* IRestoreReader interface to wrap the underlying reader.
+ * getReaderType() identifies how the reader can be used
  * SEEKABLE uses seekReader. Used when restoring from uncompressed data with filters from local filesystem
  * NONSEEKABLE and SUBSET types uses bufReader.
  * SUBSET type applies when restoring using plugin(if compatible) from uncompressed data with filters
  * NONSEEKABLE type applies for every other restore scenario
  */
+type IRestoreReader interface {
+	waitForPlugin() error
+	positionReader(pos uint64, oid int) error
+	copyData(num int64) (int64, error)
+	copyAllData() (int64, error)
+	closeFileHandle()
+	getReaderType() ReaderType
+}
+
 type RestoreReader struct {
 	fileHandle *os.File
 	bufReader  *bufio.Reader
 	seekReader io.ReadSeeker
-	pluginCmd  *PluginCmd
+	pluginCmd  IPluginCmd
 	readerType ReaderType
 }
 
@@ -55,19 +68,14 @@ type RestoreReader struct {
 // called on every reader that used a plugin as to not leave any zombies behind.
 func (r *RestoreReader) waitForPlugin() error {
 	var err error
-	if r.pluginCmd != nil && r.pluginCmd.Process != nil {
-		logVerbose(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.Process.Pid))
+	if r.pluginCmd != nil && r.pluginCmd.hasProcess() {
+		logVerbose(fmt.Sprintf("Waiting for the plugin process (%d)", r.pluginCmd.pid()))
 		err = r.pluginCmd.Wait()
 		if err != nil {
 			logError(fmt.Sprintf("Plugin process exited with an error: %s", err))
 		}
 		// Log plugin's stderr as warnings.
-		errLog := strings.Trim(r.pluginCmd.errBuf.String(), "\x00")
-		if len(errLog) != 0 {
-			logWarn(fmt.Sprintf("Plugin log: %s", errLog))
-			// Consume the entire buffer.
-			r.pluginCmd.errBuf.Next(r.pluginCmd.errBuf.Len())
-		}
+		r.pluginCmd.errLog()
 	}
 	return err
 }
@@ -118,10 +126,22 @@ func (r *RestoreReader) copyAllData() (int64, error) {
 	return bytesRead, err
 }
 
-func closeAndDeletePipe(tableOid int, batchNum int) {
+func (r *RestoreReader) getReaderType() ReaderType {
+	return r.readerType
+}
+
+func (r *RestoreReader) closeFileHandle() {
+	r.fileHandle.Close()
+}
+
+func (RestoreHelper) createPipe(pipe string) error {
+	return createPipe(pipe)
+}
+
+func (rh RestoreHelper) closeAndDeletePipe(tableOid int, batchNum int) {
 	pipe := fmt.Sprintf("%s_%d_%d", *pipeFile, tableOid, batchNum)
 	logInfo(fmt.Sprintf("Oid %d, Batch %d: Closing pipe %s", tableOid, batchNum, pipe))
-	err := flushAndCloseRestoreWriter(pipe, tableOid)
+	err := rh.flushAndCloseRestoreWriter(pipe, tableOid)
 	if err != nil {
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: Failed to flush and close pipe: %s", tableOid, batchNum, err))
 	}
@@ -138,7 +158,30 @@ type oidWithBatch struct {
 	batch int
 }
 
+type IRestoreHelper interface {
+	getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error)
+	flushAndCloseRestoreWriter(pipeName string, oid int) error
+	doRestoreAgentCleanup()
+
+	createPipe(pipe string) error
+	closeAndDeletePipe(tableOid int, batchNum int)
+
+	getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error)
+	getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error)
+	checkForSkipFile(pipeFile string, tableOid int) bool
+}
+
+type RestoreHelper struct{}
+
+func (RestoreHelper) checkForSkipFile(pipeFile string, tableOid int) bool {
+	return utils.FileExists(fmt.Sprintf("%s_%d", utils.GetSkipFilename(pipeFile), tableOid))
+}
+
 func doRestoreAgent() error {
+	return doRestoreAgentInternal(new(RestoreHelper))
+}
+
+func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 	// We need to track various values separately per content for resize restore
 	var segmentTOC map[int]*toc.SegmentTOC
 	var tocEntries map[int]map[uint]toc.SegmentDataEntry
@@ -149,12 +192,14 @@ func doRestoreAgent() error {
 	var bytesRead int64
 	var lastError error
 
-	readers := make(map[int]*RestoreReader)
+	readers := make(map[int]IRestoreReader)
 
-	oidWithBatchList, err := getOidWithBatchListFromFile(*oidFile)
+	oidWithBatchList, err := restoreHelper.getOidWithBatchListFromFile(*oidFile)
 	if err != nil {
 		return err
 	}
+
+	defer restoreHelper.doRestoreAgentCleanup()
 
 	// During a larger-to-smaller restore, we need to do multiple passes for each oid, so the table
 	// restore goes into another nested for loop below.  In the normal or smaller-to-larger cases,
@@ -199,7 +244,7 @@ func doRestoreAgent() error {
 			tocEntries[contentToRestore] = segmentTOC[contentToRestore].DataEntries
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
-			readers[contentToRestore], err = getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
+			readers[contentToRestore], err = restoreHelper.getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
 			if readers[contentToRestore] != nil {
 				// NOTE: If we reach here with batches > 1, there will be
 				// *origSize / *destSize (N old segments / N new segments)
@@ -218,7 +263,7 @@ func doRestoreAgent() error {
 				logError(fmt.Sprintf("Error encountered getting restore data reader for single data file: %v", err))
 				return err
 			}
-			logVerbose(fmt.Sprintf("Using reader type: %s", readers[contentToRestore].readerType))
+			logVerbose(fmt.Sprintf("Using reader type: %s", readers[contentToRestore].getReaderType()))
 
 			contentToRestore += *destSize
 		}
@@ -248,7 +293,7 @@ func doRestoreAgent() error {
 				nextBatchNum := nextOidWithBatch.batch
 				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
 				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-				err := createPipe(nextPipeToCreate)
+				err := restoreHelper.createPipe(nextPipeToCreate)
 				if err != nil {
 					logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 					// In the case this error is hit it means we have lost the
@@ -276,12 +321,12 @@ func doRestoreAgent() error {
 				// Close file before it gets overwritten. Free up these
 				// resources when the reader is not needed anymore.
 				if reader, ok := readers[contentToRestore]; ok {
-					reader.fileHandle.Close()
+					reader.closeFileHandle()
 				}
 				// We pre-create readers above for the sake of not re-opening SDF readers.  For MDF we can't
 				// re-use them but still having them in a map simplifies overall code flow.  We repeatedly assign
 				// to a map entry here intentionally.
-				readers[contentToRestore], err = getRestoreDataReader(filename, nil, nil)
+				readers[contentToRestore], err = restoreHelper.getRestoreDataReader(filename, nil, nil)
 				if err != nil {
 					logError(fmt.Sprintf("Oid: %d, Batch %d: Error encountered getting restore data reader: %v", tableOid, batchNum, err))
 					return err
@@ -291,7 +336,7 @@ func doRestoreAgent() error {
 
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Opening pipe %s", tableOid, batchNum, currentPipe))
 		for {
-			writer, writeHandle, err = getRestorePipeWriter(currentPipe)
+			writer, writeHandle, err = restoreHelper.getRestorePipeWriter(currentPipe)
 			if err != nil {
 				if errors.Is(err, unix.ENXIO) {
 					// COPY (the pipe reader) has not tried to access the pipe yet so our restore_helper
@@ -302,7 +347,7 @@ func doRestoreAgent() error {
 					// might be good to have a GPDB version check here. However, the restore helper should
 					// not contain a database connection so the version should be passed through the helper
 					// invocation from gprestore (e.g. create a --db-version flag option).
-					if *onErrorContinue && utils.FileExists(fmt.Sprintf("%s_%d", utils.GetSkipFilename(*pipeFile), tableOid)) {
+					if *onErrorContinue && restoreHelper.checkForSkipFile(*pipeFile, tableOid) {
 						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 						err = nil
 						skipOid = tableOid
@@ -310,7 +355,7 @@ func doRestoreAgent() error {
 						for idx := 0; idx < *copyQueue; idx++ {
 							batchToDelete := batchNum + idx
 							if batchToDelete < batches {
-								closeAndDeletePipe(tableOid, batchToDelete)
+								restoreHelper.closeAndDeletePipe(tableOid, batchToDelete)
 							}
 						}
 						goto LoopEnd
@@ -378,10 +423,9 @@ func doRestoreAgent() error {
 			lastByte[contentToRestore] = end[contentToRestore]
 		}
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Copied %d bytes into the pipe", tableOid, batchNum, bytesRead))
-
 	LoopEnd:
 		if tableOid != skipOid {
-			closeAndDeletePipe(tableOid, batchNum)
+			restoreHelper.closeAndDeletePipe(tableOid, batchNum)
 		}
 
 		logVerbose(fmt.Sprintf("Oid %d, Batch %d: End batch restore", tableOid, batchNum))
@@ -414,6 +458,36 @@ func doRestoreAgent() error {
 	return lastError
 }
 
+func (rh *RestoreHelper) doRestoreAgentCleanup() {
+	err := rh.flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
+	if err != nil {
+		logVerbose("Encountered error during cleanup: %v", err)
+	}
+}
+
+func (RestoreHelper) flushAndCloseRestoreWriter(pipeName string, oid int) error {
+	if writer != nil {
+		writer.Write([]byte{}) // simulate writer connected in case of error
+		err := writer.Flush()
+		if err != nil {
+			logError("Oid %d: Failed to flush pipe %s", oid, pipeName)
+			return err
+		}
+		writer = nil
+		logVerbose("Oid %d: Successfully flushed pipe %s", oid, pipeName)
+	}
+	if writeHandle != nil {
+		err := writeHandle.Close()
+		if err != nil {
+			logError("Oid %d: Failed to close pipe handle", oid)
+			return err
+		}
+		writeHandle = nil
+		logVerbose("Oid %d: Successfully closed pipe handle", oid)
+	}
+	return nil
+}
+
 func constructSingleTableFilename(name string, contentToRestore int, oid int) string {
 	name = strings.ReplaceAll(name, fmt.Sprintf("gpbackup_%d", *content), fmt.Sprintf("gpbackup_%d", contentToRestore))
 	nameParts := strings.Split(name, ".")
@@ -433,12 +507,30 @@ func replaceContentInFilename(filename string, content int) string {
 	return contentRE.ReplaceAllString(filename, fmt.Sprintf("gpbackup_%d_", content))
 }
 
-func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*RestoreReader, error) {
+func (RestoreHelper) getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
+	oidStr, err := operating.System.ReadFile(oidFileName)
+	if err != nil {
+		logError(fmt.Sprintf("Error encountered reading oid batch list from file: %v", err))
+		return nil, err
+	}
+	oidStrList := strings.Split(strings.TrimSpace(fmt.Sprintf("%s", oidStr)), "\n")
+	oidList := make([]oidWithBatch, len(oidStrList))
+	for i, entry := range oidStrList {
+		oidWithBatchEntry := strings.Split(entry, ",")
+		oidNum, _ := strconv.Atoi(oidWithBatchEntry[0])
+		batchNum, _ := strconv.Atoi(oidWithBatchEntry[1])
+
+		oidList[i] = oidWithBatch{oid: oidNum, batch: batchNum}
+	}
+	return oidList, nil
+}
+
+func (RestoreHelper) getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IRestoreReader, error) {
 	var readHandle io.Reader
 	var seekHandle io.ReadSeeker
 	var isSubset bool
 	var err error = nil
-	var pluginCmd *PluginCmd = nil
+	var pluginCmd IPluginCmd
 	restoreReader := new(RestoreReader)
 
 	if *pluginConfigFile != "" {
@@ -470,7 +562,7 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 		return nil, err
 	}
 	if pluginCmd != nil {
-		logVerbose(fmt.Sprintf("Started plugin process (%d)", pluginCmd.Process.Pid))
+		logVerbose(fmt.Sprintf("Started plugin process (%d)", pluginCmd.pid()))
 	}
 
 	// Set the underlying stream reader in restoreReader
@@ -497,7 +589,7 @@ func getRestoreDataReader(fileToRead string, objToc *toc.SegmentTOC, oidList []i
 	return restoreReader, err
 }
 
-func getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
+func (RestoreHelper) getRestorePipeWriter(currentPipe string) (*bufio.Writer, *os.File, error) {
 	fileHandle, err := os.OpenFile(currentPipe, os.O_WRONLY|unix.O_NONBLOCK, os.ModeNamedPipe)
 	if err != nil {
 		// error logging handled by calling functions
@@ -532,14 +624,38 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 	return true
 }
 
-// pluginCmd is needed to keep track of readable stderr and whether the command
+// IPluginCmd is needed to keep track of readable stderr and whether the command
 // has already been ended.
+type IPluginCmd interface {
+	hasProcess() bool
+	pid() int
+	Wait() error
+	errLog()
+}
+
 type PluginCmd struct {
 	*exec.Cmd
 	errBuf bytes.Buffer
 }
 
-func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (*PluginCmd, io.Reader, bool, error) {
+func (p PluginCmd) hasProcess() bool {
+	return p.Process != nil
+}
+
+func (p PluginCmd) pid() int {
+	return p.Process.Pid
+}
+
+func (p PluginCmd) errLog() {
+	errLog := strings.Trim(p.errBuf.String(), "\x00")
+	if len(errLog) != 0 {
+		logWarn(fmt.Sprintf("Plugin log: %s", errLog))
+		// Consume the entire buffer.
+		p.errBuf.Next(p.errBuf.Len())
+	}
+}
+
+func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidList []int) (IPluginCmd, io.Reader, bool, error) {
 	isSubset := false
 	pluginConfig, err := utils.ReadPluginConfig(*pluginConfigFile)
 	if err != nil {

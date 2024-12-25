@@ -1,7 +1,6 @@
 package helper
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -28,8 +27,6 @@ var (
 	version       string
 	wasTerminated atomic.Bool
 	wasSigpiped   atomic.Bool
-	writeHandle   *os.File
-	writer        *bufio.Writer
 )
 
 /*
@@ -213,24 +210,6 @@ func openClosePipe(filename string) error {
 	return nil
 }
 
-func getOidWithBatchListFromFile(oidFileName string) ([]oidWithBatch, error) {
-	oidStr, err := operating.System.ReadFile(oidFileName)
-	if err != nil {
-		logError(fmt.Sprintf("Error encountered reading oid batch list from file: %v", err))
-		return nil, err
-	}
-	oidStrList := strings.Split(strings.TrimSpace(fmt.Sprintf("%s", oidStr)), "\n")
-	oidList := make([]oidWithBatch, len(oidStrList))
-	for i, entry := range oidStrList {
-		oidWithBatchEntry := strings.Split(entry, ",")
-		oidNum, _ := strconv.Atoi(oidWithBatchEntry[0])
-		batchNum, _ := strconv.Atoi(oidWithBatchEntry[1])
-
-		oidList[i] = oidWithBatch{oid: oidNum, batch: batchNum}
-	}
-	return oidList, nil
-}
-
 func getOidListFromFile(oidFileName string) ([]int, error) {
 	oidStr, err := operating.System.ReadFile(oidFileName)
 	if err != nil {
@@ -244,29 +223,6 @@ func getOidListFromFile(oidFileName string) ([]int, error) {
 		oidList[i] = num
 	}
 	return oidList, nil
-}
-
-func flushAndCloseRestoreWriter(pipeName string, oid int) error {
-	if writer != nil {
-		writer.Write([]byte{}) // simulate writer connected in case of error
-		err := writer.Flush()
-		if err != nil {
-			logError("Oid %d: Failed to flush pipe %s", oid, pipeName)
-			return err
-		}
-		writer = nil
-		logVerbose("Oid %d: Successfully flushed pipe %s", oid, pipeName)
-	}
-	if writeHandle != nil {
-		err := writeHandle.Close()
-		if err != nil {
-			logError("Oid %d: Failed to close pipe handle", oid)
-			return err
-		}
-		writeHandle = nil
-		logVerbose("Oid %d: Successfully closed pipe handle", oid)
-	}
-	return nil
 }
 
 /*
@@ -292,10 +248,6 @@ func DoCleanup() {
 			logVerbose("Encountered error closing error file: %v", err)
 		}
 	}
-	err := flushAndCloseRestoreWriter("Current writer pipe on cleanup", 0)
-	if err != nil {
-		logVerbose("Encountered error during cleanup: %v", err)
-	}
 
 	pipeFiles, _ := filepath.Glob(fmt.Sprintf("%s_[0-9]*", *pipeFile))
 	for _, pipeName := range pipeFiles {
@@ -305,13 +257,13 @@ func DoCleanup() {
 			 * open/close pipes so that the COPY commands hanging on them can complete.
 			 */
 			logVerbose("Opening/closing pipe %s", pipeName)
-			err = openClosePipe(pipeName)
+			err := openClosePipe(pipeName)
 			if err != nil {
 				logVerbose("Encountered error opening/closing pipe %s: %v", pipeName, err)
 			}
 		}
 		logVerbose("Removing pipe %s", pipeName)
-		err = deletePipe(pipeName)
+		err := deletePipe(pipeName)
 		if err != nil {
 			logVerbose("Encountered error removing pipe %s: %v", pipeName, err)
 		}
@@ -319,7 +271,7 @@ func DoCleanup() {
 
 	skipFiles, _ := filepath.Glob(utils.GetSkipFilename(*pipeFile) + "*")
 	for _, skipFile := range skipFiles {
-		err = utils.RemoveFileIfExists(skipFile)
+		err := utils.RemoveFileIfExists(skipFile)
 		if err != nil {
 			logVerbose("Encountered error during cleanup skip files: %v", err)
 		}
