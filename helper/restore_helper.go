@@ -228,6 +228,7 @@ func doRestoreAgent() error {
 
 	// If skip file is detected for the particular tableOid, will not process batches related to this oid
 	skipOid := -1
+	qIdx := 0
 
 	for i, oidWithBatch := range oidWithBatchList {
 		tableOid := oidWithBatch.oid
@@ -244,24 +245,11 @@ func doRestoreAgent() error {
 			nextOid := oidWithBatchList[i+1].oid
 			nextBatchNum := oidWithBatchList[i+1].batch
 
-			if nextOid != skipOid && nextBatchNum != 0 {
-				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
-				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-				err := createPipe(nextPipeToCreate)
-				if err != nil {
-					logError(fmt.Sprintf("Oid %d, Batch %d: Failed to create pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
-					// In the case this error is hit it means we have lost the
-					// ability to create pipes normally, so hard quit even if
-					// --on-error-continue is given
-					return err
-				}
+			if nextBatchNum == 0 {
+				qIdx++
 			}
-		}
-		if i < len(oidList)-*copyQueue {
-			nextOid := oidList[i+*copyQueue]
-			nextBatchNum := 0
 
-			if nextOid != skipOid {
+			if nextOid != skipOid && (nextBatchNum > 0 || qIdx >= *copyQueue) {
 				nextPipeToCreate := fmt.Sprintf("%s_%d_%d", *pipeFile, nextOid, nextBatchNum)
 				logVerbose(fmt.Sprintf("Oid %d, Batch %d: Creating pipe %s\n", nextOid, nextBatchNum, nextPipeToCreate))
 				err := createPipe(nextPipeToCreate)
