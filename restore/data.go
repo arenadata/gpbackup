@@ -243,7 +243,7 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 			}
 
 			utils.WriteOidListToSegments(oidList, globalCluster, fpInfo, HelperIdx(whichConn)...)
-			initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool, fpInfo, HelperIdx(whichConn)...)
+			initialPipes := CreateInitialSegmentPipes(oidList, globalCluster, connectionPool.NumConns*batches, fpInfo, HelperIdx(whichConn)...)
 			if wasTerminated.Load() {
 				return 0
 			}
@@ -352,13 +352,13 @@ func restoreDataFromTimestamp(fpInfo filepath.FilePathInfo, dataEntries []toc.Co
 	return numErrors
 }
 
-func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, connectionPool *dbconn.DBConn, fpInfo filepath.FilePathInfo, helperIdx ...int) int {
+func CreateInitialSegmentPipes(oidList []string, c *cluster.Cluster, numConns int, fpInfo filepath.FilePathInfo, helperIdx ...int) int {
 	// Create min(connections, tables) segment pipes on each host
 	var maxPipes int
 	if !backupConfig.SingleDataFile {
 		maxPipes = 1 // Create single initial pipe for the first oid in the restore oids list for non --single-data-file data file restore.
-	} else if connectionPool.NumConns < len(oidList) {
-		maxPipes = connectionPool.NumConns
+	} else if numConns < len(oidList) {
+		maxPipes = numConns
 	} else {
 		maxPipes = len(oidList)
 	}
