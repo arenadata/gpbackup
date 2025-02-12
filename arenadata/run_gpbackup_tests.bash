@@ -30,6 +30,6 @@ wget https://golang.org/dl/go1.20.5.linux-amd64.tar.gz -O - | tar -C /opt -xz;
 su - gpadmin -c "
 source /usr/local/greenplum-db-devel/greenplum_path.sh;
 source ~/gpdb_src/gpAux/gpdemo/gpdemo-env.sh;
-gpconfig -c shared_preload_libraries -v \"$(psql -At -c "SELECT array_to_string(array_append(string_to_array(current_setting('shared_preload_libraries'), ','), 'dummy_seclabel'), ',')" postgres)\";
+gpconfig -c shared_preload_libraries -v \"\$(psql -At -c \"SELECT array_to_string(array_append(string_to_array(current_setting('shared_preload_libraries'), ','), 'dummy_seclabel'), ',')\" postgres)\";
 gpstop -ar;
 PATH=$PATH:/opt/go/bin:~/go/bin GOPATH=~/go make depend build install integration end_to_end -C /home/gpadmin/go/src/github.com/greenplum-db/gpbackup"
