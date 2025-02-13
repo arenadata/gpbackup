@@ -41,7 +41,7 @@ Required for Greenplum Database 6 or higher, several tests require the `dummy_se
 ```bash
 pushd $(find ~/workspace/gpdb -name dummy_seclabel)
     make install
-    gpconfig -c shared_preload_libraries -v dummy_seclabel
+    gpconfig -c shared_preload_libraries -v "$(psql -At -c "SELECT array_to_string(array_append(string_to_array(current_setting('shared_preload_libraries'), ','), 'dummy_seclabel'), ',')" postgres)"
     gpstop -ra
     gpconfig -s shared_preload_libraries | grep dummy_seclabel
 popd
