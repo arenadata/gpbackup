@@ -277,7 +277,9 @@ func CheckHelperPids(c *cluster.Cluster, fpInfo filepath.FilePathInfo, operation
 	remoteOutput := c.GenerateAndExecuteCommand("Checking for leftover gpbackup_helper processes", cluster.ON_SEGMENTS, func(contentID int) string {
 		tocFile := fpInfo.GetSegmentTOCFilePath(contentID)
 		procPattern := fmt.Sprintf("gpbackup_helper --%s-agent --toc-file %s*", operation, tocFile)
-		return fmt.Sprintf(`ps ux | grep "%s" | grep -v grep | awk '{print $2}'`, procPattern)
+		pipeFile := fpInfo.GetSegmentPipeFilePath(contentID)
+		pipePattern := fmt.Sprintf("--pipe-file %s", pipeFile)
+		return fmt.Sprintf(`ps ux | grep "%s" | grep "%s" | grep -v grep | awk '{print $2}'`, procPattern, pipePattern)
 	})
 	pidMap := make(map[string][]int)
 	for _, cmd := range remoteOutput.Commands {
@@ -316,7 +318,9 @@ func CleanUpSegmentHelperProcesses(c *cluster.Cluster, fpInfo filepath.FilePathI
 			c.GenerateAndExecuteCommand("Cleaning up gpbackup_helper processes", cluster.ON_SEGMENTS, func(contentID int) string {
 				tocFile := fpInfo.GetSegmentTOCFilePath(contentID)
 				procPattern := fmt.Sprintf("gpbackup_helper --%s-agent --toc-file %s", operation, tocFile)
-				return fmt.Sprintf("PIDS=`ps ux | grep \"%s\" | grep -v grep | awk '{print $2}'`; if [[ ! -z \"$PIDS\" ]]; then kill -USR1 $PIDS; fi", procPattern)
+				pipeFile := fpInfo.GetSegmentPipeFilePath(contentID)
+				pipePattern := fmt.Sprintf("--pipe-file %s", pipeFile)
+				return fmt.Sprintf("PIDS=`ps ux | grep \"%s\" | grep \"%s\" | grep -v grep | awk '{print $2}'`; if [[ ! -z \"$PIDS\" ]]; then kill -USR1 $PIDS; fi", procPattern, pipePattern)
 			})
 		case <-time.After(timeout):
 			for host, pids := range helperPids {
