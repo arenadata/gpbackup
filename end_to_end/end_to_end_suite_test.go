@@ -841,7 +841,7 @@ var _ = Describe("backup and restore end to end tests", func() {
 			}
 			Expect(err).NotTo(HaveOccurred())
 		})
-		It(`Can backup and concurrent restores of same backup with helpers`, func() {
+		It(`Ensures that concurrent restores from the same backup will not interfere with each other's helpers`, func() {
 			testhelper.AssertQueryRuns(backupConn,
 				"CREATE TABLE public.t (i int) DISTRIBUTED BY (i)")
 			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE public.t")
