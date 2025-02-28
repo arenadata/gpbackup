@@ -2787,7 +2787,6 @@ LANGUAGE plpgsql NO SQL;`)
 			assertArtifactsCleaned("20240730085053")
 			testhelper.AssertQueryRuns(restoreConn, "DROP TABLE a; DROP TABLE b; DROP TABLE c; DROP TABLE d;")
 		})
-
 	})
 	Describe("Restore indexes and constraints on exchanged partition tables", func() {
 		BeforeEach(func() {
