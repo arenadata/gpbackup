@@ -843,7 +843,7 @@ var _ = Describe("backup and restore end to end tests", func() {
 		})
 		It(`Ensures that concurrent restores from the same backup will not interfere with each other's helpers`, func() {
 			testhelper.AssertQueryRuns(backupConn,
-				"CREATE TABLE public.t (i int) DISTRIBUTED BY (i)")
+				"CREATE TABLE public.t AS SELECT i FROM generate_series(1, 10) i DISTRIBUTED BY (i)")
 			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE public.t")
 			output := gpbackup(gpbackupPath, backupHelperPath,
 				"--single-data-file", "--include-table", "public.t")
@@ -877,6 +877,7 @@ var _ = Describe("backup and restore end to end tests", func() {
 			for err := range errchan {
 				Expect(err).ToNot(HaveOccurred())
 			}
+			assertDataRestored(restoreConn, map[string]int{"public.t": 10})
 		})
 		It(`ensures gprestore on corrupt backup with --on-error-continue logs error tables`, func() {
 			if segmentCount != 3 {
