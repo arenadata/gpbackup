@@ -841,6 +841,44 @@ var _ = Describe("backup and restore end to end tests", func() {
 			}
 			Expect(err).NotTo(HaveOccurred())
 		})
+		It(`Ensures that concurrent restores from the same backup will not interfere with each other's helpers`, func() {
+			testhelper.AssertQueryRuns(backupConn,
+				"CREATE TABLE public.t AS SELECT i FROM generate_series(1, 10) i DISTRIBUTED BY (i)")
+			defer testhelper.AssertQueryRuns(backupConn, "DROP TABLE public.t")
+			output := gpbackup(gpbackupPath, backupHelperPath,
+				"--single-data-file", "--include-table", "public.t")
+			timestamp := getBackupTimestamp(string(output))
+			gprestore(gprestorePath, restoreHelperPath, timestamp,
+				"--redirect-db", "restoredb", "--metadata-only")
+			restoreConn.MustExec(
+				"BEGIN; LOCK TABLE public.t IN ACCESS EXCLUSIVE MODE")
+			var backWg sync.WaitGroup
+			errchan := make(chan error, 2)
+			backWg.Add(1)
+			go func() {
+				defer backWg.Done()
+				cmd := exec.Command(gprestorePath, "--timestamp", timestamp,
+					"--redirect-db", "restoredb", "--data-only")
+				_, err := cmd.CombinedOutput()
+				errchan <- err
+			}()
+			backWg.Add(1)
+			go func() {
+				defer backWg.Done()
+				cmd := exec.Command(gprestorePath, "--timestamp", timestamp,
+					"--redirect-db", "restoredb", "--data-only",
+					"--exclude-table", "public.t")
+				_, err := cmd.CombinedOutput()
+				restoreConn.MustExec("COMMIT")
+				errchan <- err
+			}()
+			backWg.Wait()
+			close(errchan)
+			for err := range errchan {
+				Expect(err).ToNot(HaveOccurred())
+			}
+			assertDataRestored(restoreConn, map[string]int{"public.t": 10})
+		})
 		It(`ensures gprestore on corrupt backup with --on-error-continue logs error tables`, func() {
 			if segmentCount != 3 {
 				Skip("Restoring from a tarred backup currently requires a 3-segment cluster to test.")
