@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/GreengageDB/gp-common-go-libs/cluster"
+	"github.com/GreengageDB/gp-common-go-libs/iohelper"
+	"github.com/GreengageDB/gp-common-go-libs/operating"
+	"github.com/GreengageDB/gp-common-go-libs/testhelper"
 	"github.com/blang/semver"
-	"github.com/greenplum-db/gp-common-go-libs/cluster"
-	"github.com/greenplum-db/gp-common-go-libs/iohelper"
-	"github.com/greenplum-db/gp-common-go-libs/operating"
-	"github.com/greenplum-db/gp-common-go-libs/testhelper"
 	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/pkg/errors"
 
