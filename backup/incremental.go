@@ -77,7 +77,7 @@ func GetLatestMatchingBackupConfig(historyDBPath string, currentBackupConfig *hi
 		currentBackupConfig.Plugin,
 		MustGetFlagBool(options.SINGLE_DATA_FILE),
 		currentBackupConfig.Compressed,
-		history.BackupStatusSucceed)
+        history.BackupStatusSucceed)
 
 	getBackupTimetampsQuery := fmt.Sprintf(`
 		SELECT timestamp
