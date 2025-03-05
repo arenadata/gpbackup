@@ -12,10 +12,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/greenplum-db/gp-common-go-libs/cluster"
-	"github.com/greenplum-db/gp-common-go-libs/gplog"
-	"github.com/greenplum-db/gp-common-go-libs/iohelper"
-	"github.com/greenplum-db/gp-common-go-libs/operating"
+	"github.com/GreengageDB/gp-common-go-libs/cluster"
+	"github.com/GreengageDB/gp-common-go-libs/gplog"
+	"github.com/GreengageDB/gp-common-go-libs/iohelper"
+	"github.com/GreengageDB/gp-common-go-libs/operating"
 	"github.com/greenplum-db/gpbackup/filepath"
 	"github.com/pkg/errors"
 )

@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/greenplum-db/gp-common-go-libs/gplog"
+	"github.com/GreengageDB/gp-common-go-libs/gplog"
 	"github.com/pkg/errors"
 )
 

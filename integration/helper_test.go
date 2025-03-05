@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/greenplum-db/gp-common-go-libs/operating"
+	"github.com/GreengageDB/gp-common-go-libs/operating"
 	"github.com/greenplum-db/gpbackup/utils"
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/sys/unix"
