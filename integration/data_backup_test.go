@@ -5,9 +5,9 @@ import (
 	"os"
 	"path"
 
+	"github.com/GreengageDB/gp-common-go-libs/gplog"
+	"github.com/GreengageDB/gp-common-go-libs/testhelper"
 	"github.com/blang/semver"
-	"github.com/greenplum-db/gp-common-go-libs/gplog"
-	"github.com/greenplum-db/gp-common-go-libs/testhelper"
 	"github.com/greenplum-db/gpbackup/backup"
 	"github.com/greenplum-db/gpbackup/filepath"
 	"github.com/greenplum-db/gpbackup/testutils"
