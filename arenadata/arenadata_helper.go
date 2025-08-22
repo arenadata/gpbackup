@@ -1,8 +1,12 @@
 package arenadata
 
 import (
+	"github.com/GreengageDB/gp-common-go-libs/dbconn"
+	"github.com/greenplum-db/gpbackup/history"
+	"github.com/greenplum-db/gpbackup/toc"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/GreengageDB/gp-common-go-libs/gplog"
 	"github.com/pkg/errors"
@@ -13,8 +17,8 @@ var (
 )
 
 func EnsureAdVersionCompatibility(backupVersion string, restoreVersion string) {
-	adBackup := GetArenadataVersion(backupVersion)
-	adRestore := GetArenadataVersion(restoreVersion)
+	adBackup := getArenadataVersion(backupVersion)
+	adRestore := getArenadataVersion(restoreVersion)
 
 	if adRestore < adBackup {
 		gplog.Fatal(errors.Errorf("gprestore arenadata%d cannot restore a backup taken with gpbackup arenadata%d; please use gprestore arenadata%d or later.",
@@ -28,7 +32,26 @@ func GetOriginalVersion(fullVersion string) string {
 	return adPattern.ReplaceAllString(fullVersion, "")
 }
 
-func GetArenadataVersion(fullVersion string) uint {
+func PatchStatisticsStatements(backupConfig *history.BackupConfig, connectionPool *dbconn.DBConn, statements []toc.StatementWithType) []toc.StatementWithType {
+	// Backups created in versions 1.30.5_arenadata16 to 1.30.5_arenadata19 have ineffective sql for
+	// deleting statistics, which can affect restore performance. as a workaround for these
+	// versions, we enable nested loop.
+	if connectionPool.Version.Is("6") &&
+		strings.Contains(backupConfig.BackupVersion, "1.30.5_arenadata") {
+		arenadataVersion := getArenadataVersion(backupConfig.BackupVersion)
+
+		if arenadataVersion >= 16 && arenadataVersion <= 19 {
+			statements = append(statements, toc.StatementWithType{})
+			copy(statements[1:], statements[:])
+			statements[0] = toc.StatementWithType{
+				Statement: "SET enable_nestloop = ON;",
+			}
+		}
+	}
+	return statements
+}
+
+func getArenadataVersion(fullVersion string) uint {
 	match := adPattern.FindStringSubmatch(fullVersion)
 	if len(match) != 2 {
 		gplog.Fatal(errors.Errorf("Invalid arenadata version format for gpbackup: %s", fullVersion), "")

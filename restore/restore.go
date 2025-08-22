@@ -554,21 +554,7 @@ func restoreStatistics() {
 	statements := GetRestoreMetadataStatementsFiltered("statistics", statisticsFilename, []string{}, []string{}, filters)
 	editStatementsRedirectSchema(statements, opts.RedirectSchema)
 
-	// Backups created in versions 1.30.5_arenadata16 to 1.30.5_arenadata19 have ineffective sql for
-	// deleting statistics, which can affect restore performance. as a workaround for these
-	// versions, we enable nested loop.
-	if connectionPool.Version.Is("6") &&
-		strings.Contains(backupConfig.BackupVersion, "1.30.5_arenadata") {
-		arenadataVersion := arenadata.GetArenadataVersion(backupConfig.BackupVersion)
-
-		if arenadataVersion >= 16 && arenadataVersion <= 19 {
-			statements = append(statements, toc.StatementWithType{})
-			copy(statements[1:], statements[:])
-			statements[0] = toc.StatementWithType{
-				Statement: "SET enable_nestloop = ON;",
-			}
-		}
-	}
+	statements = arenadata.PatchStatisticsStatements(backupConfig, connectionPool, statements)
 
 	numErrors := ExecuteRestoreMetadataStatements("statistics", statements, "Table statistics", nil, utils.PB_VERBOSE, false)
 

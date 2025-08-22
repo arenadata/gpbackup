@@ -249,7 +249,7 @@ SET
         reltuples = 10000.000000::real
 WHERE oid = 'public.t1'::regclass::oid;
 
-DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+DELETE FROM pg_statistic WHERE (starelid, staattnum) =
         (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'public.t1'::regclass::oid AND attname = 'a');
 INSERT INTO pg_statistic SELECT
         attrelid,
@@ -298,7 +298,7 @@ statisticsentries:
   objecttype: STATISTICS
   referenceobject: ""
   startbyte: 129
-  endbyte: 300
+  endbyte: 299
   tier:
   - 0
   - 0
@@ -306,8 +306,8 @@ statisticsentries:
   name: t1
   objecttype: STATISTICS
   referenceobject: ""
-  startbyte: 300
-  endbyte: 967
+  startbyte: 299
+  endbyte: 966
   tier:
   - 0
   - 0
@@ -350,7 +350,7 @@ statisticsentries:
 			}
 			mock.ExpectExec("UPDATE pg_class SET relpages = 194::int, reltuples = 10000\\.000000::real WHERE oid = 'public\\.t1'::regclass::oid;").
 				WillReturnResult(sqlmock.NewResult(0, 1))
-			mock.ExpectExec("DELETE FROM pg_statistic WHERE \\(starelid, staattnum\\) IN" +
+			mock.ExpectExec("DELETE FROM pg_statistic WHERE \\(starelid, staattnum\\) =" +
 				" \\(SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'public\\.t1'::regclass::oid AND attname = 'a'\\);").
 				WillReturnResult(sqlmock.NewResult(0, 1))
 			mock.ExpectExec("INSERT INTO pg_statistic SELECT" +
