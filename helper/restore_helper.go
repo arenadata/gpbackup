@@ -40,6 +40,14 @@ var (
 	contentRE   *regexp.Regexp
 )
 
+type DiscardError struct {
+	what string
+}
+
+func (e DiscardError) Error() string {
+	return e.what
+}
+
 /* IRestoreReader interface to wrap the underlying reader.
  * getReaderType() identifies how the reader can be used
  * SEEKABLE uses seekReader. Used when restoring from uncompressed data with filters from local filesystem
@@ -108,8 +116,20 @@ func (r *RestoreReader) copyData(num int64) (int64, error) {
 	switch r.readerType {
 	case SEEKABLE:
 		bytesRead, err = io.CopyN(writer, r.seekReader, num)
-	case NONSEEKABLE, SUBSET:
+	case NONSEEKABLE:
 		bytesRead, err = io.CopyN(writer, r.bufReader, num)
+	case SUBSET:
+		bytesRead, err = io.CopyN(writer, r.bufReader, num)
+		if err != nil {
+			if err != io.EOF {
+				bytesLeftToRead := num - bytesRead
+				bytesDiscard, errDiscard := io.CopyN(io.Discard, r.bufReader, bytesLeftToRead)
+				bytesRead += bytesDiscard
+				
+				err = DiscardError {errDiscard.Error()}
+				//Что делать в случае критичных ошибок?
+			}
+		}
 	}
 	return bytesRead, err
 }
@@ -612,10 +632,6 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 	if !pluginConfig.CanRestoreSubset() {
 		return false
 	}
-	// Helper's option does not allow to use subset
-	if !*isFiltered || *onErrorContinue {
-		return false
-	}
 	// Restore subset and compression does not allow together
 	if strings.HasSuffix(fileToRead, ".gz") || strings.HasSuffix(fileToRead, ".zst") {
 		return false
@@ -663,6 +679,7 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 		return nil, nil, false, err
 	}
 	cmdStr := ""
+	logVerbose("sokolov111", *isFiltered, *onErrorContinue, objToc, getSubsetFlag(fileToRead, pluginConfig))
 	if objToc != nil && getSubsetFlag(fileToRead, pluginConfig) {
 		offsetsFile, _ := ioutil.TempFile("/tmp", "gprestore_offsets_")
 		defer func() {

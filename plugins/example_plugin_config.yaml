@@ -1,3 +1,4 @@
-executablepath: $GOPATH/src/github.com/greenplum-db/gpbackup/plugins/example_plugin.bash
+executablepath: /home/keremet/compile/gpbackup/plugins/example_plugin.bash
 options:
   password: unknown
+  restore_subset: on
