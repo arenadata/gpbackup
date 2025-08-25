@@ -1,14 +1,14 @@
 package arenadata
 
 import (
-	"github.com/GreengageDB/gp-common-go-libs/dbconn"
-	"github.com/greenplum-db/gpbackup/history"
-	"github.com/greenplum-db/gpbackup/toc"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/GreengageDB/gp-common-go-libs/dbconn"
 	"github.com/GreengageDB/gp-common-go-libs/gplog"
+	"github.com/greenplum-db/gpbackup/history"
+	"github.com/greenplum-db/gpbackup/toc"
 	"github.com/pkg/errors"
 )
 
@@ -37,7 +37,8 @@ func PatchStatisticsStatements(backupConfig *history.BackupConfig, connectionPoo
 	// deleting statistics, which can affect restore performance. as a workaround for these
 	// versions, we enable nested loop.
 	if connectionPool.Version.Is("6") &&
-		strings.Contains(backupConfig.BackupVersion, "1.30.5_arenadata") {
+		strings.Contains(backupConfig.BackupVersion, "1.30.5_arenadata") &&
+		len(statements) > 0 {
 		arenadataVersion := getArenadataVersion(backupConfig.BackupVersion)
 
 		if arenadataVersion >= 16 && arenadataVersion <= 19 {
@@ -46,6 +47,9 @@ func PatchStatisticsStatements(backupConfig *history.BackupConfig, connectionPoo
 			statements[0] = toc.StatementWithType{
 				Statement: "SET enable_nestloop = ON;",
 			}
+			statements = append(statements, toc.StatementWithType{
+				Statement: "RESET enable_nestloop;",
+			})
 		}
 	}
 	return statements

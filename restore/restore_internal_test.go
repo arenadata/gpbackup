@@ -318,7 +318,7 @@ statisticsentries:
 
 			opts = &options.Options{}
 
-			globalTOC = toc.NewTOC(path.Join(os.TempDir(), "/backup/gpseg-1/backups/20250815/20250815120713/gpbackup_20250815120713_toc.yaml"))
+			globalTOC = toc.NewTOC(path.Join(os.TempDir(), "backup/gpseg-1/backups/20250815/20250815120713/gpbackup_20250815120713_toc.yaml"))
 			globalTOC.InitializeMetadataEntryMap()
 
 			DeferCleanup(func() {
@@ -332,7 +332,7 @@ statisticsentries:
 			testCluster := cluster.NewCluster([]cluster.SegConfig{configCoordinator})
 			testFPInfo := filepath.NewFilePathInfo(testCluster, "", "20250815120713",
 				"gpseg", false)
-			testFPInfo.SegDirMap[-1] = path.Join(os.TempDir(), "/backup/gpseg-1")
+			testFPInfo.SegDirMap[-1] = path.Join(os.TempDir(), "backup/gpseg-1")
 			SetFPInfo(testFPInfo)
 
 			connectionPool, mock, _, _, _ = testhelper.SetupTestEnvironment()
@@ -365,13 +365,46 @@ statisticsentries:
 				" array_in\\('{\"1\",\"100\",}', 'int8'::regtype::oid, -1\\)," +
 				" NULL, NULL, NULL, NULL FROM pg_attribute WHERE attrelid = 'public.t1'::regclass::oid AND attname = 'a';").
 				WillReturnResult(sqlmock.NewResult(0, 1))
+			if needNestedLoop {
+				mock.ExpectExec("RESET enable_nestloop;").WillReturnResult(sqlmock.NewResult(0, 0))
+			}
 			restoreStatistics()
 			err := mock.ExpectationsWereMet()
 			Expect(err).NotTo(HaveOccurred())
 		},
 			Entry("before problematic version", "1.30.5_arenadata15", false),
 			Entry("problematic version", "1.30.5_arenadata18", true),
-			Entry("alter problematic version", "1.30.5_arenadata20", false),
+			Entry("after problematic version", "1.30.5_arenadata20", false),
 		)
+
+		// This test must be before the "statistic is empty" test since the statement list must not be empty.
+		It("Wrong version", func() {
+			defer testhelper.ShouldPanicWithMessage("Invalid arenadata version format for gpbackup: 1.30.5_arenadataABC")
+			testConfig := history.BackupConfig{
+				BackupVersion: "1.30.5_arenadataABC",
+			}
+			SetBackupConfig(&testConfig)
+			restoreStatistics()
+		})
+
+		It("statistic is empty", func() {
+			testConfig := history.BackupConfig{
+				BackupVersion: "1.30.5_arenadata18",
+			}
+			SetBackupConfig(&testConfig)
+
+			err := os.WriteFile(path.Join(os.TempDir(), "backup/gpseg-1/backups/20250815/20250815120713/gpbackup_20250815120713_statistics.sql"),
+				[]byte("SET client_encoding = 'UTF8';"), 0777)
+			Expect(err).NotTo(HaveOccurred())
+			err = os.WriteFile(path.Join(os.TempDir(), "backup/gpseg-1/backups/20250815/20250815120713/gpbackup_20250815120713_toc.yaml"), []byte(""), 0777)
+			Expect(err).NotTo(HaveOccurred())
+
+			globalTOC = toc.NewTOC(path.Join(os.TempDir(), "backup/gpseg-1/backups/20250815/20250815120713/gpbackup_20250815120713_toc.yaml"))
+			globalTOC.InitializeMetadataEntryMap()
+
+			restoreStatistics()
+			err = mock.ExpectationsWereMet()
+			Expect(err).NotTo(HaveOccurred())
+		})
 	})
 })
