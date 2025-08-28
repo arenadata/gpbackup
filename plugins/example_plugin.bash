@@ -89,26 +89,6 @@ restore_data() {
 	cat /tmp/plugin_dest/$timestamp_day_dir/$timestamp_dir/$filename
 }
 
-restore_data_subset() {
-  echo "restore_data_subset $1 $2 $3" >> /tmp/plugin_out.txt
-  filename=`basename "$2"`
-  timestamp_dir=`basename $(dirname "$2")`
-  timestamp_day_dir=${timestamp_dir%??????}
-  if [ -e "/tmp/GPBACKUP_PLUGIN_LOG_TO_STDERR" ] ; then
-    echo 'Some plugin warning' >&2
-  elif [ -e "/tmp/GPBACKUP_PLUGIN_DIE" -a "$GPBACKUP_PLUGIN_DIE_ON_OID" = "" ] ; then
-    exit 1
-  elif [[ -e "/tmp/GPBACKUP_PLUGIN_DIE" && "$filename" == *"$GPBACKUP_PLUGIN_DIE_ON_OID"* ]] ; then
-    # sleep a while for test purposes - to let gprestore start COPY commands
-    sleep 5
-    exit 1
-  fi
-	/home/keremet/arenadata/tasks/7890_handle_table_restore_errors_during_subset_restore/restore_data_subset /tmp/plugin_dest/$timestamp_day_dir/$timestamp_dir/$filename $3
-}
-
-
-
-
 delete_backup() {
   echo "delete_backup $1 $2" >> /tmp/plugin_out.txt
   timestamp_day_dir=${2%??????}

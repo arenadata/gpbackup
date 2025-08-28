@@ -40,13 +40,7 @@ var (
 	contentRE   *regexp.Regexp
 )
 
-type DiscardError struct {
-	what string
-}
-
-func (e DiscardError) Error() string {
-	return e.what
-}
+var discardError = errors.New("helper: discard error")
 
 /* IRestoreReader interface to wrap the underlying reader.
  * getReaderType() identifies how the reader can be used
@@ -62,6 +56,7 @@ type IRestoreReader interface {
 	copyAllData() (int64, error)
 	closeFileHandle()
 	getReaderType() ReaderType
+	discardData(num int64) (int64, error)
 }
 
 type RestoreReader struct {
@@ -110,6 +105,16 @@ func (r *RestoreReader) positionReader(pos uint64, oid int) error {
 	return nil
 }
 
+func (r *RestoreReader) discardData(num int64) (int64, error) {
+	if (r.readerType == SUBSET) {
+		n, err := io.CopyN(io.Discard, r.bufReader, num)
+		logVerbose(fmt.Sprintf("%d bytes to discard, discarded %d bytes", num, n))
+		return n, err
+	}
+
+	return 0, nil
+}
+
 func (r *RestoreReader) copyData(num int64) (int64, error) {
 	var bytesRead int64
 	var err error
@@ -120,14 +125,15 @@ func (r *RestoreReader) copyData(num int64) (int64, error) {
 		bytesRead, err = io.CopyN(writer, r.bufReader, num)
 	case SUBSET:
 		bytesRead, err = io.CopyN(writer, r.bufReader, num)
-		if err != nil {
-			if err != io.EOF {
-				bytesLeftToRead := num - bytesRead
-				bytesDiscard, errDiscard := io.CopyN(io.Discard, r.bufReader, bytesLeftToRead)
-				bytesRead += bytesDiscard
-				
-				err = DiscardError {errDiscard.Error()}
-				//Что делать в случае критичных ошибок?
+		if err != nil && err != io.EOF && *onErrorContinue {
+			bytesDiscard, errDiscard := r.discardData(num - bytesRead)
+			bytesRead += bytesDiscard
+			if errDiscard != nil {
+				if errDiscard == io.EOF {
+					err = errDiscard
+				} else {
+					err = errors.Wrap(discardError, errDiscard.Error())
+				}
 			}
 		}
 	}
@@ -371,6 +377,16 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 						err = nil
 						skipOid = tableOid
+						if *singleDataFile {
+							_, errDiscard := readers[contentToRestore].discardData(int64(end[contentToRestore] - start[contentToRestore]))
+							if errDiscard != nil {
+								if errDiscard == io.EOF {
+									err = errDiscard
+								} else {
+									err = errors.Wrap(discardError, errDiscard.Error())
+								}
+							}
+						}
 						/* Close up to *copyQueue files with this tableOid */
 						for idx := 0; idx < *copyQueue; idx++ {
 							batchToDelete := batchNum + idx
@@ -465,7 +481,7 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 
 		if err != nil {
 			logError(fmt.Sprintf("Oid %d, Batch %d: Error encountered: %v", tableOid, batchNum, err))
-			if *onErrorContinue {
+			if *onErrorContinue && !errors.Is(err, io.EOF) && !errors.Is(err, discardError) {
 				lastError = err
 				err = nil
 				continue
@@ -679,7 +695,6 @@ func startRestorePluginCommand(fileToRead string, objToc *toc.SegmentTOC, oidLis
 		return nil, nil, false, err
 	}
 	cmdStr := ""
-	logVerbose("sokolov111", *isFiltered, *onErrorContinue, objToc, getSubsetFlag(fileToRead, pluginConfig))
 	if objToc != nil && getSubsetFlag(fileToRead, pluginConfig) {
 		offsetsFile, _ := ioutil.TempFile("/tmp", "gprestore_offsets_")
 		defer func() {
