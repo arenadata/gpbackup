@@ -377,15 +377,14 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 						err = nil
 						skipOid = tableOid
-						if *singleDataFile {
-							if readers[contentToRestore] != nil {
-								_, errDiscard := readers[contentToRestore].discardData(int64(end[contentToRestore] - start[contentToRestore]))
-								if errDiscard != nil {
-									if errDiscard == io.EOF {
-										err = errDiscard
-									} else {
-										err = errors.Wrap(discardError, errDiscard.Error())
-									}
+						if *singleDataFile && readers[contentToRestore] != nil {
+							bytesToDiscard := int64(end[contentToRestore] - start[contentToRestore])
+							_, errDiscard := readers[contentToRestore].discardData(bytesToDiscard)
+							if errDiscard != nil {
+								if errDiscard == io.EOF {
+									err = errDiscard
+								} else {
+									err = errors.Wrap(discardError, errDiscard.Error())
 								}
 							}
 						}
