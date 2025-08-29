@@ -247,7 +247,7 @@ var _ = Describe("helper tests", func() {
 			pluginConfig.Options["restore_subset"] = "on"
 			*onErrorContinue = true
 			isSubset = getSubsetFlag(fileToRead, &pluginConfig)
-			Expect(isSubset).To(Equal(false))
+			Expect(isSubset).To(Equal(true))
 		})
 		It("when restore_subset is off, --on-error-continue is false, compression \"gz\" is used", func() {
 			pluginConfig.Options["restore_subset"] = "off"

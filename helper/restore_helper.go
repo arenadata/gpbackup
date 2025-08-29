@@ -378,12 +378,14 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 						err = nil
 						skipOid = tableOid
 						if *singleDataFile {
-							_, errDiscard := readers[contentToRestore].discardData(int64(end[contentToRestore] - start[contentToRestore]))
-							if errDiscard != nil {
-								if errDiscard == io.EOF {
-									err = errDiscard
-								} else {
-									err = errors.Wrap(discardError, errDiscard.Error())
+							if readers[contentToRestore] != nil {
+								_, errDiscard := readers[contentToRestore].discardData(int64(end[contentToRestore] - start[contentToRestore]))
+								if errDiscard != nil {
+									if errDiscard == io.EOF {
+										err = errDiscard
+									} else {
+										err = errors.Wrap(discardError, errDiscard.Error())
+									}
 								}
 							}
 						}
