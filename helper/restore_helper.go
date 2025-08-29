@@ -40,6 +40,8 @@ var (
 	contentRE   *regexp.Regexp
 )
 
+var discardError = errors.New("helper: discard error")
+
 /* IRestoreReader interface to wrap the underlying reader.
  * getReaderType() identifies how the reader can be used
  * SEEKABLE uses seekReader. Used when restoring from uncompressed data with filters from local filesystem
@@ -54,6 +56,7 @@ type IRestoreReader interface {
 	copyAllData() (int64, error)
 	closeFileHandle()
 	getReaderType() ReaderType
+	discardData(num int64) (int64, error)
 }
 
 type RestoreReader struct {
@@ -102,14 +105,37 @@ func (r *RestoreReader) positionReader(pos uint64, oid int) error {
 	return nil
 }
 
+func (r *RestoreReader) discardData(num int64) (int64, error) {
+	if (r.readerType == SUBSET) {
+		n, err := io.CopyN(io.Discard, r.bufReader, num)
+		logVerbose(fmt.Sprintf("%d bytes to discard, discarded %d bytes", num, n))
+		return n, err
+	}
+
+	return 0, nil
+}
+
 func (r *RestoreReader) copyData(num int64) (int64, error) {
 	var bytesRead int64
 	var err error
 	switch r.readerType {
 	case SEEKABLE:
 		bytesRead, err = io.CopyN(writer, r.seekReader, num)
-	case NONSEEKABLE, SUBSET:
+	case NONSEEKABLE:
 		bytesRead, err = io.CopyN(writer, r.bufReader, num)
+	case SUBSET:
+		bytesRead, err = io.CopyN(writer, r.bufReader, num)
+		if err != nil && err != io.EOF && *onErrorContinue {
+			bytesDiscard, errDiscard := r.discardData(num - bytesRead)
+			bytesRead += bytesDiscard
+			if errDiscard != nil {
+				if errDiscard == io.EOF {
+					err = errDiscard
+				} else {
+					err = errors.Wrap(discardError, errDiscard.Error())
+				}
+			}
+		}
 	}
 	return bytesRead, err
 }
@@ -351,6 +377,17 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 						err = nil
 						skipOid = tableOid
+						if *singleDataFile && readers[contentToRestore] != nil {
+							bytesToDiscard := int64(end[contentToRestore] - start[contentToRestore])
+							_, errDiscard := readers[contentToRestore].discardData(bytesToDiscard)
+							if errDiscard != nil {
+								if errDiscard == io.EOF {
+									err = errDiscard
+								} else {
+									err = errors.Wrap(discardError, errDiscard.Error())
+								}
+							}
+						}
 						/* Close up to *copyQueue files with this tableOid */
 						for idx := 0; idx < *copyQueue; idx++ {
 							batchToDelete := batchNum + idx
@@ -445,7 +482,7 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 
 		if err != nil {
 			logError(fmt.Sprintf("Oid %d, Batch %d: Error encountered: %v", tableOid, batchNum, err))
-			if *onErrorContinue {
+			if *onErrorContinue && !errors.Is(err, io.EOF) && !errors.Is(err, discardError) {
 				lastError = err
 				err = nil
 				continue
@@ -610,10 +647,6 @@ func (RestoreHelper) getRestorePipeWriter(currentPipe string) (*bufio.Writer, *o
 func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 	// Restore subset is disabled in the plugin config
 	if !pluginConfig.CanRestoreSubset() {
-		return false
-	}
-	// Helper's option does not allow to use subset
-	if !*isFiltered || *onErrorContinue {
 		return false
 	}
 	// Restore subset and compression does not allow together
