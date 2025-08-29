@@ -48,6 +48,10 @@ func (r *restoreReaderTestImpl) getReaderType() ReaderType {
 	return "nil"
 }
 
+func (r *restoreReaderTestImpl) discardData(num int64) (int64, error) {
+	return num, nil
+}
+
 type helperTestStep struct {
 	restorePipeWriterArgExpect string
 	restorePipeWriterResult    bool
