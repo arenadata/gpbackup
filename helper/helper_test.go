@@ -3,6 +3,7 @@ package helper
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/greenplum-db/gpbackup/utils"
@@ -200,6 +201,47 @@ func (pt *testPluginCmd) Wait() error {
 }
 
 func (pt *testPluginCmd) errLog() {
+}
+
+type limitReader struct {
+	rem int
+	err error
+}
+
+func (r *limitReader) Read(p []byte) (n int, err error) {
+	if r.rem <= 0 {
+		return 0, r.err
+	}
+
+	if len(p) > r.rem {
+		p = p[0:r.rem]
+	}
+
+	n = len(p)
+	for i := 0; i < n; i++ {
+		p[i] = 1
+	}
+	r.rem -= n
+	return
+}
+
+type limitWriter struct {
+	rem int
+}
+
+func (w *limitWriter) Write(p []byte) (n int, err error) {
+	if w.rem < len(p) {
+		n = w.rem
+	} else {
+		n = len(p)
+	}
+
+	if w.rem == 0 {
+		err = io.ErrShortWrite
+	}
+
+	w.rem -= n
+	return
 }
 
 var _ = Describe("helper tests", func() {
@@ -507,6 +549,70 @@ var _ = Describe("helper tests", func() {
 			err := test_reader.waitForPlugin()
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal(msg))
+		})
+		It("CopyData, readerType is SUBSET. Normal completion", func() {
+			writer = bufio.NewWriterSize(&limitWriter{100}, 5)
+
+			test_reader := RestoreReader{
+				readerType: SUBSET,
+				bufReader:  bufio.NewReader(&limitReader{100, io.EOF}),
+			}
+
+			bytesRead, err := test_reader.copyData(18)
+			Expect(bytesRead).To(Equal(int64(18)))
+			Expect(err).ToNot(HaveOccurred())
+		})
+		It("CopyData, readerType is SUBSET. Error on write", func() {
+			*onErrorContinue = true
+			writer = bufio.NewWriterSize(&limitWriter{7}, 5)
+
+			test_reader := RestoreReader{
+				readerType: SUBSET,
+				bufReader:  bufio.NewReader(&limitReader{100, io.EOF}),
+			}
+
+			bytesRead, err := test_reader.copyData(18)
+			Expect(bytesRead).To(Equal(int64(18)))
+			Expect(err).To(HaveOccurred())
+		})
+		It("CopyData, readerType is SUBSET. EOF", func() {
+			*onErrorContinue = true
+			writer = bufio.NewWriterSize(&limitWriter{100}, 5)
+
+			test_reader := RestoreReader{
+				readerType: SUBSET,
+				bufReader:  bufio.NewReader(&limitReader{25, io.EOF}),
+			}
+
+			bytesRead, err := test_reader.copyData(30)
+			Expect(bytesRead).To(Equal(int64(25)))
+			Expect(err).To(Equal(io.EOF))
+		})
+		It("CopyData, readerType is SUBSET. Error on write and EOF", func() {
+			*onErrorContinue = true
+			writer = bufio.NewWriterSize(&limitWriter{7}, 5)
+
+			test_reader := RestoreReader{
+				readerType: SUBSET,
+				bufReader:  bufio.NewReader(&limitReader{25, io.EOF}),
+			}
+
+			bytesRead, err := test_reader.copyData(30)
+			Expect(bytesRead).To(Equal(int64(25)))
+			Expect(err).To(Equal(io.EOF))
+		})
+		It("CopyData, readerType is SUBSET. Error on write and on read", func() {
+			*onErrorContinue = true
+			writer = bufio.NewWriterSize(&limitWriter{7}, 5)
+
+			test_reader := RestoreReader{
+				readerType: SUBSET,
+				bufReader:  bufio.NewReader(&limitReader{25, io.ErrNoProgress}),
+			}
+
+			bytesRead, err := test_reader.copyData(30)
+			Expect(bytesRead).To(Equal(int64(25)))
+			Expect(errors.Is(err, discardError)).To(Equal(true))
 		})
 	})
 })
