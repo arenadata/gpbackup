@@ -649,6 +649,10 @@ func getSubsetFlag(fileToRead string, pluginConfig *utils.PluginConfig) bool {
 	if !pluginConfig.CanRestoreSubset() {
 		return false
 	}
+	// Helper's option does not allow to use subset
+	if !*isFiltered {
+		return false
+	}
 	// Restore subset and compression does not allow together
 	if strings.HasSuffix(fileToRead, ".gz") || strings.HasSuffix(fileToRead, ".zst") {
 		return false
