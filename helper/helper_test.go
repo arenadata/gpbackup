@@ -19,6 +19,7 @@ import (
 var (
 	testDir     = "/tmp/helper_test/20180101/20180101010101"
 	testTocFile = fmt.Sprintf("%s/test_toc.yaml", testDir)
+	discarded int64
 )
 
 type restoreReaderTestImpl struct {
@@ -50,6 +51,7 @@ func (r *restoreReaderTestImpl) getReaderType() ReaderType {
 }
 
 func (r *restoreReaderTestImpl) discardData(num int64) (int64, error) {
+	discarded += num
 	return num, nil
 }
 
@@ -462,6 +464,29 @@ var _ = Describe("helper tests", func() {
 			err := doRestoreAgentInternal(helper)
 			Expect(err).To(BeNil())
 		})
+		It("discard data if skip file is discovered with single datafile", func() {
+			*singleDataFile = true
+			*isResizeRestore = false
+			*tocFile = testTocFile
+
+			writeTestTOC(testTocFile)
+			defer func() {
+				_ = os.Remove(*tocFile)
+			}()
+
+			oidBatch := []oidWithBatch{
+				{1 /* The first oid from TOC */, 0}, 
+			}
+
+			expectedScenario := []helperTestStep{
+				{"mock_1_0", false, 1, true, "Can not open pipe for table 1, check_skip_file shall called, skip file exists"},
+			}
+
+			helper := newHelperTest(oidBatch, expectedScenario)
+			err := doRestoreAgentInternal(helper)
+			Expect(err).To(BeNil())
+			Expect(discarded).To(Equal(int64(18)))
+		})
 		It("calls Wait in waitForPlugin doRestoreAgent for single data file", func() {
 			*singleDataFile = true
 			*isResizeRestore = false
@@ -621,13 +646,13 @@ func writeTestTOC(tocFile string) {
 	// Write test TOC. We are not going to read data using it, so dataLength is a random number
 	dataLength := 100
 	customTOC := fmt.Sprintf(`dataentries:
-1:
+  1:
     startbyte: 0
     endbyte: 18
-2:
+  2:
     startbyte: 18
     endbyte: %[1]d
-3:
+  3:
     startbyte: %[1]d
     endbyte: %d
 `, dataLength+18, dataLength+18+18)
