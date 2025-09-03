@@ -106,7 +106,7 @@ func (r *RestoreReader) positionReader(pos uint64, oid int) error {
 }
 
 func (r *RestoreReader) discardData(num int64) (int64, error) {
-	if (r.readerType == SUBSET) {
+	if r.readerType == SUBSET {
 		n, err := io.CopyN(io.Discard, r.bufReader, num)
 		logVerbose(fmt.Sprintf("%d bytes to discard, discarded %d bytes", num, n))
 		return n, err
@@ -266,11 +266,14 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 				break
 			}
 			tocFileForContent := replaceContentInFilename(*tocFile, contentToRestore)
+			logWarn("\n\n!!!!!tocFileForContent = ", tocFileForContent)
 			segmentTOC[contentToRestore] = toc.NewSegmentTOC(tocFileForContent)
+			logWarn("\n\n!!!!!tocFileForContent = ", segmentTOC[contentToRestore])
 			tocEntries[contentToRestore] = segmentTOC[contentToRestore].DataEntries
 
 			filename := replaceContentInFilename(*dataFile, contentToRestore)
 			readers[contentToRestore], err = restoreHelper.getRestoreDataReader(filename, segmentTOC[contentToRestore], oidList)
+			logWarn("\n\n!!!!!readers[contentToRestore] = ", readers[contentToRestore])
 			if readers[contentToRestore] != nil {
 				// NOTE: If we reach here with batches > 1, there will be
 				// *origSize / *destSize (N old segments / N new segments)
@@ -360,11 +363,14 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 			}
 		}
 
+		logWarn("\n\n!!!!! 2 readers[contentToRestore] = ", readers[contentToRestore], tocEntries)
 		logInfo(fmt.Sprintf("Oid %d, Batch %d: Opening pipe %s", tableOid, batchNum, currentPipe))
 		for {
 			writer, writeHandle, err = restoreHelper.getRestorePipeWriter(currentPipe)
+			logWarn("\n\n!!!!! 3 writer, writeHandle, err = ", writer, writeHandle, err)
 			if err != nil {
 				if errors.Is(err, unix.ENXIO) {
+					logWarn("\n\n!!!!! 4 writer, writeHandle, err = ", writer, writeHandle, err)
 					// COPY (the pipe reader) has not tried to access the pipe yet so our restore_helper
 					// process will get ENXIO error on its nonblocking open call on the pipe. We loop in
 					// here while looking to see if gprestore has created a skip file for this restore entry.
@@ -374,7 +380,8 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 					// not contain a database connection so the version should be passed through the helper
 					// invocation from gprestore (e.g. create a --db-version flag option).
 					if *onErrorContinue && restoreHelper.checkForSkipFile(*pipeFile, tableOid) {
-						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
+						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum), *singleDataFile, readers[contentToRestore])
+						logWarn("", end[contentToRestore], start[contentToRestore], contentToRestore)
 						err = nil
 						skipOid = tableOid
 						if *singleDataFile && readers[contentToRestore] != nil {
