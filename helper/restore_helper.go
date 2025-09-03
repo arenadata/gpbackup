@@ -108,7 +108,13 @@ func (r *RestoreReader) positionReader(pos uint64, oid int) error {
 func (r *RestoreReader) discardData(num int64) (int64, error) {
 	if r.readerType == SUBSET {
 		n, err := io.CopyN(io.Discard, r.bufReader, num)
-		logVerbose(fmt.Sprintf("%d bytes to discard, discarded %d bytes", num, n))
+		if err != nil {
+			logVerbose(fmt.Sprintf("%d bytes to discard", n))
+			if err != io.EOF {
+				err = errors.Wrap(discardError, err.Error())
+			}
+		}
+		logVerbose(fmt.Sprintf("%discarded %d bytes", n))
 		return n, err
 	}
 
@@ -129,11 +135,7 @@ func (r *RestoreReader) copyData(num int64) (int64, error) {
 			bytesDiscard, errDiscard := r.discardData(num - bytesRead)
 			bytesRead += bytesDiscard
 			if errDiscard != nil {
-				if errDiscard == io.EOF {
-					err = errDiscard
-				} else {
-					err = errors.Wrap(discardError, errDiscard.Error())
-				}
+				err = errDiscard
 			}
 		}
 	}
@@ -386,14 +388,7 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 						skipOid = tableOid
 						if *singleDataFile && readers[contentToRestore] != nil {
 							bytesToDiscard := int64(end[contentToRestore] - start[contentToRestore])
-							_, errDiscard := readers[contentToRestore].discardData(bytesToDiscard)
-							if errDiscard != nil {
-								if errDiscard == io.EOF {
-									err = errDiscard
-								} else {
-									err = errors.Wrap(discardError, errDiscard.Error())
-								}
-							}
+							_, err = readers[contentToRestore].discardData(bytesToDiscard)
 						}
 						/* Close up to *copyQueue files with this tableOid */
 						for idx := 0; idx < *copyQueue; idx++ {
