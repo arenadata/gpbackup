@@ -114,7 +114,7 @@ func (r *RestoreReader) discardData(num int64) (int64, error) {
 				err = errors.Wrap(discardError, err.Error())
 			}
 		}
-		logVerbose(fmt.Sprintf("%discarded %d bytes", n))
+		logVerbose(fmt.Sprintf("discarded %d bytes", n))
 		return n, err
 	}
 
