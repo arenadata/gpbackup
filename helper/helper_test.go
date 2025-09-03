@@ -47,7 +47,7 @@ func (r *restoreReaderTestImpl) closeFileHandle() {
 }
 
 func (r *restoreReaderTestImpl) getReaderType() ReaderType {
-	return "nil"
+	return SUBSET
 }
 
 func (r *restoreReaderTestImpl) discardData(num int64) (int64, error) {
