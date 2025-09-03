@@ -106,19 +106,19 @@ func (r *RestoreReader) positionReader(pos uint64, oid int) error {
 }
 
 func (r *RestoreReader) discardData(num int64) (int64, error) {
-	if r.readerType == SUBSET {
-		n, err := io.CopyN(io.Discard, r.bufReader, num)
-		if err != nil {
-			logVerbose(fmt.Sprintf("%d bytes to discard", n))
-			if err != io.EOF {
-				err = errors.Wrap(discardError, err.Error())
-			}
-		}
-		logVerbose(fmt.Sprintf("discarded %d bytes", n))
-		return n, err
+	if r.readerType != SUBSET {
+		panic("discardData should be called for readerType == SUBSET only")
 	}
 
-	return 0, nil
+	n, err := io.CopyN(io.Discard, r.bufReader, num)
+	if err != nil {
+		logVerbose(fmt.Sprintf("%d bytes to discard", n))
+		if err != io.EOF {
+			err = errors.Wrap(discardError, err.Error())
+		}
+	}
+	logVerbose(fmt.Sprintf("discarded %d bytes", n))
+	return n, err
 }
 
 func (r *RestoreReader) copyData(num int64) (int64, error) {
@@ -379,7 +379,7 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 						logWarn(fmt.Sprintf("Oid %d, Batch %d: Skip file discovered, skipping this relation.", tableOid, batchNum))
 						err = nil
 						skipOid = tableOid
-						if *singleDataFile && readers[contentToRestore] != nil {
+						if *singleDataFile && readers[contentToRestore] != nil  && readers[contentToRestore].getReaderType() == SUBSET {
 							bytesToDiscard := int64(end[contentToRestore] - start[contentToRestore])
 							_, err = readers[contentToRestore].discardData(bytesToDiscard)
 						}
