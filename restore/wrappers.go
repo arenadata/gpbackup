@@ -88,6 +88,7 @@ SET check_function_bodies = false;
 SET client_min_messages = error;
 SET standard_conforming_strings = on;
 SET default_with_oids = off;
+SET optimizer = off;
 `
 
 	setupQuery += "SET gp_ignore_error_table = on;\n"
