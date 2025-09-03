@@ -106,7 +106,7 @@ func (r *RestoreReader) positionReader(pos uint64, oid int) error {
 }
 
 func (r *RestoreReader) discardData(num int64) (int64, error) {
-	if (r.readerType == SUBSET) {
+	if r.readerType == SUBSET {
 		n, err := io.CopyN(io.Discard, r.bufReader, num)
 		if err != nil {
 			logVerbose(fmt.Sprintf("%d bytes to discard", n))
