@@ -484,7 +484,7 @@ var _ = Describe("helper tests", func() {
 
 			helper := newHelperTest(oidBatch, expectedScenario)
 			err := doRestoreAgentInternal(helper)
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 			Expect(discarded).To(Equal(int64(18)))
 		})
 		It("calls Wait in waitForPlugin doRestoreAgent for single data file", func() {
