@@ -547,7 +547,7 @@ var _ = Describe("helper tests", func() {
 		})
 	})
 	Describe("RestoreReader tests", func() {
-		BeforeEach(func() {
+		AfterEach(func() {
 			*onErrorContinue = false
 			writer = nil
 		})
