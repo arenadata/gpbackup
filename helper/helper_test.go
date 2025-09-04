@@ -547,6 +547,9 @@ var _ = Describe("helper tests", func() {
 		})
 	})
 	Describe("RestoreReader tests", func() {
+		BeforeEach(func() {
+			*onErrorContinue = false
+		})
 		It("waitForPlugin normal completion", func() {
 			test_cmd1 := testPluginCmd{hasProcess_: true}
 			test_reader := new(RestoreReader)
