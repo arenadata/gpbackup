@@ -477,7 +477,8 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 
 		if err != nil {
 			logError(fmt.Sprintf("Oid %d, Batch %d: Error encountered: %v", tableOid, batchNum, err))
-			if *onErrorContinue && !errors.Is(err, io.EOF) && !errors.Is(err, discardError) {
+			seekable := readers[contentToRestore] != nil && readers[contentToRestore].getReaderType() == SEEKABLE
+			if *onErrorContinue && (seekable || (!errors.Is(err, io.EOF) && !errors.Is(err, discardError))) {
 				lastError = err
 				err = nil
 				continue
