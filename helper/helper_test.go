@@ -206,43 +206,43 @@ func (pt *testPluginCmd) errLog() {
 }
 
 type limitReader struct {
-	rem int
+	remainder int
 	err error
 }
 
 func (r *limitReader) Read(p []byte) (n int, err error) {
-	if r.rem <= 0 {
+	if r.remainder <= 0 {
 		return 0, r.err
 	}
 
-	if len(p) > r.rem {
-		p = p[0:r.rem]
+	if len(p) > r.remainder {
+		p = p[0:r.remainder]
 	}
 
 	n = len(p)
 	for i := 0; i < n; i++ {
 		p[i] = 1
 	}
-	r.rem -= n
+	r.remainder -= n
 	return
 }
 
 type limitWriter struct {
-	rem int
+	remainder int
 }
 
 func (w *limitWriter) Write(p []byte) (n int, err error) {
-	if w.rem < len(p) {
-		n = w.rem
+	if w.remainder < len(p) {
+		n = w.remainder
 	} else {
 		n = len(p)
 	}
 
-	if w.rem == 0 {
+	if w.remainder == 0 {
 		err = io.ErrShortWrite
 	}
 
-	w.rem -= n
+	w.remainder -= n
 	return
 }
 
