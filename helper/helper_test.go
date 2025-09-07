@@ -602,7 +602,7 @@ var _ = Describe("helper tests", func() {
 
 			bytesRead, err := test_reader.copyData(18)
 			Expect(bytesRead).To(Equal(int64(18)))
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(io.ErrShortWrite))
 		})
 		It("CopyData, readerType is SUBSET. EOF", func() {
 			*onErrorContinue = true
