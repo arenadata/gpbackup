@@ -112,10 +112,8 @@ func (r *RestoreReader) discardData(num int64) (int64, error) {
 
 	n, err := io.CopyN(io.Discard, r.bufReader, num)
 	if err != nil {
-		logError(fmt.Sprintf("discarded %d bytes from %d. Error: %s", n, num, err.Error()))
-		if err != io.EOF {
-			err = errors.Wrap(discardError, err.Error())
-		}
+		err = fmt.Errorf("discarded %d bytes from %d: [%w: [%w]]", n, num, err, discardError)
+		logError(err.Error())
 	} else {
 		logVerbose(fmt.Sprintf("discarded %d bytes", n))
 	}

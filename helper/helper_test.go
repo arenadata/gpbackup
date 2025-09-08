@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"strings"
 	"os"
 
 	"github.com/greenplum-db/gpbackup/utils"
@@ -628,20 +629,28 @@ var _ = Describe("helper tests", func() {
 
 			bytesRead, err := test_reader.copyData(30)
 			Expect(bytesRead).To(Equal(int64(25)))
-			Expect(err).To(Equal(io.EOF))
+			Expect(errors.Is(err, discardError)).To(Equal(true))
+			Expect(errors.Is(err, io.EOF)).To(Equal(true))
 		})
 		It("CopyData, readerType is SUBSET. Error on write and on read", func() {
 			*onErrorContinue = true
-			writer = bufio.NewWriterSize(&limitWriter{7}, 5)
+			bufSize := 5
+			toCopy := int64(30)
+			rLmt := int64(25)
+			writer = bufio.NewWriterSize(&limitWriter{7}, bufSize)
 
 			test_reader := RestoreReader{
 				readerType: SUBSET,
-				bufReader:  bufio.NewReader(&limitReader{25, io.ErrNoProgress}),
+				bufReader:  bufio.NewReader(&limitReader{int(rLmt), io.ErrNoProgress}),
 			}
 
-			bytesRead, err := test_reader.copyData(30)
-			Expect(bytesRead).To(Equal(int64(25)))
+			bytesRead, err := test_reader.copyData(toCopy)
+			Expect(bytesRead).To(Equal(rLmt))
 			Expect(errors.Is(err, discardError)).To(Equal(true))
+			Expect(errors.Is(err, io.ErrNoProgress)).To(Equal(true))
+			readBeforeErr := int64(bufSize * 2)
+			str := fmt.Sprintf("discarded %d bytes from %d: [", rLmt - readBeforeErr, toCopy - readBeforeErr)
+			Expect(strings.HasPrefix(err.Error(), str)).To(Equal(true))
 		})
 	})
 })
