@@ -476,7 +476,7 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 
 		if err != nil {
 			logError(fmt.Sprintf("Oid %d, Batch %d: Error encountered: %v", tableOid, batchNum, err))
-			if (!*onErrorContinue) {
+			if !*onErrorContinue {
 				return err
 			}
 
