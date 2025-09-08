@@ -482,9 +482,10 @@ func doRestoreAgentInternal(restoreHelper IRestoreHelper) error {
 
 			// When we read data from NONSEEKABLE or SUBSET, we cannot read more when EOF or discardError happens.
 			// These errors are not a problem for SEEKABLE, because the next table may be in the middle of the file. 
-			seekable := readers[contentToRestore] != nil && readers[contentToRestore].getReaderType() == SEEKABLE
-			if !seekable && (errors.Is(err, io.EOF) || errors.Is(err, discardError)) {
-				return err
+			if readers[contentToRestore] == nil || readers[contentToRestore].getReaderType() != SEEKABLE {
+				if errors.Is(err, io.EOF) || errors.Is(err, discardError) {
+					return err
+				}
 			}
 
 			lastError = err
