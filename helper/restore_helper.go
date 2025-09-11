@@ -131,10 +131,11 @@ func (r *RestoreReader) copyData(num int64) (int64, error) {
 	case SUBSET:
 		bytesRead, err = io.CopyN(writer, r.bufReader, num)
 		if err != nil && err != io.EOF && *onErrorContinue {
+			err = fmt.Errorf("copied %d bytes from %d: [%w]", bytesRead, num, err)
 			bytesDiscard, errDiscard := r.discardData(num - bytesRead)
 			bytesRead += bytesDiscard
 			if errDiscard != nil {
-				err = errDiscard
+				err = fmt.Errorf("discard error in copyData: [%w: [%w]]", errDiscard, err)
 			}
 		}
 	}

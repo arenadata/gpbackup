@@ -594,16 +594,21 @@ var _ = Describe("helper tests", func() {
 		})
 		It("CopyData, readerType is SUBSET. Error on write", func() {
 			*onErrorContinue = true
-			writer = bufio.NewWriterSize(&limitWriter{7}, 5)
+			bufSize := 5
+			toRead := int64(18)
+			writer = bufio.NewWriterSize(&limitWriter{7}, bufSize)
 
 			test_reader := RestoreReader{
 				readerType: SUBSET,
 				bufReader:  bufio.NewReader(&limitReader{100, io.EOF}),
 			}
 
-			bytesRead, err := test_reader.copyData(18)
-			Expect(bytesRead).To(Equal(int64(18)))
-			Expect(err).To(Equal(io.ErrShortWrite))
+			bytesRead, err := test_reader.copyData(toRead)
+			Expect(bytesRead).To(Equal(toRead))
+			Expect(errors.Is(err, io.ErrShortWrite)).To(Equal(true))
+			str := fmt.Sprintf("copied %d bytes from %d: [", bufSize * 2, toRead)
+			Expect(strings.HasPrefix(err.Error(), str)).To(Equal(true))
+
 		})
 		It("CopyData, readerType is SUBSET. EOF", func() {
 			*onErrorContinue = true
@@ -620,17 +625,26 @@ var _ = Describe("helper tests", func() {
 		})
 		It("CopyData, readerType is SUBSET. Error on write and EOF", func() {
 			*onErrorContinue = true
-			writer = bufio.NewWriterSize(&limitWriter{7}, 5)
+			bufSize := 5
+			toCopy := int64(30)
+			rLmt := int64(25)
+			writer = bufio.NewWriterSize(&limitWriter{7}, bufSize)
 
 			test_reader := RestoreReader{
 				readerType: SUBSET,
-				bufReader:  bufio.NewReader(&limitReader{25, io.EOF}),
+				bufReader:  bufio.NewReader(&limitReader{int(rLmt), io.EOF}),
 			}
 
-			bytesRead, err := test_reader.copyData(30)
-			Expect(bytesRead).To(Equal(int64(25)))
+			bytesRead, err := test_reader.copyData(toCopy)
+			Expect(bytesRead).To(Equal(rLmt))
 			Expect(errors.Is(err, discardError)).To(Equal(true))
+			Expect(errors.Is(err, io.ErrShortWrite)).To(Equal(true))
 			Expect(errors.Is(err, io.EOF)).To(Equal(true))
+			readBeforeErr := int64(bufSize * 2)
+			prefix := fmt.Sprintf("discard error in copyData: [discarded %d bytes from %d: [", rLmt - readBeforeErr, toCopy - readBeforeErr)
+			Expect(strings.HasPrefix(err.Error(), prefix)).To(Equal(true))
+			strCopied := fmt.Sprintf("[copied %d bytes from %d: [", readBeforeErr, toCopy)
+			Expect(strings.Contains(err.Error(), strCopied)).To(Equal(true))
 		})
 		It("CopyData, readerType is SUBSET. Error on write and on read", func() {
 			*onErrorContinue = true
@@ -647,10 +661,13 @@ var _ = Describe("helper tests", func() {
 			bytesRead, err := test_reader.copyData(toCopy)
 			Expect(bytesRead).To(Equal(rLmt))
 			Expect(errors.Is(err, discardError)).To(Equal(true))
+			Expect(errors.Is(err, io.ErrShortWrite)).To(Equal(true))
 			Expect(errors.Is(err, io.ErrNoProgress)).To(Equal(true))
 			readBeforeErr := int64(bufSize * 2)
-			str := fmt.Sprintf("discarded %d bytes from %d: [", rLmt - readBeforeErr, toCopy - readBeforeErr)
+			str := fmt.Sprintf("discard error in copyData: [discarded %d bytes from %d: [", rLmt - readBeforeErr, toCopy - readBeforeErr)
 			Expect(strings.HasPrefix(err.Error(), str)).To(Equal(true))
+			strCopied := fmt.Sprintf("[copied %d bytes from %d: [", readBeforeErr, toCopy)
+			Expect(strings.Contains(err.Error(), strCopied)).To(Equal(true))
 		})
 	})
 })
