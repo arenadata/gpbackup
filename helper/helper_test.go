@@ -637,7 +637,6 @@ var _ = Describe("helper tests", func() {
 
 			bytesRead, err := test_reader.copyData(toCopy)
 			Expect(bytesRead).To(Equal(rLmt))
-			Expect(errors.Is(err, discardError)).To(Equal(true))
 			Expect(errors.Is(err, io.ErrShortWrite)).To(Equal(true))
 			Expect(errors.Is(err, io.EOF)).To(Equal(true))
 			readBeforeErr := int64(bufSize * 2)
@@ -660,7 +659,6 @@ var _ = Describe("helper tests", func() {
 
 			bytesRead, err := test_reader.copyData(toCopy)
 			Expect(bytesRead).To(Equal(rLmt))
-			Expect(errors.Is(err, discardError)).To(Equal(true))
 			Expect(errors.Is(err, io.ErrShortWrite)).To(Equal(true))
 			Expect(errors.Is(err, io.ErrNoProgress)).To(Equal(true))
 			readBeforeErr := int64(bufSize * 2)
