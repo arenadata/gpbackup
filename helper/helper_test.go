@@ -644,6 +644,10 @@ var _ = Describe("helper tests", func() {
 			Expect(strings.HasPrefix(err.Error(), prefix)).To(Equal(true))
 			strCopied := fmt.Sprintf("copied %d bytes from %d: [", readBeforeErr, toCopy)
 			Expect(strings.Contains(err.Error(), strCopied)).To(Equal(true))
+
+			bytesRead, err = test_reader.copyData(10)
+			Expect(bytesRead).To(Equal(int64(0)))
+			Expect(err).To(Equal(discardError))
 		})
 		It("CopyData, readerType is SUBSET. Error on write and on read", func() {
 			*onErrorContinue = true
@@ -666,6 +670,10 @@ var _ = Describe("helper tests", func() {
 			Expect(strings.HasPrefix(err.Error(), prefix)).To(Equal(true))
 			strCopied := fmt.Sprintf("copied %d bytes from %d: [", readBeforeErr, toCopy)
 			Expect(strings.Contains(err.Error(), strCopied)).To(Equal(true))
+
+			bytesRead, err = test_reader.copyData(10)
+			Expect(bytesRead).To(Equal(int64(0)))
+			Expect(err).To(Equal(discardError))
 		})
 	})
 })
