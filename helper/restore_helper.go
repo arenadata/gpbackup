@@ -161,11 +161,6 @@ func (r *RestoreReader) copyAllData() (int64, error) {
 	case SEEKABLE:
 		bytesRead, err = io.Copy(writer, r.seekReader)
 	case NONSEEKABLE, SUBSET:
-		if r.discardErr {
-			logVerbose("copyAllData: discard error has already occurred. Don't read")
-			return 0, discardError
-		}
-
 		bytesRead, err = io.Copy(writer, r.bufReader)
 	}
 	return bytesRead, err
