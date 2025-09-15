@@ -40,6 +40,8 @@ var (
 	contentRE   *regexp.Regexp
 )
 
+var discardError = errors.New("discard error occurred when restoring a previous table")
+
 /* IRestoreReader interface to wrap the underlying reader.
  * getReaderType() identifies how the reader can be used
  * SEEKABLE uses seekReader. Used when restoring from uncompressed data with filters from local filesystem
@@ -63,7 +65,7 @@ type RestoreReader struct {
 	seekReader io.ReadSeeker
 	pluginCmd  IPluginCmd
 	readerType ReaderType
-	discardErr error
+	discardErr bool
 }
 
 // Wait for plugin process that should be already finished. This should be
@@ -109,19 +111,20 @@ func (r *RestoreReader) discardData(num int64) (int64, error) {
 		panic("discardData should be called for readerType == SUBSET only")
 	}
 
-	if r.discardErr != nil {
-		logVerbose(fmt.Sprintf("%d bytes to discard, but discard error has already been set. Don't read", num))
-		return 0, r.discardErr
+	if r.discardErr {
+		logVerbose(fmt.Sprintf("%d bytes to discard, but discard error has already occurred. Don't read", num))
+		return 0, discardError
 	}
 
 	n, err := io.CopyN(io.Discard, r.bufReader, num)
 	if err == nil {
 		logVerbose(fmt.Sprintf("discarded %d bytes", n))
 	} else {
-		r.discardErr = fmt.Errorf("discarded %d bytes from %d: [%w]", n, num, err)
-		logError(r.discardErr.Error())
+		r.discardErr = true
+		err = fmt.Errorf("discarded %d bytes from %d: [%w]", n, num, err)
+		logError(err.Error())
 	}
-	return n, r.discardErr
+	return n, err
 }
 
 func (r *RestoreReader) copyData(num int64) (int64, error) {
@@ -133,9 +136,9 @@ func (r *RestoreReader) copyData(num int64) (int64, error) {
 	case NONSEEKABLE:
 		bytesRead, err = io.CopyN(writer, r.bufReader, num)
 	case SUBSET:
-		if r.discardErr != nil {
-			logVerbose(fmt.Sprintf("%d bytes to copy, but discard error has already been set. Don't read", num))
-			return 0, r.discardErr
+		if r.discardErr {
+			logVerbose(fmt.Sprintf("%d bytes to copy, but discard error has already occurred. Don't read", num))
+			return 0, discardError
 		}
 
 		bytesRead, err = io.CopyN(writer, r.bufReader, num)
@@ -158,9 +161,9 @@ func (r *RestoreReader) copyAllData() (int64, error) {
 	case SEEKABLE:
 		bytesRead, err = io.Copy(writer, r.seekReader)
 	case NONSEEKABLE, SUBSET:
-		if r.discardErr != nil {
-			logVerbose("copyAllData: discard error has already been set. Don't read")
-			return 0, r.discardErr
+		if r.discardErr {
+			logVerbose("copyAllData: discard error has already occurred. Don't read")
+			return 0, discardError
 		}
 
 		bytesRead, err = io.Copy(writer, r.bufReader)
