@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"strings"
 	"os"
+	"strings"
 
 	"github.com/greenplum-db/gpbackup/utils"
 	"golang.org/x/sys/unix"
@@ -20,7 +20,7 @@ import (
 var (
 	testDir     = "/tmp/helper_test/20180101/20180101010101"
 	testTocFile = fmt.Sprintf("%s/test_toc.yaml", testDir)
-	discarded int64
+	discarded   int64
 )
 
 type restoreReaderTestImpl struct {
@@ -208,7 +208,7 @@ func (pt *testPluginCmd) errLog() {
 
 type limitReader struct {
 	remainder int
-	err error
+	err       error
 }
 
 func (r *limitReader) Read(p []byte) (n int, err error) {
@@ -476,7 +476,7 @@ var _ = Describe("helper tests", func() {
 			}()
 
 			oidBatch := []oidWithBatch{
-				{1 /* The first oid from TOC */, 0}, 
+				{1 /* The first oid from TOC */, 0},
 			}
 
 			expectedScenario := []helperTestStep{
@@ -606,7 +606,7 @@ var _ = Describe("helper tests", func() {
 			bytesRead, err := test_reader.copyData(toRead)
 			Expect(bytesRead).To(Equal(toRead))
 			Expect(errors.Is(err, io.ErrShortWrite)).To(Equal(true))
-			str := fmt.Sprintf("copied %d bytes from %d: [", bufSize * 2, toRead)
+			str := fmt.Sprintf("copied %d bytes from %d: [", bufSize*2, toRead)
 			Expect(strings.HasPrefix(err.Error(), str)).To(Equal(true))
 
 		})
@@ -640,9 +640,9 @@ var _ = Describe("helper tests", func() {
 			Expect(errors.Is(err, io.ErrShortWrite)).To(Equal(true))
 			Expect(errors.Is(err, io.EOF)).To(Equal(true))
 			readBeforeErr := int64(bufSize * 2)
-			prefix := fmt.Sprintf("discard error in copyData: [discarded %d bytes from %d: [", rLmt - readBeforeErr, toCopy - readBeforeErr)
+			prefix := fmt.Sprintf("discard error in copyData: [discarded %d bytes from %d: [", rLmt-readBeforeErr, toCopy-readBeforeErr)
 			Expect(strings.HasPrefix(err.Error(), prefix)).To(Equal(true))
-			strCopied := fmt.Sprintf("[copied %d bytes from %d: [", readBeforeErr, toCopy)
+			strCopied := fmt.Sprintf("copied %d bytes from %d: [", readBeforeErr, toCopy)
 			Expect(strings.Contains(err.Error(), strCopied)).To(Equal(true))
 		})
 		It("CopyData, readerType is SUBSET. Error on write and on read", func() {
@@ -662,9 +662,9 @@ var _ = Describe("helper tests", func() {
 			Expect(errors.Is(err, io.ErrShortWrite)).To(Equal(true))
 			Expect(errors.Is(err, io.ErrNoProgress)).To(Equal(true))
 			readBeforeErr := int64(bufSize * 2)
-			prefix := fmt.Sprintf("discard error in copyData: [discarded %d bytes from %d: [", rLmt - readBeforeErr, toCopy - readBeforeErr)
+			prefix := fmt.Sprintf("discard error in copyData: [discarded %d bytes from %d: [", rLmt-readBeforeErr, toCopy-readBeforeErr)
 			Expect(strings.HasPrefix(err.Error(), prefix)).To(Equal(true))
-			strCopied := fmt.Sprintf("[copied %d bytes from %d: [", readBeforeErr, toCopy)
+			strCopied := fmt.Sprintf("copied %d bytes from %d: [", readBeforeErr, toCopy)
 			Expect(strings.Contains(err.Error(), strCopied)).To(Equal(true))
 		})
 	})

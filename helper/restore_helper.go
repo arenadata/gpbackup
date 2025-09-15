@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	errorsStd "errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -147,7 +148,8 @@ func (r *RestoreReader) copyData(num int64) (int64, error) {
 			bytesDiscard, errDiscard := r.discardData(num - bytesRead)
 			bytesRead += bytesDiscard
 			if errDiscard != nil {
-				err = fmt.Errorf("discard error in copyData: [%w: [%w]]", errDiscard, err)
+				err = errorsStd.Join(errDiscard, err)
+				err = fmt.Errorf("discard error in copyData: [%w]", err)
 			}
 		}
 	}
