@@ -18,14 +18,14 @@ import (
 )
 
 var (
-	testDir        = "/tmp/helper_test/20180101/20180101010101"
-	testTocFile    = fmt.Sprintf("%s/test_toc.yaml", testDir)
-	discardedBytes int64
-	discardErr     error
+	testDir     = "/tmp/helper_test/20180101/20180101010101"
+	testTocFile = fmt.Sprintf("%s/test_toc.yaml", testDir)
 )
 
 type restoreReaderTestImpl struct {
-	waitCount int
+	waitCount      int
+	discardedBytes int64
+	discardErr     error
 }
 
 func (r *restoreReaderTestImpl) waitForPlugin() error {
@@ -53,11 +53,11 @@ func (r *restoreReaderTestImpl) getReaderType() ReaderType {
 }
 
 func (r *restoreReaderTestImpl) discardData(num int64) (int64, error) {
-	if discardErr != nil {
-		return 0, discardErr
+	if r.discardErr != nil {
+		return 0, r.discardErr
 	}
 
-	discardedBytes += num
+	r.discardedBytes += num
 	return num, nil
 }
 
@@ -491,10 +491,9 @@ var _ = Describe("helper tests", func() {
 			helper := newHelperTest(oidBatch, expectedScenario)
 			err := doRestoreAgentInternal(helper)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(discardedBytes).To(Equal(int64(18)))
+			Expect(helper.restoreData.discardedBytes).To(Equal(int64(18)))
 		})
 		It("discard error data if skip file is discovered with single datafile", func() {
-			discardErr = io.EOF
 			*singleDataFile = true
 			*isResizeRestore = false
 			*tocFile = testTocFile
@@ -513,9 +512,9 @@ var _ = Describe("helper tests", func() {
 			}
 
 			helper := newHelperTest(oidBatch, expectedScenario)
+			helper.restoreData.discardErr = io.EOF
 			err := doRestoreAgentInternal(helper)
-			Expect(err).To(Equal(discardErr))
-			discardErr = nil
+			Expect(err).To(Equal(io.EOF))
 		})
 		It("calls Wait in waitForPlugin doRestoreAgent for single data file", func() {
 			*singleDataFile = true
