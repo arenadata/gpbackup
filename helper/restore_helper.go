@@ -121,7 +121,7 @@ func (r *RestoreReader) discardData(num int64) (int64, error) {
 		logVerbose(fmt.Sprintf("discarded %d bytes", n))
 	} else {
 		r.discardErr = true
-		err = fmt.Errorf("discarded %d bytes from %d: [%w]", n, num, err)
+		err = errors.Wrapf(err, "discarded %d bytes from %d", n, num)
 		logError(err.Error())
 	}
 	return n, err
@@ -144,12 +144,12 @@ func (r *RestoreReader) copyData(num int64) (int64, error) {
 
 		bytesRead, err = io.CopyN(writer, r.bufReader, num)
 		if err != nil && err != io.EOF && *onErrorContinue {
-			err = fmt.Errorf("copied %d bytes from %d: [%w]", bytesRead, num, err)
+			err = errors.Wrapf(err, "copied %d bytes from %d", bytesRead, num)
 			bytesDiscard, errDiscard := r.discardData(num - bytesRead)
 			bytesRead += bytesDiscard
 			if errDiscard != nil {
 				err = errorsStd.Join(errDiscard, err)
-				err = fmt.Errorf("discard error in copyData: [%w]", err)
+				err = errors.Wrap(err, "discard error in copyData")
 			}
 		}
 	}
