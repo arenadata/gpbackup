@@ -20,7 +20,7 @@ import (
 var (
 	testDir        = "/tmp/helper_test/20180101/20180101010101"
 	testTocFile    = fmt.Sprintf("%s/test_toc.yaml", testDir)
-	discardedCount int64
+	discardedBytes int64
 	discardErr     error
 )
 
@@ -57,7 +57,7 @@ func (r *restoreReaderTestImpl) discardData(num int64) (int64, error) {
 		return 0, discardErr
 	}
 
-	discardedCount += num
+	discardedBytes += num
 	return num, nil
 }
 
@@ -491,7 +491,7 @@ var _ = Describe("helper tests", func() {
 			helper := newHelperTest(oidBatch, expectedScenario)
 			err := doRestoreAgentInternal(helper)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(discardedCount).To(Equal(int64(18)))
+			Expect(discardedBytes).To(Equal(int64(18)))
 		})
 		It("discard error data if skip file is discovered with single datafile", func() {
 			discardErr = io.EOF
