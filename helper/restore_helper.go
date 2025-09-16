@@ -111,7 +111,7 @@ func (r *RestoreReader) discardData(num int64) (int64, error) {
 	}
 
 	if r.discardErr {
-		err := fmt.Errorf("%d bytes to discard, but discard error has already occurred. Don't read", num)
+		err := fmt.Errorf("%d bytes to discard, but discard error has already occurred. Skipping read.", num)
 		logVerbose(err.Error())
 		return 0, err
 	}
@@ -137,7 +137,7 @@ func (r *RestoreReader) copyData(num int64) (int64, error) {
 		bytesRead, err = io.CopyN(writer, r.bufReader, num)
 	case SUBSET:
 		if r.discardErr {
-			err := fmt.Errorf("%d bytes to copy, but discard error has already occurred. Don't read", num)
+			err := fmt.Errorf("%d bytes to copy, but discard error has already occurred. Skipping read.", num)
 			logVerbose(err.Error())
 			return 0, err
 		}

@@ -647,11 +647,11 @@ var _ = Describe("helper tests", func() {
 
 			bytesRead, err = test_reader.copyData(10)
 			Expect(bytesRead).To(Equal(int64(0)))
-			Expect(err.Error()).To(Equal("10 bytes to copy, but discard error has already occurred. Don't read"))
+			Expect(err.Error()).To(Equal("10 bytes to copy, but discard error has already occurred. Skipping read."))
 
 			bytesRead, err = test_reader.discardData(5)
 			Expect(bytesRead).To(Equal(int64(0)))
-			Expect(err.Error()).To(Equal("5 bytes to discard, but discard error has already occurred. Don't read"))
+			Expect(err.Error()).To(Equal("5 bytes to discard, but discard error has already occurred. Skipping read."))
 		})
 		It("CopyData, readerType is SUBSET. Error on write and on read", func() {
 			*onErrorContinue = true
@@ -677,11 +677,11 @@ var _ = Describe("helper tests", func() {
 
 			bytesRead, err = test_reader.copyData(10)
 			Expect(bytesRead).To(Equal(int64(0)))
-			Expect(err.Error()).To(Equal("10 bytes to copy, but discard error has already occurred. Don't read"))
+			Expect(err.Error()).To(Equal("10 bytes to copy, but discard error has already occurred. Skipping read."))
 
 			bytesRead, err = test_reader.discardData(5)
 			Expect(bytesRead).To(Equal(int64(0)))
-			Expect(err.Error()).To(Equal("5 bytes to discard, but discard error has already occurred. Don't read"))
+			Expect(err.Error()).To(Equal("5 bytes to discard, but discard error has already occurred. Skipping read."))
 		})
 	})
 })
