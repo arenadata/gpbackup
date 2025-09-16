@@ -41,8 +41,6 @@ var (
 	contentRE   *regexp.Regexp
 )
 
-var discardError = errors.New("discard error occurred when restoring a previous table")
-
 /* IRestoreReader interface to wrap the underlying reader.
  * getReaderType() identifies how the reader can be used
  * SEEKABLE uses seekReader. Used when restoring from uncompressed data with filters from local filesystem
@@ -113,8 +111,9 @@ func (r *RestoreReader) discardData(num int64) (int64, error) {
 	}
 
 	if r.discardErr {
-		logVerbose(fmt.Sprintf("%d bytes to discard, but discard error has already occurred. Don't read", num))
-		return 0, discardError
+		err := fmt.Errorf("%d bytes to discard, but discard error has already occurred. Don't read", num)
+		logVerbose(err.Error())
+		return 0, err
 	}
 
 	n, err := io.CopyN(io.Discard, r.bufReader, num)
@@ -138,8 +137,9 @@ func (r *RestoreReader) copyData(num int64) (int64, error) {
 		bytesRead, err = io.CopyN(writer, r.bufReader, num)
 	case SUBSET:
 		if r.discardErr {
-			logVerbose(fmt.Sprintf("%d bytes to copy, but discard error has already occurred. Don't read", num))
-			return 0, discardError
+			err := fmt.Errorf("%d bytes to copy, but discard error has already occurred. Don't read", num)
+			logVerbose(err.Error())
+			return 0, err
 		}
 
 		bytesRead, err = io.CopyN(writer, r.bufReader, num)
