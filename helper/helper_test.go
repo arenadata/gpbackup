@@ -18,9 +18,10 @@ import (
 )
 
 var (
-	testDir     = "/tmp/helper_test/20180101/20180101010101"
-	testTocFile = fmt.Sprintf("%s/test_toc.yaml", testDir)
-	discarded   int64
+	testDir        = "/tmp/helper_test/20180101/20180101010101"
+	testTocFile    = fmt.Sprintf("%s/test_toc.yaml", testDir)
+	discardedCount int64
+	discardErr     error
 )
 
 type restoreReaderTestImpl struct {
@@ -52,7 +53,11 @@ func (r *restoreReaderTestImpl) getReaderType() ReaderType {
 }
 
 func (r *restoreReaderTestImpl) discardData(num int64) (int64, error) {
-	discarded += num
+	if discardErr != nil {
+		return 0, discardErr
+	}
+
+	discardedCount += num
 	return num, nil
 }
 
@@ -486,7 +491,30 @@ var _ = Describe("helper tests", func() {
 			helper := newHelperTest(oidBatch, expectedScenario)
 			err := doRestoreAgentInternal(helper)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(discarded).To(Equal(int64(18)))
+			Expect(discardedCount).To(Equal(int64(18)))
+		})
+		It("discard error data if skip file is discovered with single datafile", func() {
+			discardErr = io.EOF
+			*singleDataFile = true
+			*isResizeRestore = false
+			*tocFile = testTocFile
+
+			writeTestTOC(testTocFile)
+			defer func() {
+				_ = os.Remove(*tocFile)
+			}()
+
+			oidBatch := []oidWithBatch{
+				{1 /* The first oid from TOC */, 0},
+			}
+
+			expectedScenario := []helperTestStep{
+				{"mock_1_0", false, 1, true, "Can not open pipe for table 1, check_skip_file shall called, skip file exists"},
+			}
+
+			helper := newHelperTest(oidBatch, expectedScenario)
+			err := doRestoreAgentInternal(helper)
+			Expect(err).To(Equal(discardErr))
 		})
 		It("calls Wait in waitForPlugin doRestoreAgent for single data file", func() {
 			*singleDataFile = true
