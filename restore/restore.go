@@ -3,7 +3,6 @@ package restore
 import (
 	"bufio"
 	"fmt"
-	"github.com/greenplum-db/gpbackup/arenadata"
 	"os"
 	"regexp"
 	"runtime/debug"
@@ -553,9 +552,6 @@ func restoreStatistics() {
 
 	statements := GetRestoreMetadataStatementsFiltered("statistics", statisticsFilename, []string{}, []string{}, filters)
 	editStatementsRedirectSchema(statements, opts.RedirectSchema)
-
-	statements = arenadata.PatchStatisticsStatements(backupConfig, connectionPool, statements)
-
 	numErrors := ExecuteRestoreMetadataStatements("statistics", statements, "Table statistics", nil, utils.PB_VERBOSE, false)
 
 	if numErrors > 0 {
