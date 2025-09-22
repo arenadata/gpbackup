@@ -1,8 +1,17 @@
 package restore
 
 import (
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/GreengageDB/gp-common-go-libs/cluster"
 	"github.com/GreengageDB/gp-common-go-libs/dbconn"
+	"github.com/GreengageDB/gp-common-go-libs/gplog"
+	"github.com/GreengageDB/gp-common-go-libs/testhelper"
+	"github.com/greenplum-db/gpbackup/filepath"
+	"github.com/greenplum-db/gpbackup/history"
+	"github.com/greenplum-db/gpbackup/options"
 	"github.com/greenplum-db/gpbackup/toc"
+	"os"
+	path "path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -60,47 +69,47 @@ var _ = Describe("restore internal tests", func() {
 		},
 		{
 			Schema: "foo", Name: "bar", ObjectType: toc.OBJ_STATISTICS,
-			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo.bar'::regclass::oid AND attname = 'i');`,
 		},
 		{
 			Schema: "foo", Name: `"b'ar"`, ObjectType: toc.OBJ_STATISTICS,
-			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo."b''ar"'::regclass::oid AND attname = 'i');`,
 		},
 		{
 			Schema: "foo", Name: `"b.ar"`, ObjectType: toc.OBJ_STATISTICS,
-			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo."b.ar"'::regclass::oid AND attname = 'i');`,
 		},
 		{
 			Schema: `"fo.o"`, Name: "bar", ObjectType: toc.OBJ_STATISTICS,
-			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = '"fo.o".bar'::regclass::oid AND attname = 'i');`,
 		},
 		{
 			Schema: `"fo.o"`, Name: `"b'ar"`, ObjectType: toc.OBJ_STATISTICS,
-			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = '"fo.o"."b''ar"'::regclass::oid AND attname = 'i');`,
 		},
 		{
 			Schema: `"fo.o"`, Name: `"b.ar"`, ObjectType: toc.OBJ_STATISTICS,
-			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = '"fo.o"."b.ar"'::regclass::oid AND attname = 'i');`,
 		},
 		{
 			Schema: `"fo'o"`, Name: "bar", ObjectType: toc.OBJ_STATISTICS,
-			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = '"fo''o".bar'::regclass::oid AND attname = 'i');`,
 		},
 		{
 			Schema: `"fo'o"`, Name: `"b'ar"`, ObjectType: toc.OBJ_STATISTICS,
-			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = '"fo''o"."b''ar"'::regclass::oid AND attname = 'i');`,
 		},
 		{
 			Schema: `"fo'o"`, Name: `"b.ar"`, ObjectType: toc.OBJ_STATISTICS,
-			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+			Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = '"fo''o"."b.ar"'::regclass::oid AND attname = 'i');`,
 		},
 	}
@@ -176,47 +185,47 @@ var _ = Describe("restore internal tests", func() {
 				},
 				{
 					Schema: "foo2", Name: "bar", ObjectType: toc.OBJ_STATISTICS,
-					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo2.bar'::regclass::oid AND attname = 'i');`,
 				},
 				{
 					Schema: "foo2", Name: `"b'ar"`, ObjectType: toc.OBJ_STATISTICS,
-					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo2."b''ar"'::regclass::oid AND attname = 'i');`,
 				},
 				{
 					Schema: "foo2", Name: `"b.ar"`, ObjectType: toc.OBJ_STATISTICS,
-					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo2."b.ar"'::regclass::oid AND attname = 'i');`,
 				},
 				{
 					Schema: "foo2", Name: "bar", ObjectType: toc.OBJ_STATISTICS,
-					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo2.bar'::regclass::oid AND attname = 'i');`,
 				},
 				{
 					Schema: "foo2", Name: `"b'ar"`, ObjectType: toc.OBJ_STATISTICS,
-					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo2."b''ar"'::regclass::oid AND attname = 'i');`,
 				},
 				{
 					Schema: "foo2", Name: `"b.ar"`, ObjectType: toc.OBJ_STATISTICS,
-					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo2."b.ar"'::regclass::oid AND attname = 'i');`,
 				},
 				{
 					Schema: "foo2", Name: "bar", ObjectType: toc.OBJ_STATISTICS,
-					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo2.bar'::regclass::oid AND attname = 'i');`,
 				},
 				{
 					Schema: "foo2", Name: `"b'ar"`, ObjectType: toc.OBJ_STATISTICS,
-					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo2."b''ar"'::regclass::oid AND attname = 'i');`,
 				},
 				{
 					Schema: "foo2", Name: `"b.ar"`, ObjectType: toc.OBJ_STATISTICS,
-					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) IN
+					Statement: `DELETE FROM pg_statistic WHERE (starelid, staattnum) =
 (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'foo2."b.ar"'::regclass::oid AND attname = 'i');`,
 				},
 			}
@@ -225,6 +234,177 @@ var _ = Describe("restore internal tests", func() {
 				//fmt.Println("\n\nACTUAL\n", statements[i], "\nEXPECTED\n", expectedStatements[i])
 				Expect(statements[i]).To(Equal(expectedStatements[i]))
 			}
+		})
+	})
+	Describe("Restore statistic", Ordered, func() {
+		var mock sqlmock.Sqlmock
+		BeforeAll(func() {
+			err := os.MkdirAll(path.Join(os.TempDir(), "backup/gpseg-1/backups/20250815/20250815120713/"), 0777)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = os.WriteFile(path.Join(os.TempDir(), "backup/gpseg-1/backups/20250815/20250815120713/gpbackup_20250815120713_statistics.sql"), []byte(
+				`UPDATE pg_class
+SET
+        relpages = 194::int,
+        reltuples = 10000.000000::real
+WHERE oid = 'public.t1'::regclass::oid;
+
+DELETE FROM pg_statistic WHERE (starelid, staattnum) =
+        (SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'public.t1'::regclass::oid AND attname = 'a');
+INSERT INTO pg_statistic SELECT
+        attrelid,
+        attnum,
+        false::boolean,
+        0.000000::real,
+        8::integer,
+        -1.000000::real,
+        2::smallint,
+        3::smallint,
+        0::smallint,
+        0::smallint,
+        0::smallint,
+        412::oid,
+        412::oid,
+        0::oid,
+        0::oid,
+        0::oid,
+        NULL::real[],
+        '{"0.313703984"}'::real[],
+        NULL::real[],
+        NULL::real[],
+        NULL::real[],
+        array_in('{"1","100",}', 'int8'::regtype::oid, -1),
+        NULL,
+        NULL,
+        NULL,
+        NULL
+FROM pg_attribute WHERE attrelid = 'public.t1'::regclass::oid AND attname = 'a';
+`), 0777)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = os.WriteFile(path.Join(os.TempDir(), "backup/gpseg-1/backups/20250815/20250815120713/gpbackup_20250815120713_toc.yaml"), []byte(`
+statisticsentries:
+- schema: public
+  name: t1
+  objecttype: STATISTICS
+  referenceobject: ""
+  startbyte: 0
+  endbyte: 129
+  tier:
+  - 0
+  - 0
+- schema: public
+  name: t1
+  objecttype: STATISTICS
+  referenceobject: ""
+  startbyte: 129
+  endbyte: 299
+  tier:
+  - 0
+  - 0
+- schema: public
+  name: t1
+  objecttype: STATISTICS
+  referenceobject: ""
+  startbyte: 299
+  endbyte: 966
+  tier:
+  - 0
+  - 0
+`), 0777)
+
+			gplog.InitializeLogging("gprestore", path.Join(os.TempDir(), "gprestore_test"))
+			gplog.SetLogFileVerbosity(gplog.LOGERROR)
+
+			opts = &options.Options{}
+
+			globalTOC = toc.NewTOC(path.Join(os.TempDir(), "backup/gpseg-1/backups/20250815/20250815120713/gpbackup_20250815120713_toc.yaml"))
+			globalTOC.InitializeMetadataEntryMap()
+
+			DeferCleanup(func() {
+				err := os.RemoveAll(path.Join(os.TempDir(), "backup"))
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		BeforeEach(func() {
+			configCoordinator := cluster.SegConfig{ContentID: -1, Hostname: "localhost", DataDir: "gpseg-1"}
+			testCluster := cluster.NewCluster([]cluster.SegConfig{configCoordinator})
+			testFPInfo := filepath.NewFilePathInfo(testCluster, "", "20250815120713",
+				"gpseg", false)
+			testFPInfo.SegDirMap[-1] = path.Join(os.TempDir(), "backup/gpseg-1")
+			SetFPInfo(testFPInfo)
+
+			connectionPool, mock, _, _, _ = testhelper.SetupTestEnvironment()
+			connectionPool.Version = dbconn.NewVersion("6.0.0")
+		})
+
+		DescribeTable("Restore statistic with different backup versions", func(backupVersion string, needNestedLoop bool) {
+			testConfig := history.BackupConfig{
+				BackupVersion: backupVersion,
+			}
+			SetBackupConfig(&testConfig)
+
+			if needNestedLoop {
+				mock.ExpectExec("SET enable_nestloop = ON;").WillReturnResult(sqlmock.NewResult(0, 0))
+			}
+			mock.ExpectExec("UPDATE pg_class SET relpages = 194::int, reltuples = 10000\\.000000::real WHERE oid = 'public\\.t1'::regclass::oid;").
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectExec("DELETE FROM pg_statistic WHERE \\(starelid, staattnum\\) =" +
+				" \\(SELECT attrelid, attnum FROM pg_attribute WHERE attrelid = 'public\\.t1'::regclass::oid AND attname = 'a'\\);").
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectExec("INSERT INTO pg_statistic SELECT" +
+				" attrelid, attnum," +
+				" false::boolean," +
+				" 0\\.000000::real," +
+				" 8::integer," +
+				" -1.000000::real," +
+				" 2::smallint, 3::smallint, 0::smallint, 0::smallint, 0::smallint," +
+				" 412::oid, 412::oid, 0::oid, 0::oid, 0::oid," +
+				" NULL::real\\[\\], '{\"0.313703984\"}'::real\\[\\], NULL::real\\[\\], NULL::real\\[\\], NULL::real\\[\\]," +
+				" array_in\\('{\"1\",\"100\",}', 'int8'::regtype::oid, -1\\)," +
+				" NULL, NULL, NULL, NULL FROM pg_attribute WHERE attrelid = 'public.t1'::regclass::oid AND attname = 'a';").
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			if needNestedLoop {
+				mock.ExpectExec("RESET enable_nestloop;").WillReturnResult(sqlmock.NewResult(0, 0))
+			}
+			restoreStatistics()
+			err := mock.ExpectationsWereMet()
+			Expect(err).NotTo(HaveOccurred())
+		},
+			Entry("before problematic version", "1.30.5_arenadata15", false),
+			Entry("problematic version", "1.30.5_arenadata18", true),
+			Entry("after problematic version", "1.30.5_arenadata20", false),
+		)
+
+		// This test must be before the "statistic is empty" test since the statement list must not be empty.
+		It("Wrong version", func() {
+			defer testhelper.ShouldPanicWithMessage("Invalid arenadata version format for gpbackup: 1.30.5_arenadataABC")
+			testConfig := history.BackupConfig{
+				BackupVersion: "1.30.5_arenadataABC",
+			}
+			SetBackupConfig(&testConfig)
+			restoreStatistics()
+		})
+
+		It("statistic is empty", func() {
+			testConfig := history.BackupConfig{
+				BackupVersion: "1.30.5_arenadata18",
+			}
+			SetBackupConfig(&testConfig)
+
+			err := os.WriteFile(path.Join(os.TempDir(), "backup/gpseg-1/backups/20250815/20250815120713/gpbackup_20250815120713_statistics.sql"),
+				[]byte("SET client_encoding = 'UTF8';"), 0777)
+			Expect(err).NotTo(HaveOccurred())
+			err = os.WriteFile(path.Join(os.TempDir(), "backup/gpseg-1/backups/20250815/20250815120713/gpbackup_20250815120713_toc.yaml"), []byte(""), 0777)
+			Expect(err).NotTo(HaveOccurred())
+
+			globalTOC = toc.NewTOC(path.Join(os.TempDir(), "backup/gpseg-1/backups/20250815/20250815120713/gpbackup_20250815120713_toc.yaml"))
+			globalTOC.InitializeMetadataEntryMap()
+
+			restoreStatistics()
+			err = mock.ExpectationsWereMet()
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })
