@@ -70,6 +70,7 @@ func CopyTableOut(queryContext context.Context, connectionPool *dbconn.DBConn, t
 	checkPipeExistsCommand := ""
 	customPipeThroughCommand := utils.GetPipeThroughProgram().OutputCommand
 	sendToDestinationCommand := ">"
+	copyCommand := ""
 	if MustGetFlagBool(options.SINGLE_DATA_FILE) {
 		/*
 		 * The segment TOC files are always written to the segment data directory for
@@ -81,9 +82,13 @@ func CopyTableOut(queryContext context.Context, connectionPool *dbconn.DBConn, t
 		customPipeThroughCommand = utils.DefaultPipeThroughProgram
 	} else if MustGetFlagString(options.PLUGIN_CONFIG) != "" {
 		sendToDestinationCommand = fmt.Sprintf("| %s backup_data %s", pluginConfig.ExecutablePath, pluginConfig.ConfigPath)
+	} else if customPipeThroughCommand == "cat -" {
+		copyCommand = fmt.Sprintf("'%s'", destinationToWrite)
 	}
 
-	copyCommand := fmt.Sprintf("PROGRAM '%s%s %s %s'", checkPipeExistsCommand, customPipeThroughCommand, sendToDestinationCommand, destinationToWrite)
+	if copyCommand == "" {
+		copyCommand = fmt.Sprintf("PROGRAM '%s%s %s %s'", checkPipeExistsCommand, customPipeThroughCommand, sendToDestinationCommand, destinationToWrite)
+	}
 
 	columnNames := ""
 	if connectionPool.Version.AtLeast("7") {
